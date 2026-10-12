@@ -50,7 +50,7 @@ public class VoteController {
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 빈 값·선택지 개수 / INVALID_VOTE_OPTIONS: 선택지 구성 오류(중복 등)",
+                description = "INVALID_REQUEST: 빈 값·선택지 개수 / INVALID_VOTE_OPTIONS: 선택지 구성 오류(중복 등)",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",

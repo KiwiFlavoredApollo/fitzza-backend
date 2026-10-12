@@ -36,7 +36,7 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
             "GET /api/users/profile/options",
             "GET /api/users/status");
     private static final byte[] UNAUTHENTICATED_BODY =
-            "{\"code\":\"UNAUTHENTICATED\",\"message\":\"로그인이 필요합니다.\"}".getBytes(StandardCharsets.UTF_8);
+            "{\"status\":401,\"code\":\"UNAUTHENTICATED\",\"message\":\"로그인이 필요합니다.\"}".getBytes(StandardCharsets.UTF_8);
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {

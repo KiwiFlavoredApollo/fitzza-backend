@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PostService {
 
-    static final int MAX_PAGE_SIZE = 50;
+    public static final int MAX_PAGE_SIZE = 100;
 
     // 같은 시각에 쓰인 글의 순서가 페이지마다 바뀌지 않도록 ID를 보조 정렬로 둔다.
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
@@ -65,7 +65,7 @@ public class PostService {
                 PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE), NEWEST_FIRST);
         Page<Post> posts = postRepository.findAll(PostSpecifications.feed(category, postType, keyword), pageable);
         if (posts.isEmpty()) {
-            return new PostPageResponse(List.of(), posts.getNumber(), posts.getTotalPages());
+            return PostPageResponse.of(List.of(), posts);
         }
 
         List<Long> postIds = posts.getContent().stream().map(Post::getId).toList();
@@ -86,7 +86,7 @@ public class PostService {
                         likeCounts.getOrDefault(post.getId(), 0L),
                         commentCounts.getOrDefault(post.getId(), 0L)))
                 .toList();
-        return new PostPageResponse(content, posts.getNumber(), posts.getTotalPages());
+        return PostPageResponse.of(content, posts);
     }
 
     // 상세를 열 때마다 조회수가 오른다. viewerId는 비로그인이면 null이다.

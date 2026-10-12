@@ -123,7 +123,7 @@ public class UserBodyUpdateParser {
     }
 
     private UserApiException invalid(String message) {
-        return new UserApiException(ErrorCode.INVALID_INPUT, message);
+        return new UserApiException(ErrorCode.INVALID_REQUEST, message);
     }
 
     private static Set<String> namesOf(Enum<?>[] values) {

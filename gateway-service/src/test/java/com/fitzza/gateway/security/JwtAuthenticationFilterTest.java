@@ -86,7 +86,8 @@ class JwtAuthenticationFilterTest {
 
         assertThat(forwarded.get()).isNull();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":\"TOKEN_EXPIRED\"");
+        assertThat(exchange.getResponse().getBodyAsString().block())
+                .contains("\"status\":401", "\"code\":\"TOKEN_EXPIRED\"");
     }
 
     @Test

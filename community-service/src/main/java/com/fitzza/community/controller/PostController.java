@@ -21,6 +21,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,12 +50,12 @@ public class PostController {
     @Operation(
             summary = "게시글 목록",
             description = "최신순. 삭제된 글은 빠진다. 투표 탭은 postType=VOTE로 조회한다. "
-                    + "page가 음수면 0으로, size는 1~50 범위로 맞춰서 처리한다.")
+                    + "page는 0 이상, size는 1~100이며 벗어나면 400이다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 없는 분류나 숫자가 아닌 page·size",
+                description = "INVALID_REQUEST: 없는 분류, 숫자가 아니거나 범위를 벗어난 page·size",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping
@@ -64,9 +66,10 @@ public class PostController {
                     PostType postType,
             @Parameter(description = "제목·내용 검색어") @RequestParam(name = "keyword", required = false)
                     String keyword,
-            @Parameter(description = "페이지 번호(0부터)") @RequestParam(name = "page", defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기(최대 50)") @RequestParam(name = "size", defaultValue = "20")
-                    int size) {
+            @Parameter(description = "페이지 번호(0부터)") @RequestParam(name = "page", defaultValue = "0") @Min(0)
+                    int page,
+            @Parameter(description = "페이지 크기(1~100)") @RequestParam(name = "size", defaultValue = "20")
+                    @Min(1) @Max(PostService.MAX_PAGE_SIZE) int size) {
         return postService.getFeed(category, postType, keyword, page, size);
     }
 
@@ -97,7 +100,7 @@ public class PostController {
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 빈 값이나 길이 초과",
+                description = "INVALID_REQUEST: 빈 값이나 길이 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -120,7 +123,7 @@ public class PostController {
         @ApiResponse(responseCode = "200", description = "수정 성공(응답 본문 없음)", content = @Content),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT",
+                description = "INVALID_REQUEST",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",

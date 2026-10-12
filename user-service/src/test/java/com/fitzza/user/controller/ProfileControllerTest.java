@@ -112,7 +112,7 @@ class ProfileControllerTest {
                                 {"height": 999}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(profileService);
     }
 

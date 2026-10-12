@@ -40,7 +40,7 @@ public class InternalNotificationController {
         @ApiResponse(responseCode = "202", description = "접수됨(응답 본문 없음)", content = @Content),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 필수 값 누락, 없는 알림 유형, 길이 초과",
+                description = "INVALID_REQUEST: 필수 값 누락, 없는 알림 유형, 길이 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",

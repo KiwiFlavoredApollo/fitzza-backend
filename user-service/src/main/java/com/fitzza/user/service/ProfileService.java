@@ -87,7 +87,7 @@ public class ProfileService {
     public List<NicknameResponse> findNicknames(List<Long> userIds) {
         if (userIds.isEmpty() || userIds.size() > MAX_NICKNAME_LOOKUP_SIZE) {
             throw new UserApiException(
-                    ErrorCode.INVALID_INPUT, "userIds는 1~" + MAX_NICKNAME_LOOKUP_SIZE + "개여야 합니다.");
+                    ErrorCode.INVALID_REQUEST, "userIds는 1~" + MAX_NICKNAME_LOOKUP_SIZE + "개여야 합니다.");
         }
         return userRepository.findAllById(userIds).stream()
                 .map(user -> new NicknameResponse(user.getId(), user.getNickname()))

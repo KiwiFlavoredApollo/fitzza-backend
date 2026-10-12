@@ -46,7 +46,7 @@ public class UserController {
         @ApiResponse(responseCode = "201", description = "가입 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 형식이 맞지 않는 값",
+                description = "INVALID_REQUEST: 형식이 맞지 않는 값",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "409",
@@ -67,7 +67,7 @@ public class UserController {
         @ApiResponse(responseCode = "200", description = "확인 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 이메일 형식이 아님",
+                description = "INVALID_REQUEST: 이메일 형식이 아님",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/check-email")
@@ -85,7 +85,7 @@ public class UserController {
         @ApiResponse(responseCode = "200", description = "확인 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 닉네임 형식이 아님",
+                description = "INVALID_REQUEST: 닉네임 형식이 아님",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/check-nickname")

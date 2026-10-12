@@ -90,7 +90,7 @@ class InternalUserControllerTest {
     void nicknameLookupRejectsNonNumericId() throws Exception {
         mockMvc.perform(get("/internal/users").param("userIds", "7,abc").header("X-Internal-Token", INTERNAL_TOKEN))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test

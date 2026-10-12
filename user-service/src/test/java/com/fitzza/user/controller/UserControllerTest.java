@@ -58,7 +58,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("not-an-email", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -71,7 +71,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -84,7 +84,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1!", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -97,7 +97,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "passwordonly", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -123,7 +123,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit_zza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -136,7 +136,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit zza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -162,7 +162,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "abcdefghijklmnopqrstuvwx1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -175,7 +175,7 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "01234567890")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -225,7 +225,7 @@ class UserControllerTest {
     void checkEmailRejectsMissingParameter() throws Exception {
         mockMvc.perform(get("/api/users/check-email"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     /**

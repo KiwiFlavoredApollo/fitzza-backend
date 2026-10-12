@@ -35,13 +35,13 @@ public class GlobalExceptionHandler {
         String message = exception.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .map(FieldError::getDefaultMessage)
-                .orElse(ErrorCode.INVALID_INPUT.getMessage());
-        return toResponse(ErrorCode.INVALID_INPUT, message);
+                .orElse(ErrorCode.INVALID_REQUEST.getMessage());
+        return toResponse(ErrorCode.INVALID_REQUEST, message);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ErrorResponse> handleMalformedRequest() {
-        return toResponse(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage());
+        return toResponse(ErrorCode.INVALID_REQUEST, ErrorCode.INVALID_REQUEST.getMessage());
     }
 
     // 스프링이 직접 던지는 요청 오류(없는 주소, 지원하지 않는 메서드 등)는 상태 코드를 그대로 두고 응답 모양만 맞춘다.
@@ -51,12 +51,13 @@ public class GlobalExceptionHandler {
         if (exception instanceof org.springframework.web.ErrorResponse frameworkError) {
             HttpStatus status = HttpStatus.resolve(frameworkError.getStatusCode().value());
             if (status != null && status.is4xxClientError()) {
-                boolean invalidInput = status == HttpStatus.BAD_REQUEST;
+                boolean invalidRequest = status == HttpStatus.BAD_REQUEST;
                 return ResponseEntity.status(status)
                         .headers(frameworkError.getHeaders())
                         .body(new ErrorResponse(
-                                invalidInput ? ErrorCode.INVALID_INPUT.name() : status.name(),
-                                invalidInput ? ErrorCode.INVALID_INPUT.getMessage() : UNSUPPORTED_REQUEST_MESSAGE));
+                                status.value(),
+                                invalidRequest ? ErrorCode.INVALID_REQUEST.name() : status.name(),
+                                invalidRequest ? ErrorCode.INVALID_REQUEST.getMessage() : UNSUPPORTED_REQUEST_MESSAGE));
             }
         }
         log.error("처리되지 않은 예외가 발생했습니다.", exception);
@@ -64,6 +65,7 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErrorResponse> toResponse(ErrorCode errorCode, String message) {
-        return ResponseEntity.status(errorCode.getStatus()).body(new ErrorResponse(errorCode.name(), message));
+        return ResponseEntity.status(errorCode.getStatus()).body(new ErrorResponse(
+                errorCode.getStatus().value(), errorCode.name(), message));
     }
 }

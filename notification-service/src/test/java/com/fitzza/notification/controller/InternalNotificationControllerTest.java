@@ -113,7 +113,7 @@ class InternalNotificationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(notificationService);
     }
 
@@ -127,7 +127,7 @@ class InternalNotificationControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(notificationService);
     }
 }

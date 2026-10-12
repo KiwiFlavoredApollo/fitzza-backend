@@ -78,7 +78,7 @@ public class ProfileController {
         @ApiResponse(responseCode = "200", description = "수정된 신체 정보"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 범위를 벗어난 값이나 없는 코드",
+                description = "INVALID_REQUEST: 범위를 벗어난 값이나 없는 코드",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
