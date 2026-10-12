@@ -2,6 +2,7 @@ package com.fitzza.community.service;
 
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Comment;
+import com.fitzza.community.domain.Post;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.CommentCreateRequest;
 import com.fitzza.community.dto.CommentCreatedResponse;
@@ -10,6 +11,7 @@ import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.LikeCountResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
+import com.fitzza.community.notification.CommentCreatedEvent;
 import com.fitzza.community.repository.CommentLikeRepository;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
@@ -20,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,16 +35,19 @@ public class CommentService {
     private final CommentLikeRepository commentLikeRepository;
     private final PostRepository postRepository;
     private final UserDirectory userDirectory;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CommentService(
             CommentRepository commentRepository,
             CommentLikeRepository commentLikeRepository,
             PostRepository postRepository,
-            UserDirectory userDirectory) {
+            UserDirectory userDirectory,
+            ApplicationEventPublisher eventPublisher) {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.postRepository = postRepository;
         this.userDirectory = userDirectory;
+        this.eventPublisher = eventPublisher;
     }
 
     // 댓글은 작성순, 답글은 각 댓글 아래에 작성순으로 내려간다. viewerId는 비로그인이면 null이다.
@@ -88,13 +94,21 @@ public class CommentService {
         return result;
     }
 
+    // 다른 사람이 단 댓글·답글이면 글 작성자에게 알림을 보낸다. 실제 전송은 커밋 뒤에 한다.
     @Transactional
     public CommentCreatedResponse create(Long userId, Long postId, CommentCreateRequest request) {
-        requireVisiblePost(postId);
+        Post post = postRepository
+                .findByIdAndDeletedAtIsNull(postId)
+                .orElseThrow(() -> new CommunityApiException(ErrorCode.POST_NOT_FOUND));
         Comment comment = request.parentCommentId() == null
                 ? Comment.create(postId, userId, request.content())
                 : Comment.replyTo(findReplyTarget(postId, request.parentCommentId()), userId, request.content());
-        return new CommentCreatedResponse(commentRepository.save(comment).getId());
+        Comment saved = commentRepository.save(comment);
+        if (!post.isWrittenBy(userId)) {
+            eventPublisher.publishEvent(
+                    new CommentCreatedEvent(saved.getId(), postId, post.getUserId(), saved.getContent()));
+        }
+        return new CommentCreatedResponse(saved.getId());
     }
 
     @Transactional

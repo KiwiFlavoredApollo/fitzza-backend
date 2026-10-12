@@ -7,10 +7,13 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Comment;
+import com.fitzza.community.domain.Post;
+import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.dto.CommentCreateRequest;
 import com.fitzza.community.dto.CommentCreatedResponse;
 import com.fitzza.community.dto.CommentResponse;
@@ -18,6 +21,7 @@ import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.LikeCountResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
+import com.fitzza.community.notification.CommentCreatedEvent;
 import com.fitzza.community.repository.CommentLikeRepository;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
@@ -28,6 +32,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class CommentServiceTest {
@@ -41,13 +46,15 @@ class CommentServiceTest {
     private final CommentLikeRepository commentLikeRepository = mock(CommentLikeRepository.class);
     private final PostRepository postRepository = mock(PostRepository.class);
     private final UserDirectory userDirectory = mock(UserDirectory.class);
-    private final CommentService commentService =
-            new CommentService(commentRepository, commentLikeRepository, postRepository, userDirectory);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final CommentService commentService = new CommentService(
+            commentRepository, commentLikeRepository, postRepository, userDirectory, eventPublisher);
 
     @BeforeEach
     void setUp() {
         when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(true);
         when(postRepository.existsByIdAndDeletedAtIsNull(OTHER_POST_ID)).thenReturn(true);
+        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post(POST_ID, AUTHOR_ID)));
         when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
             Comment saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", 100L);
@@ -120,13 +127,54 @@ class CommentServiceTest {
 
     @Test
     void commentOnMissingOrDeletedPostIsNotFound() {
-        when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(false);
+        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> commentService.create(AUTHOR_ID, POST_ID, new CommentCreateRequest("댓글", null)))
                 .isInstanceOf(CommunityApiException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
         verify(commentRepository, never()).save(any(Comment.class));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void commentByAnotherUserAnnouncesItForThePostAuthor() {
+        commentService.create(OTHER_ID, POST_ID, new CommentCreateRequest("  잘 어울려요  ", null));
+
+        ArgumentCaptor<CommentCreatedEvent> captor = ArgumentCaptor.forClass(CommentCreatedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue()).isEqualTo(new CommentCreatedEvent(100L, POST_ID, AUTHOR_ID, "잘 어울려요"));
+    }
+
+    @Test
+    void replyByAnotherUserAlsoAnnouncesItForThePostAuthor() {
+        Comment parent = comment(1L, POST_ID, AUTHOR_ID, "원 댓글");
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(parent));
+
+        commentService.create(OTHER_ID, POST_ID, new CommentCreateRequest("답글입니다", 1L));
+
+        ArgumentCaptor<CommentCreatedEvent> captor = ArgumentCaptor.forClass(CommentCreatedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().postAuthorId()).isEqualTo(AUTHOR_ID);
+        assertThat(captor.getValue().postId()).isEqualTo(POST_ID);
+    }
+
+    @Test
+    void authorCommentingOnOwnPostAnnouncesNothing() {
+        commentService.create(AUTHOR_ID, POST_ID, new CommentCreateRequest("제 글이에요", null));
+
+        verify(commentRepository).save(any(Comment.class));
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void rejectedReplyAnnouncesNothing() {
+        Comment elsewhere = comment(3L, OTHER_POST_ID, AUTHOR_ID, "다른 글의 댓글");
+        when(commentRepository.findById(3L)).thenReturn(Optional.of(elsewhere));
+
+        assertThatThrownBy(() -> commentService.create(OTHER_ID, POST_ID, new CommentCreateRequest("답글", 3L)))
+                .isInstanceOf(CommunityApiException.class);
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
@@ -276,6 +324,12 @@ class CommentServiceTest {
         ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
         verify(commentRepository).save(captor.capture());
         return captor.getValue();
+    }
+
+    private static Post post(Long postId, Long authorId) {
+        Post post = Post.createNormal(authorId, "제목", "내용", PostCategory.DAILY, null);
+        ReflectionTestUtils.setField(post, "id", postId);
+        return post;
     }
 
     private static Comment comment(Long commentId, Long postId, Long userId, String content) {
