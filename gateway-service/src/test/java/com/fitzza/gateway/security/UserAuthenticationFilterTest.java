@@ -43,7 +43,9 @@ class UserAuthenticationFilterTest {
         assertThat(filter(exchange).get()).isNull();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(exchange.getResponse().getHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE)).isEqualTo("Bearer");
-        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":\"UNAUTHENTICATED\"");
+        assertThat(exchange.getResponse().getBodyAsString().block())
+                .contains("\"status\":401")
+                .contains("\"code\":\"UNAUTHENTICATED\"");
     }
 
     @ParameterizedTest
