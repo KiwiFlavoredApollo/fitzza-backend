@@ -41,7 +41,7 @@ class StatusControllerTest {
 
     @Test
     void servesStatusAsJsonAtThePublicRoute() throws Exception {
-        mockMvc.perform(get("/api/v1/users/status"))
+        mockMvc.perform(get("/api/users/status"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.length()").value(3))
@@ -52,13 +52,13 @@ class StatusControllerTest {
 
     @Test
     void rejectsPostToTheReadOnlyStatusEndpoint() throws Exception {
-        mockMvc.perform(post("/api/v1/users/status"))
+        mockMvc.perform(post("/api/users/status"))
                 .andExpect(status().isMethodNotAllowed());
     }
 
     @Test
     void returnsNotFoundForAnUnknownEndpoint() throws Exception {
-        mockMvc.perform(get("/api/v1/users/missing"))
+        mockMvc.perform(get("/api/users/missing"))
                 .andExpect(status().isNotFound());
     }
 }

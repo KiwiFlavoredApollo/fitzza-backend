@@ -27,14 +27,14 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
-            "POST /api/v1/auth/login",
-            "POST /api/v1/auth/reissue",
-            "POST /api/v1/auth/logout",
-            "POST /api/v1/users/signup",
-            "GET /api/v1/users/check-email",
-            "GET /api/v1/users/check-nickname",
-            "GET /api/v1/users/profile/options",
-            "GET /api/v1/users/status");
+            "POST /api/auth/login",
+            "POST /api/auth/reissue",
+            "POST /api/auth/logout",
+            "POST /api/users/signup",
+            "GET /api/users/check-email",
+            "GET /api/users/check-nickname",
+            "GET /api/users/profile/options",
+            "GET /api/users/status");
 
     private final JwtParser jwtParser;
 

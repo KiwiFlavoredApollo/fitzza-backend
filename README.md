@@ -36,18 +36,18 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 토큰 유효기간은 `JWT_EXPIRATION_SECONDS`(Access Token, 1~900초, 기본 15분)와 `JWT_REFRESH_EXPIRATION_SECONDS`(Refresh Token, 기본 30일)로 바꿀 수 있습니다. Refresh Token은 Redis에 저장합니다.
 
-로그아웃(`POST /api/v1/auth/logout`)은 Body의 Refresh Token을 Redis에서 지웁니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
+로그아웃(`POST /api/auth/logout`)은 Body의 Refresh Token을 Redis에서 지웁니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
 
-알림 API(`GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`, `PATCH /api/v1/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /internal/notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다.
+알림 API(`GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /internal/notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다.
 
-notification-service의 8086 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/v1/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
+notification-service의 8086 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
-`POST /api/v1/auth/login`, `/api/v1/auth/reissue`, `/api/v1/auth/logout`, `/api/v1/users/signup`과 `GET /api/v1/users/check-email`, `/api/v1/users/check-nickname`, `/api/v1/users/profile/options`, `/api/v1/users/status`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
+`POST /api/auth/login`, `/api/auth/reissue`, `/api/auth/logout`, `/api/users/signup`과 `GET /api/users/check-email`, `/api/users/check-nickname`, `/api/users/profile/options`, `/api/users/status`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
 
 ```bash
-curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/v1/users/me
+curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/users/me
 ```
 
 ```powershell
@@ -61,7 +61,7 @@ curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/v1/user
 Gateway를 통한 예시 호출:
 
 ```bash
-curl http://localhost:8080/api/v1/users/status
+curl http://localhost:8080/api/users/status
 curl http://localhost:8080/api/v1/products/status
 curl http://localhost:8080/api/v1/recommendations/status
 ```

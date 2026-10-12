@@ -35,7 +35,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class VoteControllerTest {
 
     private static final String USER_ID_HEADER = "X-User-Id";
-    private static final String POSTS = "/api/v1/community/posts";
+    private static final String POSTS = "/api/community/posts";
     private static final String TWO_OPTIONS = "["
             + "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":\"55\","
             + "\"imageUrl\":\"https://cdn.example.com/a.png\"},"

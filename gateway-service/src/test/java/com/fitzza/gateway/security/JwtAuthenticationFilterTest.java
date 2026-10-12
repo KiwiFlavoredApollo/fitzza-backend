@@ -39,7 +39,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void validTokenIsForwardedWithItsUserId() {
-        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/v1/users/me")
+        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7")));
 
         assertThat(forwardedUserId()).isEqualTo("7");
@@ -48,7 +48,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void userIdHeaderSentByTheClientIsReplacedByTheTokenOwner() {
-        send(MockServerHttpRequest.get("/api/v1/users/me")
+        send(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7"))
                 .header(USER_ID_HEADER, "999"));
 
@@ -57,7 +57,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void requestWithoutTokenIsForwardedAsAnonymous() {
-        send(MockServerHttpRequest.get("/api/v1/community/posts"));
+        send(MockServerHttpRequest.get("/api/community/posts"));
 
         assertThat(forwarded.get()).isNotNull();
         assertThat(forwarded.get().getHeaders().containsKey(USER_ID_HEADER)).isFalse();
@@ -65,7 +65,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void userIdHeaderWithoutTokenIsRemoved() {
-        send(MockServerHttpRequest.get("/api/v1/users/me").header(USER_ID_HEADER, "999"));
+        send(MockServerHttpRequest.get("/api/users/me").header(USER_ID_HEADER, "999"));
 
         assertThat(forwarded.get()).isNotNull();
         assertThat(forwarded.get().getHeaders().containsKey(USER_ID_HEADER)).isFalse();
@@ -73,7 +73,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void expiredTokenIsRejectedWithACodeTheClientCanActOn() {
-        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/v1/users/me")
+        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.expired("7")));
 
         assertThat(forwarded.get()).isNull();
@@ -83,7 +83,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void forgedTokenIsRejected() {
-        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/v1/users/me")
+        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.signedWithOtherSecret("7")));
 
         assertThat(forwarded.get()).isNull();
@@ -94,7 +94,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void emptyBearerTokenIsRejected() {
         MockServerWebExchange exchange = send(
-                MockServerHttpRequest.get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer "));
+                MockServerHttpRequest.get("/api/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer "));
 
         assertThat(forwarded.get()).isNull();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -106,7 +106,7 @@ class JwtAuthenticationFilterTest {
         when(blacklist.isRevoked(token)).thenReturn(Mono.just(true));
 
         MockServerWebExchange exchange = send(
-                MockServerHttpRequest.get("/api/v1/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+                MockServerHttpRequest.get("/api/users/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 
         assertThat(forwarded.get()).isNull();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -117,7 +117,7 @@ class JwtAuthenticationFilterTest {
     void requestIsRefusedWhenTheBlacklistCannotBeChecked() {
         when(blacklist.isRevoked(anyString())).thenReturn(Mono.error(new IllegalStateException("redis is down")));
 
-        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/v1/users/me")
+        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7")));
 
         assertThat(forwarded.get()).isNull();
@@ -128,7 +128,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void failureBehindTheGatewayIsNotReportedAsAnAuthenticationOutage() {
         GatewayFilterChain failingChain = exchange -> Mono.error(new IllegalStateException("downstream failed"));
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/v1/users/me")
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/users/me")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7")));
 
         assertThatThrownBy(() -> filter.filter(exchange, failingChain).block())
@@ -139,7 +139,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void logoutIsForwardedWithoutAskingTheBlacklist() {
-        send(MockServerHttpRequest.post("/api/v1/auth/logout")
+        send(MockServerHttpRequest.post("/api/auth/logout")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7")));
 
         assertThat(forwarded.get()).isNotNull();
@@ -148,7 +148,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void expiredTokenDoesNotBlockTheReissueEndpoint() {
-        send(MockServerHttpRequest.post("/api/v1/auth/reissue")
+        send(MockServerHttpRequest.post("/api/auth/reissue")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.expired("7"))
                 .header(USER_ID_HEADER, "999"));
 

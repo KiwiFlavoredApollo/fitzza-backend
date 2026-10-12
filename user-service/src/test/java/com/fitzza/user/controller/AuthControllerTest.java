@@ -46,7 +46,7 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class)))
                 .thenReturn(new LoginResponse("access", "refresh", 7L, "fitzza"));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": "password1"}
@@ -66,7 +66,7 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class)))
                 .thenThrow(new UserApiException(ErrorCode.INVALID_CREDENTIALS));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": "wrong-password1"}
@@ -80,7 +80,7 @@ class AuthControllerTest {
      */
     @Test
     void loginRejectsBlankPasswordBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": ""}
@@ -95,7 +95,7 @@ class AuthControllerTest {
         when(authService.reissue(new RefreshTokenRequest("old-refresh")))
                 .thenReturn(new TokenResponse("new-access", "new-refresh"));
 
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "old-refresh"}
@@ -110,7 +110,7 @@ class AuthControllerTest {
         when(authService.reissue(any(RefreshTokenRequest.class)))
                 .thenThrow(new UserApiException(ErrorCode.INVALID_REFRESH_TOKEN));
 
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "used-refresh"}
@@ -121,7 +121,7 @@ class AuthControllerTest {
 
     @Test
     void reissueRejectsMissingRefreshTokenBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/reissue")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
@@ -131,7 +131,7 @@ class AuthControllerTest {
 
     @Test
     void logoutPassesTheRefreshTokenAndReturnsOk() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
+        mockMvc.perform(post("/api/auth/logout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "refresh"}
@@ -142,7 +142,7 @@ class AuthControllerTest {
 
     @Test
     void logoutPassesTheAccessTokenFromTheAuthorizationHeader() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
+        mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Bearer access-token ")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -154,7 +154,7 @@ class AuthControllerTest {
 
     @Test
     void logoutIgnoresAnAuthorizationHeaderThatIsNotABearerToken() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
+        mockMvc.perform(post("/api/auth/logout")
                         .header("Authorization", "Basic dXNlcjpwYXNz")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

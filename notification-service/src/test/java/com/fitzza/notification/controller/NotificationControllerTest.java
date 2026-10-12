@@ -28,7 +28,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class NotificationControllerTest {
 
     private static final String USER_ID_HEADER = "X-User-Id";
-    private static final String NOTIFICATIONS = "/api/v1/notifications";
+    private static final String NOTIFICATIONS = "/api/notifications";
     private static final String NOTIFICATION_ID = "0b0f6f0e-6f0c-4d51-9c35-6f5d2f1f7a11";
 
     private final NotificationService notificationService = mock(NotificationService.class);

@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 @SpringBootApplication
 public class ReviewServiceApplication {
     public static void main(String[] args) { SpringApplication.run(ReviewServiceApplication.class, args); }
-    @RestController @RequestMapping("/api/v1/reviews")
+    @RestController @RequestMapping("/api/reviews")
     static class StatusController {
         @GetMapping("/status") Map<String, Object> status() { return Map.of("service", "review-service", "status", "UP", "timestamp", Instant.now()); }
     }
