@@ -128,9 +128,11 @@ services:
 
   order-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
-    environment: *java-environment
+    environment:
+      <<: *java-environment
+      INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
     depends_on: *domain-dependencies
-    ports: ["8083:8083"]
+    expose: ["8083"]
 
   community-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: community-service } }

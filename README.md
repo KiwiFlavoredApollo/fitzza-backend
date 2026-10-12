@@ -30,7 +30,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
-`INTERNAL_CALL_TOKEN`은 신뢰하는 서비스가 내부 API를 호출할 때 `X-Internal-Token` 헤더로 보내는 비밀값입니다. user-service(`/internal/users`), notification-service(`/internal/notifications/events`), product-service의 내부 API가 같은 값을 검사합니다. 지금은 community-service가 user-service 내부 API를 호출합니다. 값이 없거나 비어 있으면 해당 서비스가 시작되지 않으며, 헤더가 없거나 일치하지 않으면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Internal-Token`을 전달하기 전에 제거합니다. user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
+`INTERNAL_CALL_TOKEN`은 신뢰하는 서비스가 내부 API를 호출할 때 `X-Internal-Token` 헤더로 보내는 비밀값입니다. user-service(`/internal/users`), notification-service(`/internal/notifications/events`), product-service의 내부 API가 같은 값을 검사합니다. community-service는 user-service 내부 API를 호출하고, order-service는 product-service `/internal/product-options`를 호출합니다. 값이 없거나 비어 있으면 해당 서비스가 시작되지 않으며, 헤더가 없거나 일치하지 않으면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Internal-Token`을 전달하기 전에 제거합니다. user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
 브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
 
@@ -40,7 +40,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 알림 API(`GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /internal/notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다.
 
-community-service(8084)와 review-service(8085)도 호스트에 공개하지 않습니다. 두 서비스는 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자로 글을 쓰거나 지울 수 있습니다. 확인할 때도 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
+order-service(8083), community-service(8084), review-service(8085)도 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
 
 notification-service의 8086 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
 
