@@ -42,7 +42,7 @@ class UserControllerTest {
     void signUpReturnsCreatedWithUserId() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isCreated())
@@ -54,7 +54,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsMalformedEmailBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("not-an-email", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
@@ -67,7 +67,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsEmailWithoutTopLevelDomain() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
@@ -80,7 +80,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordWithSpecialCharacter() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1!", "fitzza")))
                 .andExpect(status().isBadRequest())
@@ -93,7 +93,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordWithoutDigit() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "passwordonly", "fitzza")))
                 .andExpect(status().isBadRequest())
@@ -108,7 +108,7 @@ class UserControllerTest {
     void signUpAcceptsKoreanAndMixedCaseNickname() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "민준Fit1")))
                 .andExpect(status().isCreated());
@@ -119,7 +119,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameWithSpecialCharacter() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit_zza")))
                 .andExpect(status().isBadRequest())
@@ -132,7 +132,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameWithWhitespace() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit zza")))
                 .andExpect(status().isBadRequest())
@@ -147,7 +147,7 @@ class UserControllerTest {
     void signUpAcceptsLowercaseOnlyPasswordAndNicknameAtLengthLimits() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "abcdefghijklmnopqrstuvw1", "0123456789")))
                 .andExpect(status().isCreated());
@@ -158,7 +158,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordLongerThan24Characters() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "abcdefghijklmnopqrstuvwx1", "fitzza")))
                 .andExpect(status().isBadRequest())
@@ -171,7 +171,7 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameLongerThan10Characters() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "01234567890")))
                 .andExpect(status().isBadRequest())
@@ -187,7 +187,7 @@ class UserControllerTest {
         when(userService.signUp(any(SignupRequest.class)))
                 .thenThrow(new UserApiException(ErrorCode.DUPLICATE_EMAIL));
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/users/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isConflict())
@@ -201,7 +201,7 @@ class UserControllerTest {
     void checkEmailReturnsAvailability() throws Exception {
         when(userService.isEmailAvailable("fit@example.com")).thenReturn(false);
 
-        mockMvc.perform(get("/api/v1/users/check-email").param("email", "fit@example.com"))
+        mockMvc.perform(get("/api/users/check-email").param("email", "fit@example.com"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.available").value(false));
     }
@@ -213,7 +213,7 @@ class UserControllerTest {
     void checkNicknameReturnsAvailability() throws Exception {
         when(userService.isNicknameAvailable("fitzza")).thenReturn(true);
 
-        mockMvc.perform(get("/api/v1/users/check-nickname").param("nickname", "fitzza"))
+        mockMvc.perform(get("/api/users/check-nickname").param("nickname", "fitzza"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.available").value(true));
     }
@@ -223,7 +223,7 @@ class UserControllerTest {
      */
     @Test
     void checkEmailRejectsMissingParameter() throws Exception {
-        mockMvc.perform(get("/api/v1/users/check-email"))
+        mockMvc.perform(get("/api/users/check-email"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
     }

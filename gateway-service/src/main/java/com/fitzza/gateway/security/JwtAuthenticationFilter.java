@@ -29,7 +29,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     static final String USER_ID_HEADER = "X-User-Id";
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String AUTH_PATH_PREFIX = "/api/v1/auth/";
+    private static final String AUTH_PATH_PREFIX = "/api/auth/";
 
     private enum TokenStatus {
         ACTIVE,

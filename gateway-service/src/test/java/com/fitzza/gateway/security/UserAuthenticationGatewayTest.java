@@ -65,9 +65,9 @@ class UserAuthenticationGatewayTest {
     @Test
     void routesPublicAuthenticationRequestsWithoutForwardingForgedIdentity() {
         for (String endpoint : new String[] {"login", "reissue", "logout"}) {
-            client().post().uri("/api/v1/auth/" + endpoint).header("X-User-Id", "999")
+            client().post().uri("/api/auth/" + endpoint).header("X-User-Id", "999")
                     .exchange().expectStatus().isOk().expectBody(String.class)
-                    .isEqualTo("/api/v1/auth/" + endpoint + ":anonymous");
+                    .isEqualTo("/api/auth/" + endpoint + ":anonymous");
         }
     }
 
@@ -77,14 +77,14 @@ class UserAuthenticationGatewayTest {
                 .expiration(Date.from(Instant.now().plusSeconds(900)))
                 .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
                         .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
-        client().get().uri("/api/v1/users/me").header("X-User-Id", "999")
+        client().get().uri("/api/users/me").header("X-User-Id", "999")
                 .exchange().expectStatus().isUnauthorized();
-        client().get().uri("/api/v1/users/me").header("X-User-Id", "999")
+        client().get().uri("/api/users/me").header("X-User-Id", "999")
                 .headers(headers -> headers.setBearerAuth(token))
-                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/v1/users/me:42");
-        client().patch().uri("/api/v1/users/me/body").header("X-User-Id", "999")
+                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me:42");
+        client().patch().uri("/api/users/me/body").header("X-User-Id", "999")
                 .headers(headers -> headers.setBearerAuth(token))
-                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/v1/users/me/body:42");
+                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me/body:42");
     }
 
     @Test
@@ -95,14 +95,14 @@ class UserAuthenticationGatewayTest {
                         .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
         when(accessTokenBlacklist.isRevoked(token)).thenReturn(Mono.just(true));
 
-        client().get().uri("/api/v1/users/me")
+        client().get().uri("/api/users/me")
                 .headers(headers -> headers.setBearerAuth(token))
                 .exchange().expectStatus().isUnauthorized();
     }
 
     @Test
     void answersBrowserPreflightFromAnAllowedOriginWithoutAToken() {
-        client().options().uri("/api/v1/users/me")
+        client().options().uri("/api/users/me")
                 .header("Origin", "http://localhost:3000")
                 .header("Access-Control-Request-Method", "GET")
                 .header("Access-Control-Request-Headers", "authorization")
@@ -112,10 +112,10 @@ class UserAuthenticationGatewayTest {
 
     @Test
     void addsTheCorsHeaderToResponsesForAnAllowedOriginAndRejectsOtherOrigins() {
-        client().post().uri("/api/v1/auth/login").header("Origin", "http://localhost:5173")
+        client().post().uri("/api/auth/login").header("Origin", "http://localhost:5173")
                 .exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:5173");
-        client().post().uri("/api/v1/auth/login").header("Origin", "http://not-allowed.example")
+        client().post().uri("/api/auth/login").header("Origin", "http://not-allowed.example")
                 .exchange().expectStatus().isForbidden();
     }
 

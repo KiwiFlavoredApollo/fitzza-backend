@@ -13,7 +13,7 @@ public class UserServiceApplication {
     public static void main(String[] args) { SpringApplication.run(UserServiceApplication.class, args); }
 
     @RestController
-    @RequestMapping("/api/v1/users")
+    @RequestMapping("/api/users")
     static class StatusController {
         @GetMapping("/status")
         Map<String, Object> status() { return Map.of("service", "user-service", "status", "UP", "timestamp", Instant.now()); }

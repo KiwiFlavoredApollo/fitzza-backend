@@ -50,7 +50,7 @@ class ProfileControllerTest {
                         List.of(new OptionResponse("OVERSIZED", "오버사이즈")),
                         List.of(new OptionResponse("CASUAL", "캐주얼"))));
 
-        mockMvc.perform(get("/api/v1/users/profile/options"))
+        mockMvc.perform(get("/api/users/profile/options"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.bodyTypes[0].code").value("STANDARD"))
                 .andExpect(jsonPath("$.fits[0].code").value("OVERSIZED"))
@@ -62,7 +62,7 @@ class ProfileControllerTest {
         when(profileService.getMyProfile(7L))
                 .thenReturn(new MyProfileResponse("fit@example.com", "fitzza", sampleBody()));
 
-        mockMvc.perform(get("/api/v1/users/me").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(get("/api/users/me").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("fit@example.com"))
                 .andExpect(jsonPath("$.nickname").value("fitzza"))
@@ -73,7 +73,7 @@ class ProfileControllerTest {
 
     @Test
     void myProfileRequiresUserHeader() throws Exception {
-        mockMvc.perform(get("/api/v1/users/me"))
+        mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
         verifyNoInteractions(profileService);
@@ -83,7 +83,7 @@ class ProfileControllerTest {
     void myProfileReturnsNotFoundForUnknownUser() throws Exception {
         when(profileService.getMyProfile(7L)).thenThrow(new UserApiException(ErrorCode.USER_NOT_FOUND));
 
-        mockMvc.perform(get("/api/v1/users/me").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(get("/api/users/me").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }
@@ -92,7 +92,7 @@ class ProfileControllerTest {
     void updateMyBodyReturnsUpdatedBody() throws Exception {
         when(profileService.updateMyBody(eq(7L), any(UserBodyUpdate.class))).thenReturn(sampleBody());
 
-        mockMvc.perform(patch("/api/v1/users/me/body")
+        mockMvc.perform(patch("/api/users/me/body")
                         .header(USER_ID_HEADER, "7")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -105,7 +105,7 @@ class ProfileControllerTest {
 
     @Test
     void updateMyBodyRejectsOutOfRangeValueBeforeCallingService() throws Exception {
-        mockMvc.perform(patch("/api/v1/users/me/body")
+        mockMvc.perform(patch("/api/users/me/body")
                         .header(USER_ID_HEADER, "7")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -118,7 +118,7 @@ class ProfileControllerTest {
 
     @Test
     void updateMyBodyRequiresUserHeader() throws Exception {
-        mockMvc.perform(patch("/api/v1/users/me/body")
+        mockMvc.perform(patch("/api/users/me/body")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"height": 172.5}

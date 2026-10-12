@@ -31,7 +31,7 @@ class UserAuthenticationFilterTest {
             "test-only-jwt-secret-with-32-bytes-or-more");
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET /api/v1/users/me", "PATCH /api/v1/users/me/body"})
+    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me/body"})
     void forwardsVerifiedSubjectInsteadOfAllClientUserIds(String endpoint) {
         MockServerWebExchange exchange = exchange(endpoint, "user-service",
                 "Bearer " + token("42", Instant.now().plusSeconds(900), KEY));
@@ -42,47 +42,47 @@ class UserAuthenticationFilterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET /api/v1/users/me", "PATCH /api/v1/users/me/body",
-            "GET /api/v1/users/new-private-endpoint", "POST /api/v1/users/profile/options",
-            "GET /api/v1/users/%6de", "GET /api/v1/users/me/"})
+    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me/body",
+            "GET /api/users/new-private-endpoint", "POST /api/users/profile/options",
+            "GET /api/users/%6de", "GET /api/users/me/"})
     void rejectsUnauthenticatedRequestsDespiteSpoofedUserId(String endpoint) {
         assertUnauthorized(exchange(endpoint, "user-service"));
     }
 
     @Test
     void rejectsExpiredTokensAndTokensSignedWithAnotherKey() {
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service",
+        assertUnauthorized(exchange("GET /api/users/me", "user-service",
                 "Bearer " + token("42", Instant.now().minusSeconds(60), KEY)));
         SecretKey otherKey = Jwts.SIG.HS256.key().build();
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service",
+        assertUnauthorized(exchange("GET /api/users/me", "user-service",
                 "Bearer " + token("42", Instant.now().plusSeconds(900), otherKey)));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"not-a-token", "Bearer invalid", "Basic credentials", "Bearer "})
     void rejectsMalformedAuthorization(String authorization) {
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service", authorization));
+        assertUnauthorized(exchange("GET /api/users/me", "user-service", authorization));
     }
 
     @Test
     void rejectsMultipleAuthorizationHeaders() {
         String authorization = "Bearer " + token("42", Instant.now().plusSeconds(900), KEY);
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service", authorization, authorization));
+        assertUnauthorized(exchange("GET /api/users/me", "user-service", authorization, authorization));
     }
 
     @Test
     void rejectsTokensWithoutExpirationOrSubjectAndUnsignedTokens() {
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service", "Bearer " + token("42", null, KEY)));
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service",
+        assertUnauthorized(exchange("GET /api/users/me", "user-service", "Bearer " + token("42", null, KEY)));
+        assertUnauthorized(exchange("GET /api/users/me", "user-service",
                 "Bearer " + token(null, Instant.now().plusSeconds(900), KEY)));
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service",
+        assertUnauthorized(exchange("GET /api/users/me", "user-service",
                 "Bearer " + Jwts.builder().subject("42").compact()));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"0", "-1", "abc", "9223372036854775808"})
     void rejectsInvalidUserIds(String subject) {
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service",
+        assertUnauthorized(exchange("GET /api/users/me", "user-service",
                 "Bearer " + token(subject, Instant.now().plusSeconds(900), KEY)));
     }
 
@@ -92,21 +92,21 @@ class UserAuthenticationFilterTest {
                 .expiration(Date.from(Instant.now().plusSeconds(900)))
                 .notBefore(Date.from(Instant.now().plusSeconds(300)))
                 .signWith(KEY, Jwts.SIG.HS256).compact();
-        assertUnauthorized(exchange("GET /api/v1/users/me", "user-service", "Bearer " + futureToken));
+        assertUnauthorized(exchange("GET /api/users/me", "user-service", "Bearer " + futureToken));
         String secret = "test-only-long-secret-for-hs512-validation-".repeat(2);
         UserAuthenticationFilter longKeyFilter = new UserAuthenticationFilter(secret);
         String token = Jwts.builder().subject("42")
                 .expiration(Date.from(Instant.now().plusSeconds(900)))
                 .signWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS512).compact();
-        MockServerWebExchange exchange = exchange("GET /api/v1/users/me", "user-service", "Bearer " + token);
+        MockServerWebExchange exchange = exchange("GET /api/users/me", "user-service", "Bearer " + token);
         longKeyFilter.filter(exchange, ignored -> { throw new AssertionError("Request must not be forwarded"); }).block();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"POST /api/v1/auth/login", "POST /api/v1/auth/reissue", "POST /api/v1/auth/logout",
-            "POST /api/v1/users/signup", "GET /api/v1/users/check-email", "GET /api/v1/users/check-nickname",
-            "GET /api/v1/users/profile/options", "GET /api/v1/users/status"})
+    @ValueSource(strings = {"POST /api/auth/login", "POST /api/auth/reissue", "POST /api/auth/logout",
+            "POST /api/users/signup", "GET /api/users/check-email", "GET /api/users/check-nickname",
+            "GET /api/users/profile/options", "GET /api/users/status"})
     void keepsPublicEndpointsAccessibleAndStripsSpoofedIds(String endpoint) {
         AtomicReference<ServerWebExchange> forwarded = filter(exchange(endpoint, "user-service"));
         assertThat(forwarded.get()).isNotNull();
