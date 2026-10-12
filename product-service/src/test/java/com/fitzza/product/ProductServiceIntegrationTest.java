@@ -75,21 +75,23 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/categories']").exists())
                 .andExpect(jsonPath("$.paths['/api/products']").exists())
                 .andExpect(jsonPath("$.paths['/api/products/{productId}']").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/products']").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/products/measurements']").exists())
+                .andExpect(jsonPath("$.paths['/internal/products']").exists())
+                .andExpect(jsonPath("$.paths['/internal/products/measurements']").exists())
                 .andExpect(jsonPath("$.paths['/internal/product-options']").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/options']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/v1/products']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/v1/wishlists/check']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/v1/worldcups/{worldcupHistoryId}']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/options']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/products'].post").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].delete").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/wishlists/check']").exists())
+                .andExpect(jsonPath("$.paths['/internal/wishlists/check']").exists())
                 .andExpect(jsonPath("$.paths['/api/worldcups/candidates']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/worldcups'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/worldcups/latest']").exists())
                 .andExpect(jsonPath("$.paths['/api/worldcups/history']").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/worldcups/{worldcupHistoryId}']").exists());
+                .andExpect(jsonPath("$.paths['/internal/worldcups/{worldcupHistoryId}']").exists());
     }
 
     @Test
@@ -127,13 +129,13 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].size").value("M"))
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].values['총장']").value(70));
 
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/products"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/products"))
                         .param("productIds", knit.getProductId() + "," + shirt.getProductId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].productName").value("니트"))
                 .andExpect(jsonPath("$[1].productName").value("셔츠"));
 
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/products/measurements"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/products/measurements"))
                         .param("productIds", shirt.getProductId() + "," + knit.getProductId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].options.length()").value(1))
@@ -228,7 +230,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.content[0].price").value(30000))
                 .andExpect(jsonPath("$.content[0].categoryL1").value("TOP"));
 
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/wishlists/check"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/wishlists/check"))
                         .param("userId", USER_ID)
                         .param("itemId", itemId))
                 .andExpect(jsonPath("$.wishlisted").value(true));
@@ -265,10 +267,10 @@ class ProductServiceIntegrationTest {
         mockMvc.perform(get("/api/worldcups/history").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1));
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/worldcups/" + historyId)).param("userId", USER_ID))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/worldcups/" + historyId)).param("userId", USER_ID))
                 .andExpect(jsonPath("$.owned").value(true))
                 .andExpect(jsonPath("$.winnerProduct.productName").value("니트"));
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/worldcups/" + historyId)).param("userId", "2"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/worldcups/" + historyId)).param("userId", "2"))
                 .andExpect(jsonPath("$.owned").value(false));
         mockMvc.perform(get("/api/worldcups/latest").header(ApiHeaders.USER_ID, "2"))
                 .andExpect(status().isNotFound());

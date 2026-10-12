@@ -90,7 +90,7 @@ class WishlistControllerTest {
     void checkWishlistReturnsOwnership() throws Exception {
         when(wishlistService.checkWishlist(1L, "7")).thenReturn(new WishlistCheckResponse(true));
 
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/wishlists/check"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/wishlists/check"))
                         .param("userId", "1")
                         .param("itemId", "7"))
                 .andExpect(status().isOk())
@@ -99,7 +99,7 @@ class WishlistControllerTest {
 
     @Test
     void checkWishlistRequiresAllParameters() throws Exception {
-        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/v1/wishlists/check")).param("userId", "1"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/wishlists/check")).param("userId", "1"))
                 .andExpect(status().isBadRequest());
     }
 }

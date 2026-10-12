@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Product Internal", description = "서비스 간 통신용 상품 API")
 @RestController
-@RequestMapping("/internal/v1/products")
+@RequestMapping("/internal/products")
 @RequiredArgsConstructor
 public class ProductInternalController {
 

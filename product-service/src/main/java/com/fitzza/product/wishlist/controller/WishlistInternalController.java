@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Wishlist Internal", description = "서비스 간 통신용 찜 API")
 @RestController
-@RequestMapping("/internal/v1/wishlists")
+@RequestMapping("/internal/wishlists")
 @RequiredArgsConstructor
 public class WishlistInternalController {
 
