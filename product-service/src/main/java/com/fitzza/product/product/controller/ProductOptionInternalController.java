@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Product Option Internal", description = "장바구니·주문 서비스용 상품 옵션 내부 API")
 @RestController
-@RequestMapping("/internal/options")
+@RequestMapping("/internal/product-options")
 @RequiredArgsConstructor
 public class ProductOptionInternalController {
 
