@@ -76,9 +76,9 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/products/{productId}']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/products']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/products/measurements']").exists())
-                .andExpect(jsonPath("$.paths['/internal/options']").exists())
+                .andExpect(jsonPath("$.paths['/internal/product-options']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/options']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/internal/product-options']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/options']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/products'].post").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].post").exists())
@@ -175,7 +175,7 @@ class ProductServiceIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/internal/options")
+        mockMvc.perform(get("/internal/product-options")
                         .param("optionIds", soldOutOption.getOptionId() + ",999999," + shirtOption.getOptionId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
@@ -192,7 +192,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$[1].available").value(false))
                 .andExpect(jsonPath("$[1].status").value("SOLD_OUT"));
 
-        mockMvc.perform(get("/internal/options").param("optionIds", "999999"))
+        mockMvc.perform(get("/internal/product-options").param("optionIds", "999999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
