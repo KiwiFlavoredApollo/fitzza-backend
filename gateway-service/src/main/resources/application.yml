@@ -67,6 +67,17 @@ spring:
         - id: recommendation-service
           uri: ${RECOMMENDATION_URL:http://localhost:8092}
           predicates: [Path=/api/v1/recommendations/**]
+# Swagger UI는 Gateway 한 곳(/swagger-ui.html)에서 열고, 서비스는 오른쪽 위 목록에서 고른다.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /api-docs/user-service
+      - name: community-service
+        url: /api-docs/community-service
+      - name: notification-service
+        url: /api-docs/notification-service
 jwt:
   secret: ${JWT_SECRET}
 eureka:

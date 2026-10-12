@@ -294,4 +294,22 @@ class PostControllerTest {
                 false,
                 List.of());
     }
+
+    @Test
+    void unexpectedFailureReturnsInternalServerErrorWithoutLeakingTheCause() throws Exception {
+        when(postService.getFeed(null, null, null, 0, 20))
+                .thenThrow(new IllegalStateException("jdbc url and password"));
+
+        mockMvc.perform(get(POSTS))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
+    }
+
+    @Test
+    void unsupportedMethodKeepsItsStatusInTheCommonErrorShape() throws Exception {
+        mockMvc.perform(patch(POSTS).header(USER_ID_HEADER, "7"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
 }
