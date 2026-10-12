@@ -76,8 +76,9 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/products/{productId}']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/products']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/products/measurements']").exists())
-                .andExpect(jsonPath("$.paths['/internal/v1/options']").exists())
-                .andExpect(jsonPath("$.paths['/internal/product-options']").exists())
+                .andExpect(jsonPath("$.paths['/internal/options']").exists())
+                .andExpect(jsonPath("$.paths['/internal/v1/options']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/internal/product-options']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/products'].post").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].post").exists())
@@ -174,36 +175,26 @@ class ProductServiceIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        mockMvc.perform(get("/internal/product-options")
+        mockMvc.perform(get("/internal/options")
                         .param("optionIds", soldOutOption.getOptionId() + ",999999," + shirtOption.getOptionId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].optionId").value(shirtOption.getOptionId()))
                 .andExpect(jsonPath("$[0].productId").value(shirt.getProductId()))
+                .andExpect(jsonPath("$[0].brandName").value("Fitzza"))
                 .andExpect(jsonPath("$[0].productName").value("셔츠"))
                 .andExpect(jsonPath("$[0].price").value(30000))
                 .andExpect(jsonPath("$[0].color").value("BLACK"))
                 .andExpect(jsonPath("$[0].size").value("M"))
                 .andExpect(jsonPath("$[0].available").value(true))
-                .andExpect(jsonPath("$[0].productStatus").value("ON_SALE"))
+                .andExpect(jsonPath("$[0].status").value("ON_SALE"))
                 .andExpect(jsonPath("$[1].price").value(21500))
                 .andExpect(jsonPath("$[1].available").value(false))
-                .andExpect(jsonPath("$[1].productStatus").value("SOLD_OUT"));
+                .andExpect(jsonPath("$[1].status").value("SOLD_OUT"));
 
-        mockMvc.perform(get("/internal/product-options").param("optionIds", "999999"))
+        mockMvc.perform(get("/internal/options").param("optionIds", "999999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
-    }
-
-    @Test
-    void optionSummariesExposePriceAndStatusForOtherServices() throws Exception {
-        mockMvc.perform(get("/internal/v1/options").param("optionIds", String.valueOf(shirtOption.getOptionId())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].productId").value(shirt.getProductId()))
-                .andExpect(jsonPath("$[0].brandName").value("Fitzza"))
-                .andExpect(jsonPath("$[0].price").value(30000))
-                .andExpect(jsonPath("$[0].status").value("ON_SALE"));
     }
 
     @Test

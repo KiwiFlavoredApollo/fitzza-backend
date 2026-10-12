@@ -9,22 +9,26 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record ProductOptionInternalResponse(
         @Schema(description = "옵션 ID", example = "10") Long optionId,
         @Schema(description = "상품 ID", example = "1") Long productId,
+        @Schema(description = "브랜드명", example = "Fitzza") String brandName,
         @Schema(description = "상품명", example = "오버핏 헤비 후드 티셔츠") String productName,
-        @Schema(description = "옵션 적용 판매가(원). 상품 판매가에 옵션 추가 금액을 더한 값", example = "42000") Integer price,
         @Schema(description = "색상. 색상 구분이 없는 상품은 null", example = "BLACK") String color,
         @Schema(description = "사이즈", example = "M") String size,
+        @Schema(description = "옵션 적용 판매가(원). 상품 판매가에 옵션 추가 금액을 더한 값", example = "42000") Integer price,
+        @Schema(description = "대표 이미지 URL") String imageUrl,
         @Schema(description = "판매 가능 여부. 상품 상태가 ON_SALE일 때만 true", example = "true") Boolean available,
-        @Schema(description = "상품 판매 상태") ProductStatus productStatus) {
+        @Schema(description = "상품 판매 상태") ProductStatus status) {
 
     public static ProductOptionInternalResponse from(ProductOptionEntity option) {
         ProductEntity product = option.getProduct();
         return new ProductOptionInternalResponse(
                 option.getOptionId(),
                 product.getProductId(),
+                product.getBrand().getBrandName(),
                 product.getProductName(),
-                option.calculatePrice(),
                 option.getColor(),
                 option.getSize(),
+                option.calculatePrice(),
+                product.getImageUrl(),
                 product.getStatus() == ProductStatus.ON_SALE,
                 product.getStatus());
     }

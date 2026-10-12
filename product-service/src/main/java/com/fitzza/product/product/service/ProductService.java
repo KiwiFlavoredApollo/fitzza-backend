@@ -3,7 +3,6 @@ package com.fitzza.product.product.service;
 import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.BusinessException;
 import com.fitzza.product.global.exception.ErrorCode;
-import com.fitzza.product.product.dto.OptionSummaryResponse;
 import com.fitzza.product.product.dto.ProductDetailResponse;
 import com.fitzza.product.product.dto.ProductListResponse;
 import com.fitzza.product.product.dto.ProductMeasurementResponse;
@@ -123,17 +122,10 @@ public class ProductService {
                 .toList();
     }
 
-    public List<OptionSummaryResponse> findOptionSummaries(List<Long> optionIds) {
-        List<Long> distinctIds = optionIds.stream().distinct().toList();
-        return productOptionRepository.findAllWithProductByOptionIdIn(distinctIds).stream()
-                .map(OptionSummaryResponse::from)
-                .toList();
-    }
-
     /** 존재하지 않는 옵션 ID는 오류 없이 결과에서 제외한다. */
     public List<ProductOptionInternalResponse> findProductOptions(List<Long> optionIds) {
         List<Long> distinctIds = optionIds.stream().distinct().toList();
-        return productOptionRepository.findAllByOptionIdInOrderByOptionId(distinctIds).stream()
+        return productOptionRepository.findAllWithProductByOptionIdIn(distinctIds).stream()
                 .map(ProductOptionInternalResponse::from)
                 .toList();
     }
