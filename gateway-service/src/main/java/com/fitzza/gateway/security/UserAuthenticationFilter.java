@@ -27,10 +27,10 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
 
     private static final String USER_ROUTE_ID = "user-service";
     private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
-            "POST /api/auth/login",
-            "POST /api/auth/reissue",
-            "POST /api/auth/logout",
-            "POST /api/users/signup",
+            "POST /api/auth/signin",
+            "POST /api/auth/refresh",
+            "POST /api/auth/signout",
+            "POST /api/auth/signup",
             "GET /api/users/profile/options",
             "GET /api/users/status");
     private static final byte[] UNAUTHENTICATED_BODY =
