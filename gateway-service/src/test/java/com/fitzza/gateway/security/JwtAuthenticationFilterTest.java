@@ -148,7 +148,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void logoutIsForwardedWithoutAskingTheBlacklist() {
-        send(MockServerHttpRequest.post("/api/auth/logout")
+        send(MockServerHttpRequest.post("/api/auth/signout")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.valid("7")));
 
         assertThat(forwarded.get()).isNotNull();
@@ -157,7 +157,7 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void expiredTokenDoesNotBlockTheReissueEndpoint() {
-        send(MockServerHttpRequest.post("/api/auth/reissue")
+        send(MockServerHttpRequest.post("/api/auth/refresh")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.expired("7"))
                 .header(USER_ID_HEADER, "999"));
 

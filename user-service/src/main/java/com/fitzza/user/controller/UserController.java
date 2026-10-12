@@ -20,13 +20,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "회원", description = "회원가입. 토큰 없이 호출한다.")
 @RestController
-@RequestMapping("/api/users")
+// 회원가입은 로그인·재발급·로그아웃과 같은 /api/auth 아래에 둔다(이슈 #36).
+@RequestMapping("/api/auth")
 public class UserController {
 
     private final UserService userService;
 
     /**
-     * 가입 및 중복 확인 요청을 처리할 사용자 서비스를 주입한다.
+     * 가입 요청을 처리할 사용자 서비스를 주입한다.
      */
     public UserController(UserService userService) {
         this.userService = userService;

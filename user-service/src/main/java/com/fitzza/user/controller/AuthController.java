@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "인증", description = "로그인, 토큰 재발급, 로그아웃")
+@Tag(name = "인증", description = "로그인(signin), 토큰 재발급(refresh), 로그아웃(signout)")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -57,7 +57,7 @@ public class AuthController {
                 description = "INVALID_CREDENTIALS: 이메일 또는 비밀번호가 틀림(원인은 구분하지 않음)",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/login")
+    @PostMapping("/signin")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
@@ -77,7 +77,7 @@ public class AuthController {
                 description = "INVALID_REFRESH_TOKEN: 없거나 만료됐거나 이미 쓴 토큰. 다시 로그인해야 한다.",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/reissue")
+    @PostMapping("/refresh")
     public TokenResponse reissue(@Valid @RequestBody RefreshTokenRequest request) {
         return authService.reissue(request);
     }
@@ -96,7 +96,7 @@ public class AuthController {
                 description = "INVALID_REQUEST: Refresh Token 누락",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/logout")
+    @PostMapping("/signout")
     public void logout(
             @Valid @RequestBody RefreshTokenRequest request,
             @Parameter(hidden = true) @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false)

@@ -75,7 +75,7 @@ class UserAuthenticationGatewayTest {
 
     @Test
     void routesPublicAuthenticationRequestsWithoutForwardingForgedIdentity() {
-        for (String endpoint : new String[] {"login", "reissue", "logout"}) {
+        for (String endpoint : new String[] {"signup", "signin", "refresh", "signout"}) {
             client().post().uri("/api/auth/" + endpoint).header("X-User-Id", "999")
                     .exchange().expectStatus().isOk().expectBody(String.class)
                     .isEqualTo("/api/auth/" + endpoint + ":anonymous");
@@ -145,10 +145,10 @@ class UserAuthenticationGatewayTest {
 
     @Test
     void addsTheCorsHeaderToResponsesForAnAllowedOriginAndRejectsOtherOrigins() {
-        client().post().uri("/api/auth/login").header("Origin", "http://localhost:5173")
+        client().post().uri("/api/auth/signin").header("Origin", "http://localhost:5173")
                 .exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:5173");
-        client().post().uri("/api/auth/login").header("Origin", "http://not-allowed.example")
+        client().post().uri("/api/auth/signin").header("Origin", "http://not-allowed.example")
                 .exchange().expectStatus().isForbidden();
     }
 
