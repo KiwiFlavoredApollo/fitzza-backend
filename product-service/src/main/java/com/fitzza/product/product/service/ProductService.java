@@ -35,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -50,16 +51,22 @@ public class ProductService {
     private final ProductSizeGuideRepository productSizeGuideRepository;
 
     public PageResponse<ProductListResponse> findProducts(
-            String categoryL1,
-            String categoryL2,
-            String subcategory,
-            ProductSortType sortType,
-            int page,
-            int size) {
+            String category, ProductSortType sortType, int page, int size) {
+        validateCategoryLength(category);
         PageRequest pageRequest = PageRequest.of(page, size, sortType.toSort());
         Page<ProductEntity> products = productRepository.findAll(
-                ProductSpecifications.visibleInCategory(categoryL1, categoryL2, subcategory), pageRequest);
+                ProductSpecifications.visibleInCategory(category), pageRequest);
         return PageResponse.from(products.map(ProductListResponse::from));
+    }
+
+    private void validateCategoryLength(String category) {
+        if (!StringUtils.hasText(category)) {
+            return;
+        }
+        int length = category.trim().length();
+        if (length != 3 && length != 6 && length != 9) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "카테고리 코드 길이는 3, 6, 9여야 합니다.");
+        }
     }
 
     public ProductDetailResponse findProduct(Long productId) {

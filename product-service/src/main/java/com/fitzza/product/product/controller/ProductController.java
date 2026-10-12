@@ -31,7 +31,8 @@ public class ProductController {
 
     private final ProductService productService;
 
-    @Operation(summary = "상품 목록 조회", description = "카테고리 코드 조건과 정렬 기준으로 노출 가능한 상품(HIDDEN 제외)을 페이지 단위로 조회한다.")
+    @Operation(summary = "상품 목록 조회",
+            description = "카테고리 코드 길이에 따라 대분류(3)·중분류(6)·소분류(9)로 조회한다. 코드가 없으면 전체 노출 상품을 반환한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터",
@@ -39,15 +40,14 @@ public class ProductController {
     })
     @GetMapping
     public PageResponse<ProductListResponse> getProducts(
-            @Parameter(description = "대분류 카테고리 코드", example = "001") @RequestParam(required = false) String categoryL1,
-            @Parameter(description = "중분류 카테고리 코드", example = "001004") @RequestParam(required = false) String categoryL2,
-            @Parameter(description = "소분류 카테고리 코드", example = "001004001") @RequestParam(required = false) String subcategory,
+            @Parameter(description = "카테고리 코드. 길이 3은 대분류, 6은 중분류, 9는 소분류", example = "001")
+            @RequestParam(required = false) String category,
             @Parameter(description = "정렬 기준") @RequestParam(defaultValue = "LATEST") ProductSortType sort,
             @Parameter(description = "페이지 번호(0부터 시작)")
             @RequestParam(defaultValue = PagingConstants.DEFAULT_PAGE) @Min(0) int page,
             @Parameter(description = "페이지 크기")
             @RequestParam(defaultValue = PagingConstants.DEFAULT_SIZE) @Min(1) @Max(PagingConstants.MAX_SIZE) int size) {
-        return productService.findProducts(categoryL1, categoryL2, subcategory, sort, page, size);
+        return productService.findProducts(category, sort, page, size);
     }
 
     @Operation(summary = "상품 상세 조회", description = "상품 기본 정보와 옵션별 실측 정보를 함께 조회한다.")

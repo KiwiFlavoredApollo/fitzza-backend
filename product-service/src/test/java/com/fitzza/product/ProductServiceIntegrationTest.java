@@ -105,10 +105,16 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$[0].children[0].code").value("KNIT"))
                 .andExpect(jsonPath("$[0].children[0].name").value("니트"));
 
-        mockMvc.perform(get("/api/products").param("categoryL1", "TOP").param("sort", "PRICE_DESC"))
+        mockMvc.perform(get("/api/products").param("category", "TOP").param("sort", "PRICE_DESC"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.content[0].productName").value("니트"));
+        mockMvc.perform(get("/api/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+        mockMvc.perform(get("/api/products").param("category", "TO"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 
         mockMvc.perform(get("/api/products/" + shirt.getProductId()))
                 .andExpect(status().isOk())
