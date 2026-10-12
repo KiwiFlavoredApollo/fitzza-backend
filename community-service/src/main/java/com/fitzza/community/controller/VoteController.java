@@ -43,7 +43,8 @@ public class VoteController {
     @Operation(
             summary = "투표 게시글 작성",
             description = "선택지는 2~4개. 마감 시각은 서버가 작성 시각 + 6시간으로 정한다. 직접 올린 사진은 "
-                    + "source=UPLOAD, itemType=IMAGE로 보내고 itemId는 비운다.",
+                    + "source=UPLOAD, itemType=IMAGE로 보내고 itemId는 비운다. 찜한 상품은 source=WISHLIST, "
+                    + "itemType=PRODUCT, itemId=상품 ID로 보내며, 이미지·상품명·가격은 상품 서비스 값으로 저장한다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
@@ -54,6 +55,14 @@ public class VoteController {
         @ApiResponse(
                 responseCode = "401",
                 description = "UNAUTHENTICATED: 로그인 필요",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description = "NOT_WISHLISTED_ITEM: 내가 찜하지 않은 상품을 골랐음",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "503",
+                description = "PRODUCT_LOOKUP_UNAVAILABLE: 상품 서비스에서 찜 상품을 확인하지 못함",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/vote")
