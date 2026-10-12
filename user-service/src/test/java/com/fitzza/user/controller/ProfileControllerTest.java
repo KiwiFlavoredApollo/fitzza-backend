@@ -131,4 +131,21 @@ class ProfileControllerTest {
     private UserBodyResponse sampleBody() {
         return new UserBodyResponse(172.5f, 64f, Gender.W, "STANDARD", "OVERSIZED", List.of("CASUAL", "MINIMAL"), 245);
     }
+
+    @Test
+    void unexpectedFailureReturnsInternalServerErrorWithoutLeakingTheCause() throws Exception {
+        when(profileService.getOptions()).thenThrow(new IllegalStateException("jdbc url and password"));
+
+        mockMvc.perform(get("/api/users/profile/options"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
+    }
+
+    @Test
+    void unsupportedMethodKeepsItsStatusInTheCommonErrorShape() throws Exception {
+        mockMvc.perform(patch("/api/users/me").header(USER_ID_HEADER, "7"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
 }

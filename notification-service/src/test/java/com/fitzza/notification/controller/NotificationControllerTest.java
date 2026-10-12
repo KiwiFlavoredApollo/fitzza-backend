@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -137,5 +138,22 @@ class NotificationControllerTest {
         mockMvc.perform(patch(NOTIFICATIONS + "/missing/read").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOTIFICATION_NOT_FOUND"));
+    }
+
+    @Test
+    void unexpectedFailureReturnsInternalServerErrorWithoutLeakingTheCause() throws Exception {
+        when(notificationService.countUnread(7L)).thenThrow(new IllegalStateException("jdbc url and password"));
+
+        mockMvc.perform(get(NOTIFICATIONS + "/unread-count").header(USER_ID_HEADER, "7"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
+    }
+
+    @Test
+    void unsupportedMethodKeepsItsStatusInTheCommonErrorShape() throws Exception {
+        mockMvc.perform(post(NOTIFICATIONS + "/unread-count").header(USER_ID_HEADER, "7"))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
 }

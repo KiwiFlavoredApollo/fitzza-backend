@@ -13,7 +13,8 @@ public enum ErrorCode {
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
     VOTE_CLOSED(HttpStatus.CONFLICT, "마감된 투표입니다."),
-    CONCURRENT_UPDATE(HttpStatus.CONFLICT, "다른 요청과 겹쳐 처리하지 못했습니다. 새로고침 후 다시 시도해주세요.");
+    CONCURRENT_UPDATE(HttpStatus.CONFLICT, "다른 요청과 겹쳐 처리하지 못했습니다. 새로고침 후 다시 시도해주세요."),
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
 
     private final HttpStatus status;
     private final String message;
