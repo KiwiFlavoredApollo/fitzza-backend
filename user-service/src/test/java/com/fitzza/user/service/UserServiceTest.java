@@ -179,14 +179,14 @@ class UserServiceTest {
     }
 
     /**
-     * 잘못된 이메일 형식의 중복 조회가 INVALID_INPUT으로 거부되는지 검증한다.
+     * 잘못된 이메일 형식의 중복 조회가 INVALID_REQUEST으로 거부되는지 검증한다.
      */
     @Test
     void emailAvailabilityCheckRejectsMalformedEmail() {
         assertThatThrownBy(() -> userService.isEmailAvailable("fit@example"))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     /**
@@ -209,7 +209,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.isNicknameAvailable("fit_zza"))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     /**
@@ -220,10 +220,10 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.isEmailAvailable(" "))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
         assertThatThrownBy(() -> userService.isNicknameAvailable(""))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 }

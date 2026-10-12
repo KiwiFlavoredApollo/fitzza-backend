@@ -202,11 +202,11 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> profileService.findNicknames(List.of()))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
         assertThatThrownBy(() -> profileService.findNicknames(tooMany))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     private User storedUser(Long id, String nickname) {

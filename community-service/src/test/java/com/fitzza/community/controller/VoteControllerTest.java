@@ -83,7 +83,7 @@ class VoteControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(votePostBody(oneOption)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(voteService);
     }
 
@@ -97,7 +97,7 @@ class VoteControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(votePostBody(missingImage)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(voteService);
     }
 

@@ -69,7 +69,7 @@ public class CommentController {
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 빈 댓글·500자 초과 / INVALID_PARENT_COMMENT: 답글을 달 수 없는 댓글",
+                description = "INVALID_REQUEST: 빈 댓글·500자 초과 / INVALID_PARENT_COMMENT: 답글을 달 수 없는 댓글",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -97,7 +97,7 @@ public class CommentController {
         @ApiResponse(responseCode = "200", description = "수정 성공(응답 본문 없음)", content = @Content),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 빈 댓글·500자 초과",
+                description = "INVALID_REQUEST: 빈 댓글·500자 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",

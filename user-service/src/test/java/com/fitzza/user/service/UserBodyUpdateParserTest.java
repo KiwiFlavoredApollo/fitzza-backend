@@ -122,7 +122,7 @@ class UserBodyUpdateParserTest {
         assertThatThrownBy(() -> parser.parse(json(content)))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     private JsonNode json(String content) throws JsonProcessingException {

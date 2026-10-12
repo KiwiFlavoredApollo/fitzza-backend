@@ -60,7 +60,10 @@ class PostControllerTest {
                         List.of(new PostSummaryResponse(
                                 3L, "셔츠 골라주세요", PostCategory.FASHION, PostType.VOTE, "fitzza", null, null, 2, 5)),
                         1,
-                        4));
+                        10,
+                        31,
+                        4,
+                        true));
 
         mockMvc.perform(get(POSTS)
                         .param("category", "FASHION")
@@ -74,12 +77,16 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.content[0].likeCount").value(2))
                 .andExpect(jsonPath("$.content[0].commentCount").value(5))
                 .andExpect(jsonPath("$.page").value(1))
-                .andExpect(jsonPath("$.totalPages").value(4));
+                .andExpect(jsonPath("$.size").value(10))
+                .andExpect(jsonPath("$.totalElements").value(31))
+                .andExpect(jsonPath("$.totalPages").value(4))
+                .andExpect(jsonPath("$.hasNext").value(true));
     }
 
     @Test
     void feedUsesFirstPageOfTwentyByDefault() throws Exception {
-        when(postService.getFeed(null, null, null, 0, 20)).thenReturn(new PostPageResponse(List.of(), 0, 0));
+        when(postService.getFeed(null, null, null, 0, 20))
+                .thenReturn(new PostPageResponse(List.of(), 0, 20, 0, 0, false));
 
         mockMvc.perform(get(POSTS))
                 .andExpect(status().isOk())
@@ -88,10 +95,27 @@ class PostControllerTest {
     }
 
     @Test
+    void feedRejectsANegativePage() throws Exception {
+        mockMvc.perform(get(POSTS).param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void feedRejectsASizeOverTheLimit() throws Exception {
+        mockMvc.perform(get(POSTS).param("size", String.valueOf(PostService.MAX_PAGE_SIZE + 1)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(postService);
+    }
+
+    @Test
     void feedRejectsUnknownCategory() throws Exception {
         mockMvc.perform(get(POSTS).param("category", "FOOD"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(postService);
     }
 
@@ -160,7 +184,7 @@ class PostControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"   \",\"content\":\"내용\",\"category\":\"DAILY\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
                 .andExpect(jsonPath("$.message").value("제목을 입력해주세요."));
         verifyNoInteractions(postService);
     }
@@ -179,7 +203,7 @@ class PostControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"제목\",\"content\":\"내용\",\"category\":\"FOOD\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(postService);
     }
 

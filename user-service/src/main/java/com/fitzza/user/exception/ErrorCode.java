@@ -3,7 +3,7 @@ package com.fitzza.user.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
-    INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 혹은 비밀번호가 틀렸습니다."),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "로그인이 만료되었습니다. 다시 로그인해주세요."),

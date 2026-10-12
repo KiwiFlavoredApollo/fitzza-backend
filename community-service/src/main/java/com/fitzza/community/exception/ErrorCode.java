@@ -3,7 +3,7 @@ package com.fitzza.community.exception;
 import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
-    INVALID_INPUT(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
     INVALID_PARENT_COMMENT(HttpStatus.BAD_REQUEST, "답글을 달 수 없는 댓글입니다."),
     NOT_VOTE_POST(HttpStatus.BAD_REQUEST, "투표 게시글이 아닙니다."),
     INVALID_VOTE_OPTIONS(HttpStatus.BAD_REQUEST, "투표 선택지를 확인해주세요."),

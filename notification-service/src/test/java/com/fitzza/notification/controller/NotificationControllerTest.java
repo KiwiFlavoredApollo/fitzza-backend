@@ -52,12 +52,15 @@ class NotificationControllerTest {
                 false,
                 Instant.parse("2026-10-12T00:00:00Z"));
         when(notificationService.getNotifications(7L, 0, 20))
-                .thenReturn(new NotificationPageResponse(List.of(notification), 0, 1));
+                .thenReturn(new NotificationPageResponse(List.of(notification), 0, 20, 1, 1, false));
 
         mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.hasNext").value(false))
                 .andExpect(jsonPath("$.content[0].notificationId").value(NOTIFICATION_ID))
                 .andExpect(jsonPath("$.content[0].type").value("COMMENT"))
                 .andExpect(jsonPath("$.content[0].content").value("새 댓글이 달렸습니다."))
@@ -69,7 +72,7 @@ class NotificationControllerTest {
     @Test
     void listPassesTheRequestedPageAndSize() throws Exception {
         when(notificationService.getNotifications(7L, 2, 5))
-                .thenReturn(new NotificationPageResponse(List.of(), 2, 3));
+                .thenReturn(new NotificationPageResponse(List.of(), 2, 5, 15, 3, false));
 
         mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7").param("page", "2").param("size", "5"))
                 .andExpect(status().isOk())
@@ -89,7 +92,25 @@ class NotificationControllerTest {
     void listRejectsANonNumericPage() throws Exception {
         mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7").param("page", "first"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void listRejectsANegativePage() throws Exception {
+        mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7").param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
+    void listRejectsASizeOverTheLimit() throws Exception {
+        String tooBig = String.valueOf(NotificationService.MAX_PAGE_SIZE + 1);
+        mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7").param("size", tooBig))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(notificationService);
     }
 

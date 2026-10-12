@@ -73,7 +73,7 @@ public class UserService {
         requireText(email);
         String normalizedEmail = User.normalizeEmail(email);
         if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
-            throw new UserApiException(ErrorCode.INVALID_INPUT);
+            throw new UserApiException(ErrorCode.INVALID_REQUEST);
         }
         return !userRepository.existsByEmail(normalizedEmail);
     }
@@ -90,7 +90,7 @@ public class UserService {
     public boolean isNicknameAvailable(String nickname) {
         requireText(nickname);
         if (!NICKNAME_PATTERN.matcher(nickname).matches()) {
-            throw new UserApiException(ErrorCode.INVALID_INPUT);
+            throw new UserApiException(ErrorCode.INVALID_REQUEST);
         }
         return !userRepository.existsByNickname(nickname);
     }
@@ -120,11 +120,11 @@ public class UserService {
     }
 
     /**
-     * null 또는 공백뿐인 값을 INVALID_INPUT 오류로 거부한다.
+     * null 또는 공백뿐인 값을 INVALID_REQUEST 오류로 거부한다.
      */
     private void requireText(String value) {
         if (value == null || value.isBlank()) {
-            throw new UserApiException(ErrorCode.INVALID_INPUT);
+            throw new UserApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 }

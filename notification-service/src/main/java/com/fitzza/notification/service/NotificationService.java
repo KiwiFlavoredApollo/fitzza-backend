@@ -19,7 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class NotificationService {
 
-    static final int MAX_PAGE_SIZE = 50;
+    public static final int MAX_PAGE_SIZE = 100;
     // 같은 시각에 생긴 알림의 순서가 페이지마다 달라지지 않도록 ID를 보조 정렬로 둔다.
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
@@ -46,10 +46,8 @@ public class NotificationService {
         Pageable pageable =
                 PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), MAX_PAGE_SIZE), NEWEST_FIRST);
         Page<Notification> notifications = notificationRepository.findByUserId(userId, pageable);
-        return new NotificationPageResponse(
-                notifications.getContent().stream().map(NotificationResponse::from).toList(),
-                notifications.getNumber(),
-                notifications.getTotalPages());
+        return NotificationPageResponse.of(
+                notifications.getContent().stream().map(NotificationResponse::from).toList(), notifications);
     }
 
     @Transactional(readOnly = true)

@@ -50,7 +50,7 @@ public class AuthController {
         @ApiResponse(responseCode = "200", description = "로그인 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: 이메일 또는 비밀번호 누락",
+                description = "INVALID_REQUEST: 이메일 또는 비밀번호 누락",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -70,7 +70,7 @@ public class AuthController {
         @ApiResponse(responseCode = "200", description = "재발급 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: Refresh Token 누락",
+                description = "INVALID_REQUEST: Refresh Token 누락",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -93,7 +93,7 @@ public class AuthController {
         @ApiResponse(responseCode = "200", description = "로그아웃 성공(응답 본문 없음)", content = @Content),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: Refresh Token 누락",
+                description = "INVALID_REQUEST: Refresh Token 누락",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping("/logout")

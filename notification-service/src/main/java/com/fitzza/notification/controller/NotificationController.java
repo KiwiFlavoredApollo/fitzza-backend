@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,9 +39,13 @@ public class NotificationController {
     @Operation(
             summary = "알림 목록",
             description = "최신순. targetId는 댓글·투표 알림이면 게시글 ID, 피팅 알림이면 피팅 작업 ID다. "
-                    + "page가 음수면 0으로, size는 1~50 범위로 맞춰서 처리한다.")
+                    + "page는 0 이상, size는 1~100이며 벗어나면 400이다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공(알림이 없으면 빈 목록)"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "INVALID_REQUEST: 숫자가 아니거나 범위를 벗어난 page·size",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
                 description = "UNAUTHENTICATED: 로그인 필요",
@@ -48,9 +54,10 @@ public class NotificationController {
     @GetMapping
     public NotificationPageResponse getNotifications(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
-            @Parameter(description = "페이지 번호(0부터)") @RequestParam(name = "page", defaultValue = "0") int page,
-            @Parameter(description = "페이지 크기(최대 50)") @RequestParam(name = "size", defaultValue = "20")
-                    int size) {
+            @Parameter(description = "페이지 번호(0부터)") @RequestParam(name = "page", defaultValue = "0") @Min(0)
+                    int page,
+            @Parameter(description = "페이지 크기(1~100)") @RequestParam(name = "size", defaultValue = "20")
+                    @Min(1) @Max(NotificationService.MAX_PAGE_SIZE) int size) {
         return notificationService.getNotifications(userId, page, size);
     }
 

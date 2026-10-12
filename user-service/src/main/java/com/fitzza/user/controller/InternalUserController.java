@@ -40,7 +40,7 @@ public class InternalUserController {
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_INPUT: ID가 없거나 숫자가 아니거나 100개 초과",
+                description = "INVALID_REQUEST: ID가 없거나 숫자가 아니거나 100개 초과",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
