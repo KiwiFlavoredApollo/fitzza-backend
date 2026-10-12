@@ -7,6 +7,7 @@ import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.support.PostgresModeJpaTest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,70 @@ class PostRepositoryTest {
 
         assertThatThrownBy(() -> postRepository.saveAndFlush(stale))
                 .isInstanceOf(OptimisticLockingFailureException.class);
+    }
+
+    @Test
+    void onlyOpenUndeletedVotesPastTheirDeadlineAreDueToClose() {
+        Instant now = Instant.now();
+        Instant sevenHoursAgo = now.minus(Duration.ofHours(7));
+        Post due = save(Post.createVote(AUTHOR_ID, "마감 지남", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        Post dueEarlier = save(Post.createVote(
+                AUTHOR_ID, "더 먼저 마감", "골라주세요", PostCategory.FASHION, sevenHoursAgo.minus(Duration.ofHours(1))));
+        save(Post.createVote(AUTHOR_ID, "아직 진행 중", "골라주세요", PostCategory.FASHION, now));
+        Post closedEarly = save(Post.createVote(AUTHOR_ID, "조기 종료", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedEarly.closeVote();
+        Post deleted = save(Post.createVote(AUTHOR_ID, "지운 투표", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        deleted.delete();
+        save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY, null));
+        entityManager.flush();
+
+        assertThat(postRepository.findVotePostIdsDueToClose(now, PageRequest.of(0, 100)))
+                .containsExactly(dueEarlier.getId(), due.getId());
+        assertThat(postRepository.findVotePostIdsDueToClose(now, PageRequest.of(0, 1)))
+                .containsExactly(dueEarlier.getId());
+    }
+
+    @Test
+    void onlyVotesClosedAtTheDeadlineWaitForTheAuthorNotificationUntilMarked() {
+        Instant sevenHoursAgo = Instant.now().minus(Duration.ofHours(7));
+        Post closedByServer = save(Post.createVote(AUTHOR_ID, "서버가 마감", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedByServer.closeVoteAtDeadline();
+        Post closedEarly = save(Post.createVote(AUTHOR_ID, "조기 종료", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedEarly.closeVote();
+        Post deleted = save(Post.createVote(AUTHOR_ID, "지운 투표", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        deleted.closeVoteAtDeadline();
+        deleted.delete();
+        entityManager.flush();
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100)))
+                .containsExactly(closedByServer.getId());
+
+        assertThat(postRepository.markVoteCloseNotified(closedByServer.getId())).isEqualTo(1);
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100))).isEmpty();
+        assertThat(postRepository.findById(closedByServer.getId()).orElseThrow().isVoteClosed()).isTrue();
+    }
+
+    // 계속 실패하는 글이 한 페이지를 차지해 새로 마감된 글의 알림을 막지 않는지 확인한다.
+    @Test
+    void votesWhoseNotificationFailedGoBehindVotesNotTriedYet() {
+        Instant eightHoursAgo = Instant.now().minus(Duration.ofHours(8));
+        Post failedLongAgo = save(Post.createVote(AUTHOR_ID, "오래전 실패", "골라주세요", PostCategory.FASHION, eightHoursAgo));
+        failedLongAgo.closeVoteAtDeadline();
+        Post failedRecently = save(Post.createVote(AUTHOR_ID, "방금 실패", "골라주세요", PostCategory.FASHION, eightHoursAgo));
+        failedRecently.closeVoteAtDeadline();
+        Post notTriedYet = save(Post.createVote(
+                AUTHOR_ID, "새로 마감", "골라주세요", PostCategory.FASHION, eightHoursAgo.plus(Duration.ofHours(1))));
+        notTriedYet.closeVoteAtDeadline();
+        entityManager.flush();
+        Instant now = Instant.now();
+        postRepository.recordVoteCloseNotifyFailure(failedLongAgo.getId(), now.minus(Duration.ofMinutes(10)));
+        postRepository.recordVoteCloseNotifyFailure(failedRecently.getId(), now);
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100)))
+                .containsExactly(notTriedYet.getId(), failedLongAgo.getId(), failedRecently.getId());
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 1)))
+                .containsExactly(notTriedYet.getId());
     }
 
     private Post save(Post post) {

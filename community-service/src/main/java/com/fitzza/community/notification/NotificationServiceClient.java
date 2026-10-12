@@ -35,7 +35,7 @@ public class NotificationServiceClient implements NotificationSender {
     }
 
     @Override
-    public void send(NotificationEvent event) {
+    public boolean send(NotificationEvent event) {
         try {
             restClient
                     .post()
@@ -44,9 +44,11 @@ public class NotificationServiceClient implements NotificationSender {
                     .body(event)
                     .retrieve()
                     .toBodilessEntity();
+            return true;
         } catch (RestClientException | IllegalStateException exception) {
             // 알림 서비스가 없거나 꺼져 있으면 Eureka 조회 단계에서 IllegalStateException이 날 수 있다.
             log.warn("알림 전송 실패, 알림 없이 진행합니다. eventId={}: {}", event.eventId(), exception.getMessage());
+            return false;
         }
     }
 }

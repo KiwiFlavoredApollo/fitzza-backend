@@ -1,5 +1,6 @@
 package com.fitzza.community.notification;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
@@ -44,7 +45,7 @@ class NotificationServiceClientTest {
                         + "\"targetId\":\"10\",\"content\":\"내 게시글에 새 댓글이 달렸어요: 잘 어울려요\"}"))
                 .andRespond(withStatus(HttpStatus.ACCEPTED));
 
-        client.send(EVENT);
+        assertThat(client.send(EVENT)).isTrue();
 
         server.verify();
     }
@@ -53,7 +54,7 @@ class NotificationServiceClientTest {
     void aFailingNotificationServiceDoesNotThrow() {
         server.expect(requestTo(EVENTS_API)).andRespond(withServerError());
 
-        assertThatCode(() -> client.send(EVENT)).doesNotThrowAnyException();
+        assertThatCode(() -> assertThat(client.send(EVENT)).isFalse()).doesNotThrowAnyException();
         server.verify();
     }
 
