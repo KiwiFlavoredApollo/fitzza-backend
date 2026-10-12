@@ -23,6 +23,7 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 ```bash
 cp .env.example .env
 # .env의 JWT_SECRET과 INTERNAL_CALL_TOKEN에 서로 다른 32바이트 이상의 무작위 비밀값을 입력한 뒤 실행합니다.
+# 알림 서비스의 TLS를 구성하고 NOTIFICATION_SERVICE_BASE_URL에 HTTPS 주소를 입력합니다.
 docker compose up --build -d
 ```
 
@@ -40,7 +41,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 알림 API(`GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /internal/notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다.
 
-notification-service의 8086 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
+notification-service의 8086 포트는 호스트에 공개하지 않습니다. community-service의 내부 알림 호출은 `NOTIFICATION_SERVICE_BASE_URL`에 HTTPS 주소(예: `https://notification-service:8086`)를 명시해야 합니다. 값이 없거나 HTTPS가 아니면 community-service가 시작되지 않습니다. 기본 Compose 구성에는 TLS 인증서가 포함되어 있지 않으므로 notification-service에 TLS와 community-service가 신뢰하는 인증서를 먼저 구성해야 합니다. Eureka에서 선택된 인스턴스도 등록된 포트에서 HTTPS를 제공해야 하며, HTTP로 재구성된 요청은 토큰을 전송하기 전에 차단합니다. 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 

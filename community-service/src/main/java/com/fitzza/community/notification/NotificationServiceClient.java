@@ -1,5 +1,7 @@
 package com.fitzza.community.notification;
 
+import java.net.URI;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,16 +23,30 @@ public class NotificationServiceClient implements NotificationSender {
 
     public NotificationServiceClient(
             @LoadBalanced RestClient.Builder restClientBuilder,
-            @Value("${fitzza.notification-service.base-url:http://notification-service}") String baseUrl,
+            @Value("${fitzza.notification-service.base-url}") String baseUrl,
             @Value("${internal.call-token}") String internalCallToken) {
         if (internalCallToken == null || internalCallToken.isBlank()) {
             throw new IllegalArgumentException("INTERNAL_CALL_TOKEN must be set and non-blank");
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
+            throw new IllegalArgumentException("Notification service base URL must be explicitly set to HTTPS");
+        }
+        URI baseUri = URI.create(baseUrl);
+        if (!"https".equalsIgnoreCase(baseUri.getScheme()) || baseUri.getHost() == null) {
+            throw new IllegalArgumentException("Notification service base URL must be an absolute HTTPS URL");
         }
         // 다른 클라이언트와 같은 빌더 빈을 쓰므로, 주소와 헤더가 섞이지 않게 복사본에 설정한다.
         this.restClient = restClientBuilder
                 .clone()
                 .baseUrl(baseUrl)
                 .defaultHeader(INTERNAL_TOKEN_HEADER, internalCallToken)
+                .requestInterceptor((request, body, execution) -> {
+                    // Eureka가 주소를 재구성한 뒤에도 토큰이 HTTP로 전송되지 않게 한다.
+                    if (!"https".equalsIgnoreCase(request.getURI().getScheme())) {
+                        throw new IllegalStateException("Notification requests must use HTTPS");
+                    }
+                    return execution.execute(request, body);
+                })
                 .build();
     }
 

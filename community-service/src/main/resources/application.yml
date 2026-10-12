@@ -6,3 +6,7 @@ spring:
 
 internal:
   call-token: ${INTERNAL_CALL_TOKEN}
+
+fitzza:
+  notification-service:
+    base-url: ${NOTIFICATION_SERVICE_BASE_URL}
