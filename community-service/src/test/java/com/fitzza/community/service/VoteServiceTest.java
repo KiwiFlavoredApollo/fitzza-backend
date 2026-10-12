@@ -12,7 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.fitzza.community.client.UnverifiedVoteItemGateway;
+import com.fitzza.community.client.VoteItemGateway;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
@@ -48,11 +48,15 @@ class VoteServiceTest {
     private static final Long OPTION_B = 101L;
     private static final String IMAGE_URL = "https://cdn.example.com/options/1.png";
 
+    // 선택지 확인은 VerifiedVoteItemGatewayTest에서 따로 본다. 여기서는 요청 이미지를 그대로 쓴다.
+    private static final VoteItemGateway PASS_THROUGH_GATEWAY = (userId, source, itemType, itemId, imageUrl) ->
+            new VoteItemGateway.VoteItemSnapshot(imageUrl, null, null);
+
     private final PostRepository postRepository = mock(PostRepository.class);
     private final VoteOptionRepository voteOptionRepository = mock(VoteOptionRepository.class);
     private final VoteRepository voteRepository = mock(VoteRepository.class);
     private final VoteService voteService = new VoteService(
-            postRepository, voteOptionRepository, voteRepository, new UnverifiedVoteItemGateway());
+            postRepository, voteOptionRepository, voteRepository, PASS_THROUGH_GATEWAY);
 
     @Test
     void createStoresAVotePostThatClosesInSixHoursWithItsOptionsInOrder() {
