@@ -81,6 +81,17 @@ class VerifiedVoteItemGatewayTest {
         assertThat(catalog.calls).isZero();
     }
 
+    // "55"와 "055"를 함께 보내 같은 상품을 두 선택지로 넣는 것을 막는다.
+    @Test
+    void productIdsWrittenDifferentlyFromTheirNumberAreRejected() {
+        catalog.wishlist(USER_ID, 55L);
+        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
+
+        assertThat(resolveWishlist(USER_ID, "55").name()).isEqualTo("오버핏 셔츠");
+        assertRejectedWith(() -> resolveWishlist(USER_ID, "055"), ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(() -> resolveWishlist(USER_ID, "+55"), ErrorCode.INVALID_VOTE_OPTIONS);
+    }
+
     @Test
     void voteIsRejectedInsteadOfTrustedWhenTheProductServiceIsDown() {
         catalog.down = true;

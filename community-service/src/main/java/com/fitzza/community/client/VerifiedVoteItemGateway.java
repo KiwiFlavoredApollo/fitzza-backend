@@ -54,10 +54,12 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
         return new VoteItemSnapshot(snapshotImage, product.productName(), product.price());
     }
 
+    // "055"·"+55"처럼 같은 숫자를 다르게 쓴 ID는 거부한다. 선택지 중복 검사와 저장이 원래 문자열 기준이라,
+    // 받아 주면 같은 상품이 한 투표에 두 번 들어갈 수 있다.
     private static long parseProductId(String itemId) {
         try {
             long productId = Long.parseLong(itemId);
-            if (productId > 0) {
+            if (productId > 0 && String.valueOf(productId).equals(itemId)) {
                 return productId;
             }
         } catch (NumberFormatException ignored) {
