@@ -150,7 +150,7 @@ services:
       <<: *java-environment
       INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
     depends_on: *domain-dependencies
-    ports: ["8086:8086"]
+    expose: ["8086"]
 
   virtual-tryon-service:
     build:

@@ -40,6 +40,8 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 알림 API(`GET /api/v1/notifications`, `GET /api/v1/notifications/unread-count`, `PATCH /api/v1/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /internal/notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다.
 
+notification-service의 8086 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/v1/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
+
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
 `POST /api/v1/auth/login`, `/api/v1/auth/reissue`, `/api/v1/auth/logout`, `/api/v1/users/signup`과 `GET /api/v1/users/check-email`, `/api/v1/users/check-nickname`, `/api/v1/users/profile/options`, `/api/v1/users/status`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
