@@ -138,13 +138,13 @@ services:
       <<: *java-environment
       INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
     depends_on: *domain-dependencies
-    ports: ["8084:8084"]
+    expose: ["8084"]
 
   review-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: review-service } }
     environment: *java-environment
     depends_on: *domain-dependencies
-    ports: ["8085:8085"]
+    expose: ["8085"]
 
   notification-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: notification-service } }
