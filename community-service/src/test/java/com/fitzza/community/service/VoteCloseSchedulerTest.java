@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.fitzza.community.notification.VoteCloseNotifier;
 import com.fitzza.community.repository.PostRepository;
 import java.time.Instant;
 import java.util.List;
@@ -21,7 +22,9 @@ class VoteCloseSchedulerTest {
 
     private final PostRepository postRepository = mock(PostRepository.class);
     private final VoteClosingService voteClosingService = mock(VoteClosingService.class);
-    private final VoteCloseScheduler scheduler = new VoteCloseScheduler(postRepository, voteClosingService);
+    private final VoteCloseNotifier voteCloseNotifier = mock(VoteCloseNotifier.class);
+    private final VoteCloseScheduler scheduler =
+            new VoteCloseScheduler(postRepository, voteClosingService, voteCloseNotifier);
 
     @Test
     void closesEachDueVoteInItsOwnStepAndKeepsGoingAfterAFailure() {
@@ -33,6 +36,21 @@ class VoteCloseSchedulerTest {
         assertThat(scheduler.closeDueVotes(NOW)).isEqualTo(2);
 
         verify(voteClosingService).closeIfDue(3L, NOW);
+    }
+
+    @Test
+    void notifiesEveryClosedVoteStillWaitingAndKeepsGoingAfterAFailure() {
+        when(postRepository.findPostIdsAwaitingVoteCloseNotification(any(Pageable.class)))
+                .thenReturn(List.of(1L, 2L, 3L));
+        when(voteCloseNotifier.notifyAuthor(1L)).thenReturn(true);
+        when(voteCloseNotifier.notifyAuthor(2L)).thenThrow(new PessimisticLockingFailureException("db"));
+        when(voteCloseNotifier.notifyAuthor(3L)).thenReturn(false);
+
+        assertThat(scheduler.notifyClosedVotes()).isEqualTo(1);
+
+        verify(voteCloseNotifier).notifyAuthor(3L);
+        verify(postRepository)
+                .findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, VoteCloseScheduler.BATCH_SIZE));
     }
 
     @Test

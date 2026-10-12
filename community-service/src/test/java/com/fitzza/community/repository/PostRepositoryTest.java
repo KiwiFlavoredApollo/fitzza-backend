@@ -133,6 +133,27 @@ class PostRepositoryTest {
                 .containsExactly(dueEarlier.getId());
     }
 
+    @Test
+    void onlyVotesClosedAtTheDeadlineWaitForTheAuthorNotificationUntilMarked() {
+        Instant sevenHoursAgo = Instant.now().minus(Duration.ofHours(7));
+        Post closedByServer = save(Post.createVote(AUTHOR_ID, "서버가 마감", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedByServer.closeVoteAtDeadline();
+        Post closedEarly = save(Post.createVote(AUTHOR_ID, "조기 종료", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedEarly.closeVote();
+        Post deleted = save(Post.createVote(AUTHOR_ID, "지운 투표", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        deleted.closeVoteAtDeadline();
+        deleted.delete();
+        entityManager.flush();
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100)))
+                .containsExactly(closedByServer.getId());
+
+        assertThat(postRepository.markVoteCloseNotified(closedByServer.getId())).isEqualTo(1);
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100))).isEmpty();
+        assertThat(postRepository.findById(closedByServer.getId()).orElseThrow().isVoteClosed()).isTrue();
+    }
+
     private Post save(Post post) {
         return postRepository.save(post);
     }

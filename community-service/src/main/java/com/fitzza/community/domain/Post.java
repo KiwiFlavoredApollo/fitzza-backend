@@ -61,6 +61,12 @@ public class Post {
     @Column(name = "vote_closed", nullable = false)
     private boolean voteClosed;
 
+    // 서버가 마감 시각에 마감했지만 작성자에게 아직 알리지 못한 투표. 알림이 성공할 때까지 남아 재시도된다.
+    // 작성자가 조기 종료한 투표와 일반 글은 false다. 기본값은 이미 행이 있는 테이블에 컬럼을 추가할 때 필요하다.
+    @ColumnDefault("false")
+    @Column(name = "vote_close_notification_pending", nullable = false)
+    private boolean voteCloseNotificationPending;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
@@ -156,6 +162,16 @@ public class Post {
     // 작성자가 조기 종료했거나 서버가 마감 처리했는지. 마감 시각이 지났는지는 isVoteClosedAt으로 본다.
     public boolean isVoteClosed() {
         return voteClosed;
+    }
+
+    // 마감 시각이 지나 서버가 마감한다. 마감과 알림 대기 표시를 같은 트랜잭션에 저장해 알림이 사라지지 않게 한다.
+    public void closeVoteAtDeadline() {
+        this.voteClosed = true;
+        this.voteCloseNotificationPending = true;
+    }
+
+    public boolean isVoteCloseNotificationPending() {
+        return voteCloseNotificationPending;
     }
 
     public void closeVote() {
