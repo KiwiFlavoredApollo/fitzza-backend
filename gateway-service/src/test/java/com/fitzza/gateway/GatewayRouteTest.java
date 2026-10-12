@@ -99,8 +99,7 @@ class GatewayRouteTest {
                 .expectBody(String.class).isEqualTo("order-service:/api/carts");
         client.get().uri("/api/orders").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/orders");
-        client.get().uri("/api/v1/products/status").exchange().expectStatus().isOk()
-                .expectBody(String.class).isEqualTo("product-service:/api/v1/products/status");
+        client.get().uri("/api/v1/products/status").exchange().expectStatus().isNotFound();
         client.get().uri("/api/v1/orders/status").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/v1/orders/status");
         client.get().uri("/api/users/status").exchange().expectStatus().isOk()

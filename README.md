@@ -64,7 +64,7 @@ Gateway를 통한 예시 호출:
 
 ```bash
 curl http://localhost:8080/api/users/status
-curl http://localhost:8080/api/v1/products/status
+curl http://localhost:8080/api/products
 curl http://localhost:8080/api/v1/recommendations/status
 ```
 
