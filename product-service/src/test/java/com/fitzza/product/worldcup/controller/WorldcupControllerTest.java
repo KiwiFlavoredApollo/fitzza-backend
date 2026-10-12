@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fitzza.product.global.constant.ApiHeaders;
+import com.fitzza.product.support.InternalCallTokenFixture;
 import com.fitzza.product.global.exception.BusinessException;
 import com.fitzza.product.global.exception.ErrorCode;
 import com.fitzza.product.product.dto.ProductSummaryResponse;
@@ -93,7 +94,7 @@ class WorldcupControllerTest {
     void getWorldcupReturnsOwnershipForInternalCalls() throws Exception {
         when(worldcupService.findWorldcup(10L, 2L)).thenReturn(WorldcupInternalResponse.notOwned(10L));
 
-        mockMvc.perform(get("/internal/v1/worldcups/10").param("userId", "2"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/worldcups/10")).param("userId", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.owned").value(false))
                 .andExpect(jsonPath("$.winnerProduct").doesNotExist());
@@ -101,7 +102,7 @@ class WorldcupControllerTest {
 
     @Test
     void getWorldcupRequiresUserId() throws Exception {
-        mockMvc.perform(get("/internal/v1/worldcups/10"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/worldcups/10")))
                 .andExpect(status().isBadRequest());
     }
 }

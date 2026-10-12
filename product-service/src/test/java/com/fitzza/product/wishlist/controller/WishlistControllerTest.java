@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fitzza.product.global.constant.ApiHeaders;
+import com.fitzza.product.support.InternalCallTokenFixture;
 import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.wishlist.dto.WishlistCheckResponse;
 import com.fitzza.product.wishlist.dto.WishlistCreateRequest;
@@ -89,7 +90,7 @@ class WishlistControllerTest {
     void checkWishlistReturnsOwnership() throws Exception {
         when(wishlistService.checkWishlist(1L, "7")).thenReturn(new WishlistCheckResponse(true));
 
-        mockMvc.perform(get("/internal/v1/wishlists/check")
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/wishlists/check"))
                         .param("userId", "1")
                         .param("itemId", "7"))
                 .andExpect(status().isOk())
@@ -98,7 +99,7 @@ class WishlistControllerTest {
 
     @Test
     void checkWishlistRequiresAllParameters() throws Exception {
-        mockMvc.perform(get("/internal/v1/wishlists/check").param("userId", "1"))
+        mockMvc.perform(InternalCallTokenFixture.withToken(get("/internal/wishlists/check")).param("userId", "1"))
                 .andExpect(status().isBadRequest());
     }
 }

@@ -99,13 +99,14 @@ class GatewayRouteTest {
                 .expectBody(String.class).isEqualTo("order-service:/api/carts");
         client.get().uri("/api/orders").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/orders");
-        client.get().uri("/api/v1/products/status").exchange().expectStatus().isOk()
-                .expectBody(String.class).isEqualTo("product-service:/api/v1/products/status");
+        client.get().uri("/api/v1/products/status").exchange().expectStatus().isNotFound();
         client.get().uri("/api/v1/orders/status").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/v1/orders/status");
         client.get().uri("/api/users/status").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("user-service:/api/users/status");
-        client.get().uri("/internal/v1/wishlists/check").exchange().expectStatus().isNotFound();
-        client.get().uri("/internal/v1/worldcups/1").exchange().expectStatus().isNotFound();
+        client.get().uri("/internal/wishlists/check").exchange().expectStatus().isNotFound();
+        client.get().uri("/internal/worldcups/1").exchange().expectStatus().isNotFound();
+        client.get().uri("/internal/products").exchange().expectStatus().isNotFound();
+        client.get().uri("/internal/product-options").exchange().expectStatus().isNotFound();
     }
 }

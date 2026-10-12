@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Worldcup Internal", description = "서비스 간 통신용 월드컵 API")
 @RestController
-@RequestMapping("/internal/v1/worldcups")
+@RequestMapping("/internal/worldcups")
 @RequiredArgsConstructor
 public class WorldcupInternalController {
 

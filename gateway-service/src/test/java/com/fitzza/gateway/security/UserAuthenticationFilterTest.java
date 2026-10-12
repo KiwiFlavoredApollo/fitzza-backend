@@ -115,7 +115,7 @@ class UserAuthenticationFilterTest {
 
     @Test
     void stripsSpoofedIdsFromOtherRoutes() {
-        AtomicReference<ServerWebExchange> forwarded = filter(exchange("GET /api/v1/products/status", "product-service"));
+        AtomicReference<ServerWebExchange> forwarded = filter(exchange("GET /api/products", "product-service"));
         assertThat(forwarded.get().getRequest().getHeaders()).doesNotContainKey("X-User-Id");
     }
 

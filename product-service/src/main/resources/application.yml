@@ -46,6 +46,9 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
 
+internal:
+  call-token: ${INTERNAL_CALL_TOKEN}
+
 fitzza:
   seed:
     musinsa:

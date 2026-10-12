@@ -5,7 +5,7 @@ $endpoints = [ordered]@{
     'Discovery' = 'http://localhost:8761/actuator/health'
     'Gateway' = 'http://localhost:8080/actuator/health'
     'User via Gateway' = 'http://localhost:8080/api/users/status'
-    'Product via Gateway' = 'http://localhost:8080/api/v1/products/status'
+    'Product via Gateway' = 'http://localhost:8080/api/products'
     'Try-On via Gateway' = 'http://localhost:8080/api/v1/tryon/status'
     'Recommendation via Gateway' = 'http://localhost:8080/api/v1/recommendations/status'
 }
