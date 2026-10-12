@@ -3,7 +3,6 @@ package com.fitzza.product.product.controller;
 import com.fitzza.product.global.constant.PagingConstants;
 import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.ApiErrorResponse;
-import com.fitzza.product.product.dto.ProductCreateRequest;
 import com.fitzza.product.product.dto.ProductDetailResponse;
 import com.fitzza.product.product.dto.ProductListResponse;
 import com.fitzza.product.product.dto.ProductSortType;
@@ -15,21 +14,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Product", description = "상품 조회·등록 API")
+@Tag(name = "Product", description = "상품 조회 API")
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
@@ -66,20 +60,5 @@ public class ProductController {
     public ProductDetailResponse getProduct(
             @Parameter(description = "상품 ID", example = "1") @PathVariable Long productId) {
         return productService.findProduct(productId);
-    }
-
-    @Operation(summary = "상품 등록",
-            description = "상품과 옵션을 등록한다. 카테고리는 이름이 아니라 코드로 전달하며 받은 코드를 그대로 저장한다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "등록 성공"),
-            @ApiResponse(responseCode = "400", description = "요청 값 오류 또는 존재하지 않는 카테고리 코드",
-                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "브랜드 없음",
-                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
-    })
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public ProductDetailResponse createProduct(@Valid @RequestBody ProductCreateRequest request) {
-        return productService.createProduct(request);
     }
 }

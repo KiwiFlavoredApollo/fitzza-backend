@@ -78,7 +78,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/internal/v1/products/measurements']").exists())
                 .andExpect(jsonPath("$.paths['/internal/v1/options']").exists())
                 .andExpect(jsonPath("$.paths['/internal/product-options']").exists())
-                .andExpect(jsonPath("$.paths['/api/products'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/products'].post").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/wishlists'].delete").exists())
@@ -148,69 +148,6 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$[0].children[0].code").value("SHIRT"));
     }
 
-    @Test
-    void createProductStoresCategoryCodesAsGivenAndFiltersByThem() throws Exception {
-        persistCategoryPath();
-
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"003\", \"categoryL2\": \"003004\", \"subcategory\": \"003004001\"")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.productName").value("신규 바지"))
-                .andExpect(jsonPath("$.categoryL1").value("003"))
-                .andExpect(jsonPath("$.categoryL2").value("003004"))
-                .andExpect(jsonPath("$.subcategory").value("003004001"))
-                .andExpect(jsonPath("$.categoryL1Name").value("하의"))
-                .andExpect(jsonPath("$.categoryL2Name").value("데님 팬츠"))
-                .andExpect(jsonPath("$.subcategoryName").value("와이드"))
-                .andExpect(jsonPath("$.status").value("ON_SALE"))
-                .andExpect(jsonPath("$.thumbnailUrl").value("https://image.example.com/a.jpg"))
-                .andExpect(jsonPath("$.images.length()").value(2))
-                .andExpect(jsonPath("$.options.length()").value(1));
-        entityManager.flush();
-
-        Object[] storedColumns = (Object[]) entityManager
-                .createNativeQuery("select category_1, category_2, subcategory from product where product_name = '신규 바지'")
-                .getSingleResult();
-        assertThat(storedColumns).containsExactly("003", "003004", "003004001");
-        mockMvc.perform(get("/api/products").param("categoryL1", "003"))
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.content[0].productName").value("신규 바지"));
-    }
-
-    @Test
-    void createProductRejectsUnknownOrMismatchedCategoryCodesAndUnknownBrand() throws Exception {
-        persistCategoryPath();
-        persistCategory("001", "상의", null, 1);
-
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"999\"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_CATEGORY_CODE"));
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"001\", \"categoryL2\": \"003004\"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_CATEGORY_CODE"));
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"003\", \"subcategory\": \"003004001\"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_CATEGORY_CODE"));
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"하의\"")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
-        mockMvc.perform(post("/api/products").contentType(MediaType.APPLICATION_JSON)
-                        .content(createProductJson("\"categoryL1\": \"003\"").replace("\"brandId\": " + brandId(), "\"brandId\": 999999")))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("BRAND_NOT_FOUND"));
-    }
-
-    private void persistCategoryPath() {
-        persistCategory("003", "하의", null, 1);
-        persistCategory("003004", "데님 팬츠", "003", 2);
-        persistCategory("003004001", "와이드", "003004", 3);
-        entityManager.flush();
-    }
-
     private void persistCategory(String code, String name, String parentCode, int depth) {
         entityManager.persist(CategoryEntity.builder()
                 .categoryCode(code).categoryName(name).parentCode(parentCode).depth(depth).build());
@@ -218,14 +155,6 @@ class ProductServiceIntegrationTest {
 
     private Long brandId() {
         return shirt.getBrand().getBrandId();
-    }
-
-    private String createProductJson(String categoryFields) {
-        return """
-                {"brandId": %d, "productName": "신규 바지", %s, "price": 42000,
-                 "imageUrls": ["https://image.example.com/a.jpg", "https://image.example.com/b.jpg"],
-                 "options": [{"color": "BLACK", "size": "M", "additionalPrice": 0}]}
-                """.formatted(brandId(), categoryFields);
     }
 
     @Test

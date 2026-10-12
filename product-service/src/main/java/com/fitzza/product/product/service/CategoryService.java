@@ -1,7 +1,5 @@
 package com.fitzza.product.product.service;
 
-import com.fitzza.product.global.exception.BusinessException;
-import com.fitzza.product.global.exception.ErrorCode;
 import com.fitzza.product.product.dto.CategoryResponse;
 import com.fitzza.product.product.entity.CategoryEntity;
 import com.fitzza.product.product.entity.ProductStatus;
@@ -15,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,41 +48,6 @@ public class CategoryService {
         Set<String> nonNullCodes = codes.stream().filter(Objects::nonNull).collect(Collectors.toSet());
         return categoryRepository.findAllById(nonNullCodes).stream()
                 .collect(Collectors.toMap(CategoryEntity::getCategoryCode, CategoryEntity::getCategoryName));
-    }
-
-    /**
-     * 코드가 카테고리 기준 데이터에 있고 대분류 → 중분류 → 소분류 계층이 맞는지 확인한다.
-     * 이름이 넘어오는 실수를 막기 위해 변환하지 않고 그대로 거부한다.
-     */
-    public void verifyCategoryPath(String categoryL1, String categoryL2, String subcategory) {
-        if (categoryL2 == null && subcategory != null) {
-            throw invalidCategory("소분류는 중분류와 함께 지정해야 합니다.");
-        }
-        Map<String, CategoryEntity> categoriesByCode = categoryRepository
-                .findAllById(codesOf(categoryL1, categoryL2, subcategory)).stream()
-                .collect(Collectors.toMap(CategoryEntity::getCategoryCode, Function.identity()));
-        CategoryEntity levelOne = requireCategory(categoriesByCode, categoryL1, 1, null);
-        CategoryEntity levelTwo = categoryL2 == null
-                ? null : requireCategory(categoriesByCode, categoryL2, 2, levelOne.getCategoryCode());
-        if (subcategory != null) {
-            requireCategory(categoriesByCode, subcategory, 3, levelTwo.getCategoryCode());
-        }
-    }
-
-    private CategoryEntity requireCategory(
-            Map<String, CategoryEntity> categoriesByCode, String code, int depth, String parentCode) {
-        CategoryEntity category = categoriesByCode.get(code);
-        boolean matches = category != null
-                && category.getDepth() == depth
-                && Objects.equals(category.getParentCode(), parentCode);
-        if (!matches) {
-            throw invalidCategory("카테고리 코드가 올바르지 않습니다: " + code);
-        }
-        return category;
-    }
-
-    private BusinessException invalidCategory(String message) {
-        return new BusinessException(ErrorCode.INVALID_CATEGORY_CODE, message);
     }
 
     private Set<String> codesOf(String... codes) {
