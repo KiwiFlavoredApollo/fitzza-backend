@@ -29,9 +29,6 @@ public interface ProductRepository
     @Query("select p from ProductEntity p join fetch p.brand where p.productId in :productIds")
     List<ProductEntity> findAllWithBrandByProductIdIn(@Param("productIds") Collection<Long> productIds);
 
-    @Query("select p from ProductEntity p join fetch p.brand where p.status = :status order by random()")
-    List<ProductEntity> findRandomWithBrandByStatus(@Param("status") ProductStatus status, Pageable pageable);
-
     @Query("""
             select distinct
                 p.category1 as category1, p.category2 as category2, p.subcategory as subcategory
