@@ -67,6 +67,10 @@ public class Post {
     @Column(name = "vote_close_notification_pending", nullable = false)
     private boolean voteCloseNotificationPending;
 
+    // 마감 알림을 마지막으로 보내 보고 실패한 시각. 재시도 순서를 돌려, 계속 실패하는 글이 다른 글을 막지 않게 한다.
+    @Column(name = "vote_close_notify_failed_at")
+    private Instant voteCloseNotifyFailedAt;
+
     @Column(name = "deleted_at")
     private Instant deletedAt;
 

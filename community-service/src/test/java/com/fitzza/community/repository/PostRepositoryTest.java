@@ -154,6 +154,28 @@ class PostRepositoryTest {
         assertThat(postRepository.findById(closedByServer.getId()).orElseThrow().isVoteClosed()).isTrue();
     }
 
+    // 계속 실패하는 글이 한 페이지를 차지해 새로 마감된 글의 알림을 막지 않는지 확인한다.
+    @Test
+    void votesWhoseNotificationFailedGoBehindVotesNotTriedYet() {
+        Instant eightHoursAgo = Instant.now().minus(Duration.ofHours(8));
+        Post failedLongAgo = save(Post.createVote(AUTHOR_ID, "오래전 실패", "골라주세요", PostCategory.FASHION, eightHoursAgo));
+        failedLongAgo.closeVoteAtDeadline();
+        Post failedRecently = save(Post.createVote(AUTHOR_ID, "방금 실패", "골라주세요", PostCategory.FASHION, eightHoursAgo));
+        failedRecently.closeVoteAtDeadline();
+        Post notTriedYet = save(Post.createVote(
+                AUTHOR_ID, "새로 마감", "골라주세요", PostCategory.FASHION, eightHoursAgo.plus(Duration.ofHours(1))));
+        notTriedYet.closeVoteAtDeadline();
+        entityManager.flush();
+        Instant now = Instant.now();
+        postRepository.recordVoteCloseNotifyFailure(failedLongAgo.getId(), now.minus(Duration.ofMinutes(10)));
+        postRepository.recordVoteCloseNotifyFailure(failedRecently.getId(), now);
+
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 100)))
+                .containsExactly(notTriedYet.getId(), failedLongAgo.getId(), failedRecently.getId());
+        assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 1)))
+                .containsExactly(notTriedYet.getId());
+    }
+
     private Post save(Post post) {
         return postRepository.save(post);
     }

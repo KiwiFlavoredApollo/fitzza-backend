@@ -2,6 +2,7 @@ package com.fitzza.community.notification;
 
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.repository.PostRepository;
+import java.time.Instant;
 import org.springframework.stereotype.Component;
 
 // 서버가 마감한 투표의 작성자에게 마감 알림을 보낸다. 실패하면 대기 표시가 남아 다음 실행에서 다시 보낸다.
@@ -33,6 +34,8 @@ public class VoteCloseNotifier {
                 MESSAGE_PREFIX + CommentNotificationListener.excerpt(post.getTitle())));
         if (delivered) {
             postRepository.markVoteCloseNotified(post.getId());
+        } else {
+            postRepository.recordVoteCloseNotifyFailure(post.getId(), Instant.now());
         }
         return delivered;
     }
