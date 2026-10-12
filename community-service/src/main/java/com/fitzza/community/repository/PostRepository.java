@@ -2,7 +2,10 @@ package com.fitzza.community.repository;
 
 import com.fitzza.community.domain.Post;
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
@@ -20,6 +23,11 @@ public interface PostRepository extends JpaRepository<Post, Long>, JpaSpecificat
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Post p where p.id = :postId and p.deletedAt is null")
     Optional<Post> findVisibleForUpdate(@Param("postId") Long postId);
+
+    // 마감 시각이 지났는데 아직 마감 처리되지 않은 투표글. 삭제된 글은 알릴 대상이 아니므로 뺀다.
+    @Query("select p.id from Post p where p.postType = com.fitzza.community.domain.PostType.VOTE"
+            + " and p.voteClosed = false and p.deletedAt is null and p.voteEndAt <= :now order by p.voteEndAt asc")
+    List<Long> findVotePostIdsDueToClose(@Param("now") Instant now, Pageable pageable);
 
     // 동시에 여러 명이 읽어도 조회수가 빠지지 않도록 DB에서 바로 더한다.
     @Modifying(clearAutomatically = true)

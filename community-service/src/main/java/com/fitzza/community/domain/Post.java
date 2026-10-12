@@ -153,6 +153,11 @@ public class Post {
         return voteClosed || (voteEndAt != null && !now.isBefore(voteEndAt));
     }
 
+    // 작성자가 조기 종료했거나 서버가 마감 처리했는지. 마감 시각이 지났는지는 isVoteClosedAt으로 본다.
+    public boolean isVoteClosed() {
+        return voteClosed;
+    }
+
     public void closeVote() {
         this.voteClosed = true;
     }

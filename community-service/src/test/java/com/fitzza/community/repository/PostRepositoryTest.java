@@ -7,6 +7,7 @@ import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.support.PostgresModeJpaTest;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,27 @@ class PostRepositoryTest {
 
         assertThatThrownBy(() -> postRepository.saveAndFlush(stale))
                 .isInstanceOf(OptimisticLockingFailureException.class);
+    }
+
+    @Test
+    void onlyOpenUndeletedVotesPastTheirDeadlineAreDueToClose() {
+        Instant now = Instant.now();
+        Instant sevenHoursAgo = now.minus(Duration.ofHours(7));
+        Post due = save(Post.createVote(AUTHOR_ID, "마감 지남", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        Post dueEarlier = save(Post.createVote(
+                AUTHOR_ID, "더 먼저 마감", "골라주세요", PostCategory.FASHION, sevenHoursAgo.minus(Duration.ofHours(1))));
+        save(Post.createVote(AUTHOR_ID, "아직 진행 중", "골라주세요", PostCategory.FASHION, now));
+        Post closedEarly = save(Post.createVote(AUTHOR_ID, "조기 종료", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        closedEarly.closeVote();
+        Post deleted = save(Post.createVote(AUTHOR_ID, "지운 투표", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
+        deleted.delete();
+        save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY, null));
+        entityManager.flush();
+
+        assertThat(postRepository.findVotePostIdsDueToClose(now, PageRequest.of(0, 100)))
+                .containsExactly(dueEarlier.getId(), due.getId());
+        assertThat(postRepository.findVotePostIdsDueToClose(now, PageRequest.of(0, 1)))
+                .containsExactly(dueEarlier.getId());
     }
 
     private Post save(Post post) {
