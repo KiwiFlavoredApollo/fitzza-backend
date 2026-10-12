@@ -46,7 +46,7 @@ notification-service의 8086 포트는 호스트에 공개하지 않습니다. �
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
-`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`과 `GET /api/users/profile/options`, `/api/users/status`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
+`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`과 `GET /api/users/profile/options`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/users/me
@@ -65,7 +65,7 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 Gateway를 통한 예시 호출:
 
 ```bash
-curl http://localhost:8080/api/users/status
+curl http://localhost:8080/api/users/profile/options
 curl http://localhost:8080/api/products
 curl http://localhost:8080/api/v1/recommendations/status
 ```

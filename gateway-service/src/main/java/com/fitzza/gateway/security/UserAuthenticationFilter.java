@@ -31,8 +31,7 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
             "POST /api/auth/refresh",
             "POST /api/auth/signout",
             "POST /api/auth/signup",
-            "GET /api/users/profile/options",
-            "GET /api/users/status");
+            "GET /api/users/profile/options");
     private static final byte[] UNAUTHENTICATED_BODY =
             "{\"status\":401,\"code\":\"UNAUTHENTICATED\",\"message\":\"로그인이 필요합니다.\"}".getBytes(StandardCharsets.UTF_8);
 
