@@ -1,12 +1,22 @@
 package com.fitzza.user.controller;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fitzza.user.config.OpenApiConfig;
+import com.fitzza.user.dto.ErrorResponse;
 import com.fitzza.user.dto.MyProfileResponse;
 import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.security.AuthHeaders;
 import com.fitzza.user.service.ProfileService;
 import com.fitzza.user.service.UserBodyUpdateParser;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "프로필", description = "온보딩 선택지와 내 프로필")
 @RestController
 @RequestMapping("/api/users")
 public class ProfileController {
@@ -26,19 +37,62 @@ public class ProfileController {
         this.userBodyUpdateParser = userBodyUpdateParser;
     }
 
+    @Operation(
+            summary = "프로필 선택지 조회",
+            description = "체형·핏·스타일의 코드와 한글 라벨. 토큰 없이 호출한다. 프로필 저장 때는 code 값을 보낸다.")
+    @ApiResponse(responseCode = "200", description = "조회 성공")
     @GetMapping("/profile/options")
     public ProfileOptionsResponse getProfileOptions() {
         return profileService.getOptions();
     }
 
+    @Operation(
+            summary = "내 프로필 조회",
+            description = "입력하지 않은 신체 정보는 null로 내려간다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "조회 성공"),
+        @ApiResponse(
+                responseCode = "401",
+                description = "토큰 없음·만료·위조",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "USER_NOT_FOUND",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @GetMapping("/me")
-    public MyProfileResponse getMyProfile(@RequestHeader(AuthHeaders.USER_ID) Long userId) {
+    public MyProfileResponse getMyProfile(
+            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId) {
         return profileService.getMyProfile(userId);
     }
 
+    @Operation(
+            summary = "내 신체 정보 저장·수정·삭제",
+            description = "모든 필드가 선택이다. 보내지 않은 필드는 그대로 두고, null로 보낸 필드는 지운다. "
+                    + "키 100~250cm, 체중 20~300kg, 신발 150~350mm. 체형·핏·스타일은 선택지 조회의 code 값.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH),
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    content = @Content(schema = @Schema(implementation = UserBodyResponse.class))))
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "수정된 신체 정보"),
+        @ApiResponse(
+                responseCode = "400",
+                description = "INVALID_INPUT: 범위를 벗어난 값이나 없는 코드",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "401",
+                description = "토큰 없음·만료·위조",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "USER_NOT_FOUND",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     @PatchMapping("/me/body")
     public UserBodyResponse updateMyBody(
-            @RequestHeader(AuthHeaders.USER_ID) Long userId, @RequestBody JsonNode body) {
+            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
+            @RequestBody JsonNode body) {
         return profileService.updateMyBody(userId, userBodyUpdateParser.parse(body));
     }
 }

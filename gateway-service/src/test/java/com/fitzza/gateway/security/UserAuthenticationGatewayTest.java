@@ -63,6 +63,13 @@ class UserAuthenticationGatewayTest {
     }
 
     @Test
+    void routesTheApiDocumentOfAServiceWithoutAToken() {
+        client().get().uri("/api-docs/user-service")
+                .exchange().expectStatus().isOk().expectBody(String.class)
+                .isEqualTo("/v3/api-docs:anonymous");
+    }
+
+    @Test
     void routesPublicAuthenticationRequestsWithoutForwardingForgedIdentity() {
         for (String endpoint : new String[] {"login", "reissue", "logout"}) {
             client().post().uri("/api/auth/" + endpoint).header("X-User-Id", "999")
