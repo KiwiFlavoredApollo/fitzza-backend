@@ -31,8 +31,6 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
             "POST /api/auth/reissue",
             "POST /api/auth/logout",
             "POST /api/users/signup",
-            "GET /api/users/check-email",
-            "GET /api/users/check-nickname",
             "GET /api/users/profile/options",
             "GET /api/users/status");
     private static final byte[] UNAUTHENTICATED_BODY =

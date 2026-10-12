@@ -4,7 +4,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -192,40 +191,6 @@ class UserControllerTest {
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
-    }
-
-    /**
-     * 이메일 중복 조회 결과가 available 필드로 전달되는지 검증한다.
-     */
-    @Test
-    void checkEmailReturnsAvailability() throws Exception {
-        when(userService.isEmailAvailable("fit@example.com")).thenReturn(false);
-
-        mockMvc.perform(get("/api/users/check-email").param("email", "fit@example.com"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.available").value(false));
-    }
-
-    /**
-     * 사용 가능한 닉네임 조회 결과가 available 필드로 전달되는지 검증한다.
-     */
-    @Test
-    void checkNicknameReturnsAvailability() throws Exception {
-        when(userService.isNicknameAvailable("fitzza")).thenReturn(true);
-
-        mockMvc.perform(get("/api/users/check-nickname").param("nickname", "fitzza"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.available").value(true));
-    }
-
-    /**
-     * 필수 이메일 쿼리 매개변수 누락이 공통 HTTP 400 응답이 되는지 검증한다.
-     */
-    @Test
-    void checkEmailRejectsMissingParameter() throws Exception {
-        mockMvc.perform(get("/api/users/check-email"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     /**
