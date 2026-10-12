@@ -50,7 +50,7 @@ class UserAuthenticationFilterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"POST /api/auth/login", "POST /api/auth/reissue", "POST /api/auth/logout",
-            "POST /api/users/signup", "GET /api/users/check-email", "GET /api/users/check-nickname",
+            "POST /api/users/signup",
             "GET /api/users/profile/options", "GET /api/users/status"})
     void keepsPublicEndpointsAccessibleWithoutLogin(String endpoint) {
         assertThat(filter(exchange(endpoint, "user-service", null)).get()).isNotNull();

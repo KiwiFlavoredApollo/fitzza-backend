@@ -7,7 +7,6 @@ import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.repository.UserBodyRepository;
 import com.fitzza.user.repository.UserRepository;
-import java.util.regex.Pattern;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,9 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserService {
-
-    private static final Pattern EMAIL_PATTERN = Pattern.compile(User.EMAIL_REGEX);
-    private static final Pattern NICKNAME_PATTERN = Pattern.compile(User.NICKNAME_REGEX);
 
     private final UserRepository userRepository;
     private final UserBodyRepository userBodyRepository;
@@ -61,41 +57,6 @@ public class UserService {
     }
 
     /**
-     * 이메일을 정규화하고 형식을 검사한 뒤 현재 사용 가능 여부를 확인한다.
-     * 조회 결과는 예약을 보장하지 않으므로 가입 시 중복 여부를 다시 확인한다.
-     *
-     * @param email 사용 가능 여부를 확인할 이메일
-     * @return 같은 이메일의 계정이 없으면 true
-     * @throws UserApiException 입력이 비어 있거나 이메일 형식이 잘못된 경우
-     */
-    @Transactional(readOnly = true)
-    public boolean isEmailAvailable(String email) {
-        requireText(email);
-        String normalizedEmail = User.normalizeEmail(email);
-        if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
-            throw new UserApiException(ErrorCode.INVALID_REQUEST);
-        }
-        return !userRepository.existsByEmail(normalizedEmail);
-    }
-
-    /**
-     * 닉네임 형식을 검사한 뒤 현재 사용 가능 여부를 확인한다.
-     * 조회 결과는 예약을 보장하지 않으므로 가입 시 중복 여부를 다시 확인한다.
-     *
-     * @param nickname 사용 가능 여부를 확인할 닉네임
-     * @return 같은 닉네임의 계정이 없으면 true
-     * @throws UserApiException 입력이 비어 있거나 닉네임 형식이 잘못된 경우
-     */
-    @Transactional(readOnly = true)
-    public boolean isNicknameAvailable(String nickname) {
-        requireText(nickname);
-        if (!NICKNAME_PATTERN.matcher(nickname).matches()) {
-            throw new UserApiException(ErrorCode.INVALID_REQUEST);
-        }
-        return !userRepository.existsByNickname(nickname);
-    }
-
-    /**
      * 저장 내용을 즉시 반영해 동시 가입으로 발생한 이메일·닉네임 고유 제약 위반을 변환한다.
      * 알 수 없는 제약이나 다른 무결성 오류는 원래 예외를 유지한다.
      *
@@ -116,15 +77,6 @@ public class UserService {
                 }
             }
             throw exception;
-        }
-    }
-
-    /**
-     * null 또는 공백뿐인 값을 INVALID_REQUEST 오류로 거부한다.
-     */
-    private void requireText(String value) {
-        if (value == null || value.isBlank()) {
-            throw new UserApiException(ErrorCode.INVALID_REQUEST);
         }
     }
 }
