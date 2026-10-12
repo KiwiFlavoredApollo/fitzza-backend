@@ -165,6 +165,25 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void moreThanOneAuthorizationHeaderIsRejected() {
+        String authorization = "Bearer " + TestTokens.valid("7");
+        MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/community/posts")
+                .header(HttpHeaders.AUTHORIZATION, authorization, authorization));
+
+        assertThat(forwarded.get()).isNull();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":\"INVALID_TOKEN\"");
+    }
+
+    @Test
+    void bearerSchemeIsAcceptedInAnyCase() {
+        send(MockServerHttpRequest.get("/api/community/posts")
+                .header(HttpHeaders.AUTHORIZATION, "bearer " + TestTokens.valid("7")));
+
+        assertThat(forwardedUserId()).isEqualTo("7");
+    }
+
+    @Test
     void runsBeforeRouting() {
         assertThat(filter.getOrder()).isNegative();
     }
