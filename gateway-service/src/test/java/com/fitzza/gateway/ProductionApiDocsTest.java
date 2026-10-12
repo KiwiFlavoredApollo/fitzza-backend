@@ -29,7 +29,7 @@ class ProductionApiDocsTest {
         assertThat(routes.getRoutes().collectList().block())
                 .extracting(route -> route.getId())
                 .contains("user-service", "community-service", "notification-service",
-                        "product-service", "order-service")
+                        "product-service-products", "order-service")
                 .doesNotContain("user-service-docs", "community-service-docs", "notification-service-docs");
 
         WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
