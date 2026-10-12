@@ -53,8 +53,10 @@ class UserAuthenticationGatewayTest {
 
     @DynamicPropertySource
     static void downstream(DynamicPropertyRegistry registry) {
-        registry.add("spring.cloud.discovery.client.simple.instances.user-service[0].uri",
-                () -> "http://127.0.0.1:" + DOWNSTREAM.port());
+        for (String service : new String[] {"user-service", "community-service", "notification-service"}) {
+            registry.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri",
+                    () -> "http://127.0.0.1:" + DOWNSTREAM.port());
+        }
     }
 
     @AfterAll
@@ -64,9 +66,11 @@ class UserAuthenticationGatewayTest {
 
     @Test
     void routesTheApiDocumentOfAServiceWithoutAToken() {
-        client().get().uri("/api-docs/user-service")
-                .exchange().expectStatus().isOk().expectBody(String.class)
-                .isEqualTo("/v3/api-docs:anonymous");
+        for (String service : new String[] {"user-service", "community-service", "notification-service"}) {
+            client().get().uri("/api-docs/" + service)
+                    .exchange().expectStatus().isOk().expectBody(String.class)
+                    .isEqualTo("/v3/api-docs:anonymous");
+        }
     }
 
     @Test
