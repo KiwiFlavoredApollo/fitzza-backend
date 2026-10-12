@@ -3,6 +3,7 @@ package com.fitzza.gateway.security;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -49,11 +50,20 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String authorization = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        boolean hasBearerToken = authorization != null && authorization.startsWith(BEARER_PREFIX);
-
         // 로그인·재발급·로그아웃은 만료된 토큰이 같이 실려 와도 통과해야 한다. 막으면 재발급을 못 한다.
-        if (!hasBearerToken || request.getPath().value().startsWith(AUTH_PATH_PREFIX)) {
+        if (request.getPath().value().startsWith(AUTH_PATH_PREFIX)) {
+            return chain.filter(withUserId(exchange, null));
+        }
+        // 토큰이 여러 개면 어느 것을 믿을지 정할 수 없으므로 거부한다.
+        List<String> authorizations = request.getHeaders().getOrEmpty(HttpHeaders.AUTHORIZATION);
+        if (authorizations.size() > 1) {
+            return reject(exchange, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN", "유효하지 않은 토큰입니다.");
+        }
+        String authorization = authorizations.isEmpty() ? null : authorizations.getFirst();
+        // 인증 방식 이름(Bearer)은 대소문자를 구분하지 않는다.
+        boolean hasBearerToken = authorization != null
+                && authorization.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length());
+        if (!hasBearerToken) {
             return chain.filter(withUserId(exchange, null));
         }
 

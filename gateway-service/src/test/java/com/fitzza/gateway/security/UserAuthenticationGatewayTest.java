@@ -98,6 +98,28 @@ class UserAuthenticationGatewayTest {
                 .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me/body:42");
     }
 
+    // 프론트는 TOKEN_EXPIRED를 받았을 때만 재발급한다. user 라우트도 다른 라우트와 같은 코드를 줘야 한다.
+    @Test
+    void expiredTokenOnTheUserRouteTellsTheClientToReissue() {
+        String expired = Jwts.builder().subject("42")
+                .issuedAt(Date.from(Instant.now().minusSeconds(1000)))
+                .expiration(Date.from(Instant.now().minusSeconds(60)))
+                .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
+                        .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
+
+        client().get().uri("/api/users/me")
+                .headers(headers -> headers.setBearerAuth(expired))
+                .exchange().expectStatus().isUnauthorized()
+                .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"TOKEN_EXPIRED\""));
+    }
+
+    @Test
+    void userRouteWithoutATokenAnswersWithACode() {
+        client().get().uri("/api/users/me")
+                .exchange().expectStatus().isUnauthorized()
+                .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"UNAUTHENTICATED\""));
+    }
+
     @Test
     void rejectsATokenRevokedByLogoutOnTheUserRoute() {
         String token = Jwts.builder().subject("42").issuedAt(new Date())

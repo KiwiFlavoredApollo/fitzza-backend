@@ -5,9 +5,19 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Date;
+import javax.crypto.SecretKey;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class AccessTokenVerifierTest {
+
+    private static final SecretKey KEY = Keys.hmacShaKeyFor(TestTokens.SECRET.getBytes(StandardCharsets.UTF_8));
 
     private final AccessTokenVerifier verifier = new AccessTokenVerifier(TestTokens.SECRET);
 
@@ -46,6 +56,62 @@ class AccessTokenVerifierTest {
     void rejectsTokenWhoseSubjectIsNotAUserId() {
         assertThatThrownBy(() -> verifier.verify(TestTokens.valid("admin")))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1", "9223372036854775808"})
+    void rejectsTokenWhoseSubjectIsNotAPositiveUserId(String subject) {
+        assertThatThrownBy(() -> verifier.verify(TestTokens.valid(subject)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsTokenWithoutASubject() {
+        String token = Jwts.builder()
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(KEY, Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> verifier.verify(token)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsTokenThatNeverExpires() {
+        String token = Jwts.builder().subject("7").signWith(KEY, Jwts.SIG.HS256).compact();
+
+        assertThatThrownBy(() -> verifier.verify(token)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsUnsignedToken() {
+        String token = Jwts.builder().subject("7").expiration(Date.from(Instant.now().plusSeconds(600))).compact();
+
+        assertThatThrownBy(() -> verifier.verify(token)).isInstanceOf(JwtException.class);
+    }
+
+    @Test
+    void rejectsTokenThatIsNotValidYet() {
+        String token = Jwts.builder().subject("7")
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .notBefore(Date.from(Instant.now().plusSeconds(300)))
+                .signWith(KEY, Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> verifier.verify(token)).isInstanceOf(JwtException.class);
+    }
+
+    // 비밀키가 HS512에도 쓸 수 있을 만큼 길어도 HS256으로 서명한 토큰만 받는다.
+    @Test
+    void rejectsTokenSignedWithAnotherAlgorithmEvenWithTheSameSecret() {
+        String longSecret = "test-only-long-secret-for-hs512-validation-".repeat(2);
+        AccessTokenVerifier longSecretVerifier = new AccessTokenVerifier(longSecret);
+        String token = Jwts.builder().subject("7")
+                .expiration(Date.from(Instant.now().plusSeconds(600)))
+                .signWith(Keys.hmacShaKeyFor(longSecret.getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS512)
+                .compact();
+
+        assertThatThrownBy(() -> longSecretVerifier.verify(token))
+                .isInstanceOfAny(IllegalArgumentException.class, JwtException.class);
     }
 
     @Test

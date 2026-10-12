@@ -1,6 +1,7 @@
 package com.fitzza.gateway.security;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -25,14 +26,27 @@ public class AccessTokenVerifier {
     }
 
     /**
-     * 서명과 만료를 확인하고 토큰의 사용자 ID를 돌려준다.
+     * 서명과 만료를 확인하고 토큰의 사용자 ID를 돌려준다. 모든 라우트가 이 검사를 함께 쓴다.
      *
      * @throws io.jsonwebtoken.ExpiredJwtException 만료된 토큰
-     * @throws io.jsonwebtoken.JwtException 서명이 다르거나 형식이 잘못된 토큰
-     * @throws IllegalArgumentException 비어 있거나 사용자 ID가 숫자가 아닌 토큰
+     * @throws io.jsonwebtoken.JwtException 서명이 다르거나 형식이 잘못됐거나 아직 쓸 수 없는 토큰
+     * @throws IllegalArgumentException 비어 있거나, HS256이 아니거나, 만료 시각이 없거나, 사용자 ID가 양수가 아닌 토큰
      */
     public long verify(String token) {
-        Claims claims = parser.parseSignedClaims(token).getPayload();
-        return Long.parseLong(claims.getSubject());
+        Jws<Claims> signed = parser.parseSignedClaims(token);
+        // user-service는 HS256으로만 서명한다. 같은 비밀키로 만든 다른 알고리즘의 토큰은 받지 않는다.
+        if (!Jwts.SIG.HS256.getId().equals(signed.getHeader().getAlgorithm())) {
+            throw new IllegalArgumentException("HS256 is required.");
+        }
+        Claims claims = signed.getPayload();
+        // 만료 시각이 없는 토큰은 영원히 쓸 수 있으므로 받지 않는다.
+        if (claims.getExpiration() == null) {
+            throw new IllegalArgumentException("An expiration is required.");
+        }
+        long userId = Long.parseLong(claims.getSubject());
+        if (userId <= 0) {
+            throw new IllegalArgumentException("A positive user ID is required.");
+        }
+        return userId;
     }
 }

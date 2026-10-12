@@ -1,15 +1,7 @@
 package com.fitzza.gateway.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jws;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.JwtParser;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Set;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
@@ -17,15 +9,23 @@ import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+/**
+ * user-service 라우트는 공개 목록에 없는 주소를 모두 로그인 필수로 둔다. 새 주소가 생겨도 기본으로 보호된다.
+ *
+ * <p>토큰 검증은 {@link JwtAuthenticationFilter}가 먼저 끝낸다. 만료·위조·로그아웃된 토큰은 거기서 코드와 함께
+ * 거부되므로, 여기서는 검증된 사용자 헤더가 붙었는지만 본다.
+ */
 @Component
 public class UserAuthenticationFilter implements GlobalFilter, Ordered {
 
-    private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String USER_ROUTE_ID = "user-service";
     private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
             "POST /api/auth/login",
             "POST /api/auth/reissue",
@@ -35,60 +35,32 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
             "GET /api/users/check-nickname",
             "GET /api/users/profile/options",
             "GET /api/users/status");
-
-    private final JwtParser jwtParser;
-
-    public UserAuthenticationFilter(@Value("${jwt.secret}") String secret) {
-        this.jwtParser = Jwts.parser()
-                .verifyWith(Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)))
-                .build();
-    }
+    private static final byte[] UNAUTHENTICATED_BODY =
+            "{\"code\":\"UNAUTHENTICATED\",\"message\":\"로그인이 필요합니다.\"}".getBytes(StandardCharsets.UTF_8);
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        ServerHttpRequest.Builder request = exchange.getRequest().mutate()
-                .headers(headers -> {
-                    headers.remove(USER_ID_HEADER);
-                    headers.remove(JwtAuthenticationFilter.INTERNAL_TOKEN_HEADER);
-                });
         Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
-        String endpoint = exchange.getRequest().getMethod() + " "
-                + exchange.getRequest().getPath().value();
-
-        // Protect the entire user route so new user endpoints are authenticated by default.
-        if (route != null && "user-service".equals(route.getId()) && !PUBLIC_ENDPOINTS.contains(endpoint)) {
-            String userId;
-            try {
-                userId = authenticatedUserId(exchange.getRequest().getHeaders());
-            } catch (JwtException | IllegalArgumentException exception) {
-                exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-                exchange.getResponse().getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
-                return exchange.getResponse().setComplete();
-            }
-            request.headers(headers -> headers.set(USER_ID_HEADER, userId));
+        ServerHttpRequest request = exchange.getRequest();
+        String endpoint = request.getMethod() + " " + request.getPath().value();
+        boolean protectedUserEndpoint =
+                route != null && USER_ROUTE_ID.equals(route.getId()) && !PUBLIC_ENDPOINTS.contains(endpoint);
+        if (!protectedUserEndpoint || request.getHeaders().containsKey(JwtAuthenticationFilter.USER_ID_HEADER)) {
+            return chain.filter(exchange);
         }
-        return chain.filter(exchange.mutate().request(request.build()).build());
+        return rejectUnauthenticated(exchange.getResponse());
     }
 
-    private String authenticatedUserId(HttpHeaders headers) {
-        List<String> authorization = headers.getOrEmpty(HttpHeaders.AUTHORIZATION);
-        if (authorization.size() != 1 || !authorization.getFirst().regionMatches(true, 0, "Bearer ", 0, 7)) {
-            throw new IllegalArgumentException("A single Bearer token is required.");
-        }
-        Jws<Claims> token = jwtParser.parseSignedClaims(authorization.getFirst().substring(7));
-        if (!Jwts.SIG.HS256.getId().equals(token.getHeader().getAlgorithm())) {
-            throw new IllegalArgumentException("HS256 is required.");
-        }
-        Claims claims = token.getPayload();
-        long userId = Long.parseLong(claims.getSubject());
-        if (claims.getExpiration() == null || userId <= 0) {
-            throw new IllegalArgumentException("An expiration and a positive user ID are required.");
-        }
-        return Long.toString(userId);
+    private Mono<Void> rejectUnauthenticated(ServerHttpResponse response) {
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.getHeaders().set(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        return response.writeWith(Mono.just(response.bufferFactory().wrap(UNAUTHENTICATED_BODY)));
     }
 
+    // JwtAuthenticationFilter(-1)가 사용자 헤더를 정리하고 다시 붙인 뒤에 돌아야 한다.
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE;
+        return 0;
     }
 }
