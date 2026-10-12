@@ -31,9 +31,27 @@ spring:
         - id: product-service
           uri: lb://product-service
           predicates: [Path=/api/v1/products/**]
+        - id: product-service-products
+          uri: lb://product-service
+          predicates: ["Path=/api/products,/api/products/**"]
+        - id: product-service-categories
+          uri: lb://product-service
+          predicates: ["Path=/api/categories,/api/categories/**"]
+        - id: product-service-wishlists
+          uri: lb://product-service
+          predicates: ["Path=/api/wishlists,/api/wishlists/**"]
+        - id: product-service-worldcups
+          uri: lb://product-service
+          predicates: ["Path=/api/worldcups,/api/worldcups/**"]
         - id: order-service
           uri: lb://order-service
           predicates: [Path=/api/v1/orders/**]
+        - id: order-service-orders
+          uri: lb://order-service
+          predicates: ["Path=/api/orders,/api/orders/**"]
+        - id: order-service-carts
+          uri: lb://order-service
+          predicates: ["Path=/api/carts,/api/carts/**"]
         - id: community-service
           uri: lb://community-service
           predicates: [Path=/api/v1/community/**]
