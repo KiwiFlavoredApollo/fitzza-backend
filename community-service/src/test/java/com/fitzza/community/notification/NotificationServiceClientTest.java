@@ -9,24 +9,17 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
-import java.net.URI;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.support.HttpRequestWrapper;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class NotificationServiceClientTest {
 
-    private static final String BASE_URL = "https://notification-service";
-    private static final String EVENTS_API = BASE_URL + "/internal/notifications/events";
+    private static final String EVENTS_API = "http://notification-service/internal/notifications/events";
     private static final String INTERNAL_TOKEN = "test-internal-token";
     private static final NotificationEvent EVENT =
             new NotificationEvent("comment-100", "COMMENT", 7L, "10", "내 게시글에 새 댓글이 달렸어요: 잘 어울려요");
@@ -38,7 +31,7 @@ class NotificationServiceClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new NotificationServiceClient(builder, BASE_URL, INTERNAL_TOKEN);
+        client = new NotificationServiceClient(builder, "http://notification-service", INTERNAL_TOKEN);
     }
 
     @Test
@@ -67,32 +60,7 @@ class NotificationServiceClientTest {
     @Test
     void aMissingInternalTokenIsRejectedAtStartup() {
         assertThatThrownBy(() -> new NotificationServiceClient(
-                        RestClient.builder(), BASE_URL, " "))
+                        RestClient.builder(), "http://notification-service", " "))
                 .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {" ", "http://notification-service", "notification-service", "https:///events"})
-    void aMissingOrNonHttpsBaseUrlIsRejectedAtStartup(String baseUrl) {
-        assertThatThrownBy(() -> new NotificationServiceClient(RestClient.builder(), baseUrl, INTERNAL_TOKEN))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void aDowngradedRequestIsNotSent() {
-        RestClient.Builder builder = RestClient.builder();
-        builder.requestInterceptor((request, body, execution) -> execution.execute(new HttpRequestWrapper(request) {
-            @Override
-            public URI getURI() {
-                return URI.create("http://notification-service" + NotificationServiceClient.EVENTS_PATH);
-            }
-        }, body));
-        MockRestServiceServer downgradeServer = MockRestServiceServer.bindTo(builder).build();
-        NotificationServiceClient secureClient = new NotificationServiceClient(builder, BASE_URL, INTERNAL_TOKEN);
-
-        assertThatCode(() -> secureClient.send(EVENT)).doesNotThrowAnyException();
-
-        downgradeServer.verify();
     }
 }

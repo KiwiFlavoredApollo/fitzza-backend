@@ -135,7 +135,6 @@ services:
     environment:
       <<: *java-environment
       INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
-      NOTIFICATION_SERVICE_BASE_URL: ${NOTIFICATION_SERVICE_BASE_URL:?NOTIFICATION_SERVICE_BASE_URL must be set to an HTTPS URL}
     depends_on: *domain-dependencies
     ports: ["8084:8084"]
 
