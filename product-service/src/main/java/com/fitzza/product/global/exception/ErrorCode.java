@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 
     INVALID_REQUEST(HttpStatus.BAD_REQUEST, "잘못된 요청입니다."),
+    UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없습니다."),
     WORLDCUP_NOT_FOUND(HttpStatus.NOT_FOUND, "월드컵 결과를 찾을 수 없습니다."),
     WORLDCUP_INVALID_CANDIDATES(HttpStatus.BAD_REQUEST, "월드컵 후보 구성이 올바르지 않습니다."),

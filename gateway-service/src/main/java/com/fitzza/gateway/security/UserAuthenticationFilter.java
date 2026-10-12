@@ -47,7 +47,10 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest.Builder request = exchange.getRequest().mutate()
-                .headers(headers -> headers.remove(USER_ID_HEADER));
+                .headers(headers -> {
+                    headers.remove(USER_ID_HEADER);
+                    headers.remove(JwtAuthenticationFilter.INTERNAL_TOKEN_HEADER);
+                });
         Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
         String endpoint = exchange.getRequest().getMethod() + " "
                 + exchange.getRequest().getPath().value();

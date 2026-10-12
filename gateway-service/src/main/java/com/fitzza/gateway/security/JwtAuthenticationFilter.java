@@ -27,6 +27,7 @@ import reactor.core.publisher.Mono;
 public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     static final String USER_ID_HEADER = "X-User-Id";
+    static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTH_PATH_PREFIX = "/api/auth/";
@@ -93,12 +94,13 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         return -1;
     }
 
-    // 밖에서 보낸 X-User-Id는 항상 지운다. 남겨 두면 헤더만 써서 남의 계정으로 요청할 수 있다.
+    // 밖에서 보낸 X-User-Id와 내부 호출 비밀 헤더는 항상 지운다. 남겨 두면 헤더만으로 다른 사용자나 내부 API를 호출할 수 있다.
     private ServerWebExchange withUserId(ServerWebExchange exchange, String userId) {
         ServerHttpRequest request = exchange.getRequest()
                 .mutate()
                 .headers(headers -> {
                     headers.remove(USER_ID_HEADER);
+                    headers.remove(INTERNAL_TOKEN_HEADER);
                     if (userId != null) {
                         headers.set(USER_ID_HEADER, userId);
                     }

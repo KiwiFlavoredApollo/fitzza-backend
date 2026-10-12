@@ -30,7 +30,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
-`INTERNAL_CALL_TOKEN`은 신뢰하는 서비스가 `/internal/users`, `/internal/users/{userId}/body`, `/internal/notifications/events` 호출 시 `X-Internal-Token` 헤더로 보내는 별도의 비밀값입니다. 내부 API를 제공하는 user-service·notification-service와 호출이 필요한 서비스에만 같은 값을 주입합니다. 지금은 작성자 닉네임을 조회하는 community-service가 호출합니다. 값이 없거나 비어 있으면 시작되지 않으며, 헤더가 없거나 일치하지 않으면 HTTP 401을 반환합니다. user-service의 8081 포트는 호스트에 공개하지 않습니다. 내부 호출은 Compose 네트워크의 `http://user-service:8081`을 사용하고 공개 API는 Gateway를 사용합니다.
+`INTERNAL_CALL_TOKEN`은 신뢰하는 서비스가 내부 API를 호출할 때 `X-Internal-Token` 헤더로 보내는 비밀값입니다. user-service(`/internal/users`), notification-service(`/internal/notifications/events`), product-service의 내부 API가 같은 값을 검사합니다. 지금은 community-service가 user-service 내부 API를 호출합니다. 값이 없거나 비어 있으면 해당 서비스가 시작되지 않으며, 헤더가 없거나 일치하지 않으면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Internal-Token`을 전달하기 전에 제거합니다. user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
 브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
 

@@ -64,6 +64,14 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void clientInternalTokenIsRemovedBeforeForwarding() {
+        send(MockServerHttpRequest.get("/api/products")
+                .header(JwtAuthenticationFilter.INTERNAL_TOKEN_HEADER, "forged-token"));
+
+        assertThat(forwarded.get().getHeaders()).doesNotContainKey(JwtAuthenticationFilter.INTERNAL_TOKEN_HEADER);
+    }
+
+    @Test
     void userIdHeaderWithoutTokenIsRemoved() {
         send(MockServerHttpRequest.get("/api/users/me").header(USER_ID_HEADER, "999"));
 
