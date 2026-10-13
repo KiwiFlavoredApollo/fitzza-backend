@@ -84,6 +84,13 @@ curl http://localhost:8080/api/v1/recommendations/status
 
 기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 JPA가 명시한 이름으로 제약을 생성합니다.
 
+성별 코드가 `W`/`M`에서 `F`/`M`으로 바뀌었습니다. 예전 DB에는 `gender`에 `W`/`M`만 허용하는 검사 제약이 남아 있어 `F`를 저장하지 못하므로, 기존 DB를 재사용하면 아래를 한 번 실행합니다. 체형(`body_type`) 컬럼은 더 이상 쓰지 않으며 남아 있어도 동작에는 영향이 없습니다.
+
+```sql
+ALTER TABLE user_service.user_body DROP CONSTRAINT IF EXISTS user_body_gender_check;
+UPDATE user_service.user_body SET gender = 'F' WHERE gender = 'W';
+```
+
 ## 로컬 빌드
 
 Java 21이 필요합니다. 별도 Gradle 설치 없이 Wrapper를 사용합니다.

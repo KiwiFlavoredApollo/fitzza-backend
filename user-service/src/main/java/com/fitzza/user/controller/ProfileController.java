@@ -38,7 +38,7 @@ public class ProfileController {
 
     @Operation(
             summary = "내 프로필 조회",
-            description = "입력하지 않은 신체 정보는 null로 내려간다.",
+            description = "계정 정보와 신체·취향 정보를 한 단계로 펼쳐서 내려준다. 입력하지 않은 항목은 null이다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
@@ -60,7 +60,8 @@ public class ProfileController {
     @Operation(
             summary = "내 신체 정보 저장·수정·삭제",
             description = "모든 필드가 선택이다. 보내지 않은 필드는 그대로 두고, null로 보낸 필드는 지운다. "
-                    + "키 100~250cm, 체중 20~300kg, 신발 150~350mm. 체형·핏·스타일은 정해진 code 값(예: STANDARD, OVERSIZED, CASUAL).",
+                    + "성별 M·F, 키 100~250cm, 체중 20~300kg, 신발 150~350mm. "
+                    + "핏·스타일은 정해진 code 값(예: OVERSIZED, CASUAL).",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH),
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(schema = @Schema(implementation = UserBodyResponse.class))))

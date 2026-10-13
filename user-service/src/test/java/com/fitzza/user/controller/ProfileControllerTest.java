@@ -44,15 +44,19 @@ class ProfileControllerTest {
     @Test
     void myProfileUsesUserIdFromGatewayHeader() throws Exception {
         when(profileService.getMyProfile(7L))
-                .thenReturn(new MyProfileResponse("fit@example.com", "fitzza", sampleBody()));
+                .thenReturn(new MyProfileResponse(
+                        "fit@example.com", "fitzza", Gender.F, 172.5f, 64f, 245, "OVERSIZED", List.of("CASUAL", "MINIMAL")));
 
         mockMvc.perform(get("/api/users/me").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.email").value("fit@example.com"))
                 .andExpect(jsonPath("$.nickname").value("fitzza"))
-                .andExpect(jsonPath("$.body.height").value(172.5))
-                .andExpect(jsonPath("$.body.gender").value("W"))
-                .andExpect(jsonPath("$.body.preferredStyles[0]").value("CASUAL"));
+                .andExpect(jsonPath("$.gender").value("F"))
+                .andExpect(jsonPath("$.height").value(172.5))
+                .andExpect(jsonPath("$.shoeSize").value(245))
+                .andExpect(jsonPath("$.preferredStyles[0]").value("CASUAL"))
+                .andExpect(jsonPath("$.body").doesNotExist())
+                .andExpect(jsonPath("$.bodyType").doesNotExist());
     }
 
     @Test
@@ -113,7 +117,7 @@ class ProfileControllerTest {
     }
 
     private UserBodyResponse sampleBody() {
-        return new UserBodyResponse(172.5f, 64f, Gender.W, "STANDARD", "OVERSIZED", List.of("CASUAL", "MINIMAL"), 245);
+        return new UserBodyResponse(Gender.F, 172.5f, 64f, 245, "OVERSIZED", List.of("CASUAL", "MINIMAL"));
     }
 
     @Test

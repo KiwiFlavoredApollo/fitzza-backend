@@ -33,8 +33,7 @@ public class ProfileService {
     public MyProfileResponse getMyProfile(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserApiException(ErrorCode.USER_NOT_FOUND));
-        return new MyProfileResponse(
-                user.getEmail(), user.getNickname(), UserBodyResponse.from(findOrCreateBody(userId)));
+        return MyProfileResponse.of(user, findOrCreateBody(userId));
     }
 
     @Transactional
@@ -55,7 +54,6 @@ public class ProfileService {
         putIfPresent(filled, "height", body.getHeight());
         putIfPresent(filled, "weight", body.getWeight());
         putIfPresent(filled, "gender", body.getGender());
-        putIfPresent(filled, "bodyType", body.getBodyType());
         putIfPresent(filled, "preferredFit", body.getPreferredFit());
         if (!body.getPreferredStyles().isEmpty()) {
             filled.put("preferredStyles", body.getPreferredStyles());
