@@ -140,7 +140,7 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
     environment:
       <<: *java-environment
-      INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
+      ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
     depends_on: *domain-dependencies
     expose: ["8083"]
 
@@ -149,7 +149,6 @@ services:
     environment:
       <<: *java-environment
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
-      INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
     depends_on: *domain-dependencies
     expose: ["8084"]
     healthcheck:

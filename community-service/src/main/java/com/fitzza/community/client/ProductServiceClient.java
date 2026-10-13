@@ -15,24 +15,22 @@ public class ProductServiceClient implements ProductCatalog {
     private static final ParameterizedTypeReference<List<ProductSummary>> PRODUCT_LIST =
             new ParameterizedTypeReference<>() {};
 
-    static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+    static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
 
     private final RestClient restClient;
 
     // 공용 빌더를 그대로 고치면 다른 클라이언트의 주소가 바뀌므로 복사해서 쓴다.
-    // product-service의 /internal API는 아직 공통 INTERNAL_CALL_TOKEN을 받는다.
-    // product-service가 서비스별 토큰으로 바뀌면 이 클라이언트도 COMMUNITY_SERVICE_TOKEN과 새 주소로 바꾼다.
     public ProductServiceClient(
             @LoadBalanced RestClient.Builder restClientBuilder,
             @Value("${fitzza.product-service.base-url:http://product-service}") String baseUrl,
-            @Value("${internal.call-token}") String internalCallToken) {
-        if (internalCallToken == null || internalCallToken.isBlank()) {
-            throw new IllegalArgumentException("INTERNAL_CALL_TOKEN must be set and non-blank");
+            @Value("${fitzza.service-token}") String serviceToken) {
+        if (serviceToken == null || serviceToken.isBlank()) {
+            throw new IllegalArgumentException("COMMUNITY_SERVICE_TOKEN must be set and non-blank");
         }
         this.restClient = restClientBuilder
                 .clone()
                 .baseUrl(baseUrl)
-                .defaultHeader(INTERNAL_TOKEN_HEADER, internalCallToken)
+                .defaultHeader(SERVICE_TOKEN_HEADER, serviceToken)
                 .build();
     }
 
@@ -41,7 +39,7 @@ public class ProductServiceClient implements ProductCatalog {
         WishlistCheck check = restClient
                 .get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/internal/wishlists/check")
+                        .path("/wishlists/check")
                         .queryParam("userId", userId)
                         .queryParam("itemId", productId)
                         .build())
@@ -55,7 +53,7 @@ public class ProductServiceClient implements ProductCatalog {
         List<ProductSummary> found = restClient
                 .get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/internal/products")
+                        .path("/products")
                         .queryParam("productIds", productId)
                         .build())
                 .retrieve()

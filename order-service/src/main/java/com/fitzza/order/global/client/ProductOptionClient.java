@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ProductOptionClient {
 
-    // product-service /internal/product-options는 한 번에 100개까지만 받고, 넘으면 요청 전체를 거부한다.
+    // product-service /product-options는 한 번에 100개까지만 받고, 넘으면 요청 전체를 거부한다.
     static final int LOOKUP_BATCH_SIZE = 100;
 
     private final ProductFeignClient productFeignClient;

@@ -4,10 +4,6 @@ spring:
   config:
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
 
-# user·notification의 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
+# user·notification·product의 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
 fitzza:
   service-token: ${COMMUNITY_SERVICE_TOKEN}
-
-# product-service 내부 API는 아직 공통 토큰을 쓴다. product-service가 서비스별 토큰으로 바뀌면 지운다.
-internal:
-  call-token: ${INTERNAL_CALL_TOKEN}

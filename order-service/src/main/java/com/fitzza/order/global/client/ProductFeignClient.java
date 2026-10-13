@@ -11,6 +11,6 @@ import org.springframework.web.bind.annotation.RequestParam;
         url = "${fitzza.clients.product.url:}")
 public interface ProductFeignClient {
 
-    @GetMapping("/internal/product-options")
+    @GetMapping("/product-options")
     List<ProductOptionResponse> getOptions(@RequestParam("optionIds") List<Long> optionIds);
 }

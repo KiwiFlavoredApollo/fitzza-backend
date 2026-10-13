@@ -22,7 +22,7 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 
 ```bash
 cp .env.example .env
-# .env의 JWT_SECRET, INTERNAL_CALL_TOKEN, COMMUNITY_SERVICE_TOKEN, ORDER_SERVICE_TOKEN에 서로 다른 32바이트 이상의 무작위 비밀값을 입력한 뒤 실행합니다.
+# .env의 JWT_SECRET, COMMUNITY_SERVICE_TOKEN, ORDER_SERVICE_TOKEN에 서로 다른 32바이트 이상의 무작위 비밀값을 입력한 뒤 실행합니다.
 docker compose up --build -d
 ```
 
@@ -40,9 +40,9 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
 | `PRODUCT_SERVICE_TOKEN` | product-service | product-service가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다. |
 
-`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
+`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
 
-order-service와 community-service의 product 호출 클라이언트는 아직 `/internal/...`과 `X-Internal-Token`을 사용합니다. product-service는 이 경로와 헤더를 더 이상 받지 않으므로, 그 클라이언트를 서비스별 토큰으로 바꾸기 전까지 상품 내부 조회는 실패합니다. user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
+user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
 브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
 
