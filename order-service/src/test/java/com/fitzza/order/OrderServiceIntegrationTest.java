@@ -1,6 +1,7 @@
 package com.fitzza.order;
 
 import static com.fitzza.order.support.TestFixtures.option;
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -67,6 +68,12 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/carts'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].patch").exists())
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].delete").exists())
+                .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
+                .andExpect(jsonPath("$.paths['/api/carts'].post.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
+                .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].patch.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
+                .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].delete.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
+                .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-Service-Token')]", hasSize(1)))
+                .andExpect(jsonPath("$.components.securitySchemes.serviceToken.name").value("X-Service-Token"))
                 .andExpect(jsonPath("$.paths['/api/orders']").doesNotExist());
     }
 
