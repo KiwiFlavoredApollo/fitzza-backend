@@ -57,30 +57,36 @@ public class VoteService {
         requireConsistentOptions(requested);
 
         // 남의 추천·찜을 고른 요청은 글을 만들기 전에 걸러지도록 선택지부터 확인한다.
-        List<VoteItemSnapshot> snapshots = new ArrayList<>();
-        for (VoteOptionRequest option : requested) {
-            snapshots.add(voteItemGateway.resolve(
-                    userId, option.source(), option.itemType(), itemIdOf(option), option.imageUrl().trim()));
-        }
+        List<VoteItemSnapshot> snapshots = resolveSnapshots(userId, requested);
 
         Post post = postRepository.save(
                 Post.createVote(userId, request.title(), request.content(), request.category(), Instant.now()));
-        List<VoteOption> options = new ArrayList<>();
-        for (int index = 0; index < requested.size(); index++) {
-            VoteOptionRequest option = requested.get(index);
-            VoteItemSnapshot snapshot = snapshots.get(index);
-            options.add(VoteOption.of(
-                    post.getId(),
-                    index + 1,
-                    option.source(),
-                    option.itemType(),
-                    itemIdOf(option),
-                    snapshot.imageUrl(),
-                    snapshot.name(),
-                    snapshot.price()));
-        }
-        voteOptionRepository.saveAll(options);
+        voteOptionRepository.saveAll(toOptions(post.getId(), requested, snapshots));
         return new VotePostCreatedResponse(post.getId(), post.getVoteEndAt());
+    }
+
+    // 게시글 수정에서 선택지를 보냈을 때 통째로 바꾼다. 글 행을 잠그므로 투표 접수(vote)와 겹치지 않는다.
+    // 한 표라도 들어온 투표나 마감된 투표는 선택지를 바꿀 수 없다.
+    @Transactional
+    public void replaceOptions(Long userId, Long postId, List<VoteOptionRequest> requested) {
+        Post post = postRepository
+                .findVisibleForUpdate(postId)
+                .orElseThrow(() -> new CommunityApiException(ErrorCode.POST_NOT_FOUND));
+        if (!post.isWrittenBy(userId)) {
+            throw new CommunityApiException(ErrorCode.NOT_AUTHOR);
+        }
+        requireVotePost(post);
+        if (post.isVoteClosedAt(Instant.now())) {
+            throw new CommunityApiException(ErrorCode.VOTE_CLOSED);
+        }
+        if (voteRepository.existsByPostId(postId)) {
+            throw new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED);
+        }
+        requireConsistentOptions(requested);
+        List<VoteItemSnapshot> snapshots = resolveSnapshots(userId, requested);
+
+        voteOptionRepository.deleteByPostId(postId);
+        voteOptionRepository.saveAll(toOptions(postId, requested, snapshots));
     }
 
     @Transactional
@@ -177,6 +183,34 @@ public class VoteService {
                 throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
             }
         }
+    }
+
+    private List<VoteItemSnapshot> resolveSnapshots(Long userId, List<VoteOptionRequest> requested) {
+        List<VoteItemSnapshot> snapshots = new ArrayList<>();
+        for (VoteOptionRequest option : requested) {
+            snapshots.add(voteItemGateway.resolve(
+                    userId, option.source(), option.itemType(), itemIdOf(option), option.imageUrl().trim()));
+        }
+        return snapshots;
+    }
+
+    private static List<VoteOption> toOptions(
+            Long postId, List<VoteOptionRequest> requested, List<VoteItemSnapshot> snapshots) {
+        List<VoteOption> options = new ArrayList<>();
+        for (int index = 0; index < requested.size(); index++) {
+            VoteOptionRequest option = requested.get(index);
+            VoteItemSnapshot snapshot = snapshots.get(index);
+            options.add(VoteOption.of(
+                    postId,
+                    index + 1,
+                    option.source(),
+                    option.itemType(),
+                    itemIdOf(option),
+                    snapshot.imageUrl(),
+                    snapshot.name(),
+                    snapshot.price()));
+        }
+        return options;
     }
 
     private static String itemIdOf(VoteOptionRequest option) {

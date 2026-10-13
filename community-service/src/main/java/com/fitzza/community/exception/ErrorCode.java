@@ -14,6 +14,7 @@ public enum ErrorCode {
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
     VOTE_CLOSED(HttpStatus.CONFLICT, "마감된 투표입니다."),
+    VOTE_OPTIONS_LOCKED(HttpStatus.CONFLICT, "투표가 시작된 글은 선택지를 바꿀 수 없습니다."),
     CONCURRENT_UPDATE(HttpStatus.CONFLICT, "다른 요청과 겹쳐 처리하지 못했습니다. 새로고침 후 다시 시도해주세요."),
     PRODUCT_LOOKUP_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "상품 정보를 확인하지 못했습니다. 잠시 후 다시 시도해주세요."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");

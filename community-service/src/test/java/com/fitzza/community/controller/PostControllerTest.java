@@ -245,6 +245,42 @@ class PostControllerTest {
     }
 
     @Test
+    void updatePassesVoteOptionsAndChecksTheirCount() throws Exception {
+        String option = "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/a.png\"}";
+        mockMvc.perform(patch(POSTS + "/3")
+                        .header(USER_ID_HEADER, "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"options\":[" + option + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(postService);
+
+        mockMvc.perform(patch(POSTS + "/3")
+                        .header(USER_ID_HEADER, "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"options\":[" + option + "," + option + "]}"))
+                .andExpect(status().isOk());
+        ArgumentCaptor<PostUpdateRequest> sent = ArgumentCaptor.forClass(PostUpdateRequest.class);
+        verify(postService).update(eq(7L), eq(3L), sent.capture());
+        assertThat(sent.getValue().getOptions()).hasSize(2);
+    }
+
+    @Test
+    void updateOfAVoteThatAlreadyHasVotesIsAConflict() throws Exception {
+        doThrow(new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED))
+                .when(postService)
+                .update(eq(7L), eq(3L), any(PostUpdateRequest.class));
+        String option = "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/a.png\"}";
+
+        mockMvc.perform(patch(POSTS + "/3")
+                        .header(USER_ID_HEADER, "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"options\":[" + option + "," + option + "]}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("VOTE_OPTIONS_LOCKED"));
+    }
+
+    @Test
     void updateByAnotherUserIsForbidden() throws Exception {
         doThrow(new CommunityApiException(ErrorCode.NOT_AUTHOR))
                 .when(postService)

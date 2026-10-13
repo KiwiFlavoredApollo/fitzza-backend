@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import com.fitzza.community.dto.PostDetailResponse;
 import com.fitzza.community.dto.PostPageResponse;
 import com.fitzza.community.dto.PostSummaryResponse;
 import com.fitzza.community.dto.PostUpdateRequest;
+import com.fitzza.community.dto.VoteOptionRequest;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.repository.CommentRepository;
@@ -62,8 +64,9 @@ class PostServiceTest {
     private final CommentRepository commentRepository = mock(CommentRepository.class);
     private final VoteOptionRepository voteOptionRepository = mock(VoteOptionRepository.class);
     private final UserDirectory userDirectory = mock(UserDirectory.class);
+    private final VoteService voteService = mock(VoteService.class);
     private final PostService postService = new PostService(
-            postRepository, postLikeRepository, commentRepository, voteOptionRepository, userDirectory);
+            postRepository, postLikeRepository, commentRepository, voteOptionRepository, userDirectory, voteService);
 
     @Test
     void createStoresTrimmedNormalPostForTheHeaderUser() {
@@ -238,6 +241,39 @@ class PostServiceTest {
         assertThat(post.getContent()).isEqualTo("내용");
         assertThat(post.getCategory()).isEqualTo(PostCategory.FASHION);
         assertThat(post.getImageUrl()).isEqualTo(IMAGE_URL);
+        verifyNoInteractions(voteService);
+    }
+
+    @Test
+    void updateHandsSentOptionsToTheVoteServiceBeforeChangingTheText() {
+        Post post = votePost(POST_ID);
+        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
+        List<VoteOptionRequest> options = List.of(
+                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL));
+        PostUpdateRequest request = new PostUpdateRequest();
+        request.setTitle("바뀐 투표");
+        request.setOptions(options);
+
+        postService.update(AUTHOR_ID, POST_ID, request);
+
+        verify(voteService).replaceOptions(AUTHOR_ID, POST_ID, options);
+        assertThat(post.getTitle()).isEqualTo("바뀐 투표");
+    }
+
+    @Test
+    void rejectedOptionsStopTheWholeUpdate() {
+        PostUpdateRequest request = new PostUpdateRequest();
+        request.setTitle("바뀐 투표");
+        request.setOptions(List.of());
+        doThrow(new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED))
+                .when(voteService).replaceOptions(AUTHOR_ID, POST_ID, List.of());
+
+        assertThatThrownBy(() -> postService.update(AUTHOR_ID, POST_ID, request))
+                .isInstanceOf(CommunityApiException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VOTE_OPTIONS_LOCKED);
+        verify(postRepository, never()).findByIdAndDeletedAtIsNull(anyLong());
     }
 
     @Test

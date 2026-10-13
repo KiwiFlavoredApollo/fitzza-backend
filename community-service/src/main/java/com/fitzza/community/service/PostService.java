@@ -47,18 +47,21 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final VoteOptionRepository voteOptionRepository;
     private final UserDirectory userDirectory;
+    private final VoteService voteService;
 
     public PostService(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             CommentRepository commentRepository,
             VoteOptionRepository voteOptionRepository,
-            UserDirectory userDirectory) {
+            UserDirectory userDirectory,
+            VoteService voteService) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.commentRepository = commentRepository;
         this.voteOptionRepository = voteOptionRepository;
         this.userDirectory = userDirectory;
+        this.voteService = voteService;
     }
 
     @Transactional(readOnly = true)
@@ -158,6 +161,10 @@ public class PostService {
 
     @Transactional
     public void update(Long userId, Long postId, PostUpdateRequest request) {
+        // 선택지를 먼저 바꾼다. 거절되면 같은 트랜잭션의 제목·본문 변경도 함께 취소된다.
+        if (request.getOptions() != null) {
+            voteService.replaceOptions(userId, postId, request.getOptions());
+        }
         Post post = findOwnPost(userId, postId);
         if (request.getTitle() != null) {
             post.changeTitle(request.getTitle());

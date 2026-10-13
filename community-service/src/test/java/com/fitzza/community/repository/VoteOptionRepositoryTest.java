@@ -62,6 +62,21 @@ class VoteOptionRepositoryTest {
         assertThat(voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(POST_ID)).hasSize(2);
     }
 
+    // 선택지를 통째로 바꿀 때 같은 표시 순서·같은 상품을 다시 넣어도 고유 제약에 걸리지 않아야 한다.
+    @Test
+    void optionsOfAPostCanBeDeletedAndWrittenAgain() {
+        voteOptionRepository.saveAllAndFlush(List.of(product(POST_ID, 1, "55"), product(POST_ID, 2, "56")));
+        voteOptionRepository.saveAndFlush(product(OTHER_POST_ID, 1, "55"));
+
+        assertThat(voteOptionRepository.deleteByPostId(POST_ID)).isEqualTo(2);
+        voteOptionRepository.saveAllAndFlush(List.of(product(POST_ID, 1, "56"), product(POST_ID, 2, "55")));
+
+        assertThat(voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(POST_ID))
+                .extracting(VoteOption::getItemId, VoteOption::getLabel)
+                .containsExactly(tuple("56", "A"), tuple("55", "B"));
+        assertThat(voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(OTHER_POST_ID)).hasSize(1);
+    }
+
     @Test
     void firstOptionImagesComeBackOnlyForTheRequestedPosts() {
         voteOptionRepository.saveAll(List.of(
