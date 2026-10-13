@@ -15,7 +15,6 @@ import com.fitzza.user.domain.UserBody;
 import com.fitzza.user.domain.UserBodyUpdate;
 import com.fitzza.user.dto.MyProfileResponse;
 import com.fitzza.user.dto.NicknameResponse;
-import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
@@ -48,18 +47,6 @@ class ProfileServiceTest {
     @BeforeEach
     void setUp() {
         profileService = new ProfileService(userRepository, userBodyRepository);
-    }
-
-    @Test
-    void optionsExposeEveryCodeWithItsLabel() {
-        ProfileOptionsResponse options = profileService.getOptions();
-
-        assertThat(options.bodyTypes()).extracting("code").contains("SLIM", "STANDARD", "MUSCULAR", "CHUBBY");
-        assertThat(options.fits())
-                .extracting("code")
-                .containsExactly("REGULAR", "RELAXED", "SLIM", "OVERSIZED", "CROPPED");
-        assertThat(options.styles()).extracting("code").contains("CASUAL", "MINIMAL");
-        assertThat(options.fits()).extracting("label").doesNotContainNull();
     }
 
     @Test

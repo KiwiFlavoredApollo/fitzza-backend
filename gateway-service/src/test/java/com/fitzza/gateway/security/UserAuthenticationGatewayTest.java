@@ -93,9 +93,9 @@ class UserAuthenticationGatewayTest {
         client().get().uri("/api/users/me").header("X-User-Id", "999")
                 .headers(headers -> headers.setBearerAuth(token))
                 .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me:42");
-        client().patch().uri("/api/users/me/body").header("X-User-Id", "999")
+        client().patch().uri("/api/users/me").header("X-User-Id", "999")
                 .headers(headers -> headers.setBearerAuth(token))
-                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me/body:42");
+                .exchange().expectStatus().isOk().expectBody(String.class).isEqualTo("/api/users/me:42");
     }
 
     // 프론트는 TOKEN_EXPIRED를 받았을 때만 재발급한다. user 라우트도 다른 라우트와 같은 코드를 줘야 한다.

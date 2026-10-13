@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fitzza.user.config.OpenApiConfig;
 import com.fitzza.user.dto.ErrorResponse;
 import com.fitzza.user.dto.MyProfileResponse;
-import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.security.AuthHeaders;
 import com.fitzza.user.service.ProfileService;
@@ -24,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "프로필", description = "온보딩 선택지와 내 프로필")
+@Tag(name = "프로필", description = "내 프로필 조회와 저장")
 @RestController
 @RequestMapping("/api/users")
 public class ProfileController {
@@ -35,15 +34,6 @@ public class ProfileController {
     public ProfileController(ProfileService profileService, UserBodyUpdateParser userBodyUpdateParser) {
         this.profileService = profileService;
         this.userBodyUpdateParser = userBodyUpdateParser;
-    }
-
-    @Operation(
-            summary = "프로필 선택지 조회",
-            description = "체형·핏·스타일의 코드와 한글 라벨. 토큰 없이 호출한다. 프로필 저장 때는 code 값을 보낸다.")
-    @ApiResponse(responseCode = "200", description = "조회 성공")
-    @GetMapping("/profile/options")
-    public ProfileOptionsResponse getProfileOptions() {
-        return profileService.getOptions();
     }
 
     @Operation(
@@ -70,7 +60,7 @@ public class ProfileController {
     @Operation(
             summary = "내 신체 정보 저장·수정·삭제",
             description = "모든 필드가 선택이다. 보내지 않은 필드는 그대로 두고, null로 보낸 필드는 지운다. "
-                    + "키 100~250cm, 체중 20~300kg, 신발 150~350mm. 체형·핏·스타일은 선택지 조회의 code 값.",
+                    + "키 100~250cm, 체중 20~300kg, 신발 150~350mm. 체형·핏·스타일은 정해진 code 값(예: STANDARD, OVERSIZED, CASUAL).",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH),
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(schema = @Schema(implementation = UserBodyResponse.class))))
@@ -89,7 +79,7 @@ public class ProfileController {
                 description = "USER_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PatchMapping("/me/body")
+    @PatchMapping("/me")
     public UserBodyResponse updateMyBody(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
             @RequestBody JsonNode body) {

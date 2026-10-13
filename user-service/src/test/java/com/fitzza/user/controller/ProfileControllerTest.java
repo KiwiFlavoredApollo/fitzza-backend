@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,8 +14,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitzza.user.domain.Gender;
 import com.fitzza.user.domain.UserBodyUpdate;
 import com.fitzza.user.dto.MyProfileResponse;
-import com.fitzza.user.dto.OptionResponse;
-import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.GlobalExceptionHandler;
@@ -40,21 +39,6 @@ class ProfileControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(new ProfileController(profileService, new UserBodyUpdateParser()))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
-    }
-
-    @Test
-    void profileOptionsAreAvailableWithoutLogin() throws Exception {
-        when(profileService.getOptions())
-                .thenReturn(new ProfileOptionsResponse(
-                        List.of(new OptionResponse("STANDARD", "보통 체형")),
-                        List.of(new OptionResponse("OVERSIZED", "오버사이즈")),
-                        List.of(new OptionResponse("CASUAL", "캐주얼"))));
-
-        mockMvc.perform(get("/api/users/profile/options"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.bodyTypes[0].code").value("STANDARD"))
-                .andExpect(jsonPath("$.fits[0].code").value("OVERSIZED"))
-                .andExpect(jsonPath("$.styles[0].code").value("CASUAL"));
     }
 
     @Test
@@ -92,7 +76,7 @@ class ProfileControllerTest {
     void updateMyBodyReturnsUpdatedBody() throws Exception {
         when(profileService.updateMyBody(eq(7L), any(UserBodyUpdate.class))).thenReturn(sampleBody());
 
-        mockMvc.perform(patch("/api/users/me/body")
+        mockMvc.perform(patch("/api/users/me")
                         .header(USER_ID_HEADER, "7")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -105,7 +89,7 @@ class ProfileControllerTest {
 
     @Test
     void updateMyBodyRejectsOutOfRangeValueBeforeCallingService() throws Exception {
-        mockMvc.perform(patch("/api/users/me/body")
+        mockMvc.perform(patch("/api/users/me")
                         .header(USER_ID_HEADER, "7")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -118,7 +102,7 @@ class ProfileControllerTest {
 
     @Test
     void updateMyBodyRequiresUserHeader() throws Exception {
-        mockMvc.perform(patch("/api/users/me/body")
+        mockMvc.perform(patch("/api/users/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"height": 172.5}
@@ -134,9 +118,9 @@ class ProfileControllerTest {
 
     @Test
     void unexpectedFailureReturnsInternalServerErrorWithoutLeakingTheCause() throws Exception {
-        when(profileService.getOptions()).thenThrow(new IllegalStateException("jdbc url and password"));
+        when(profileService.getMyProfile(7L)).thenThrow(new IllegalStateException("jdbc url and password"));
 
-        mockMvc.perform(get("/api/users/profile/options"))
+        mockMvc.perform(get("/api/users/me").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
                 .andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
@@ -144,7 +128,7 @@ class ProfileControllerTest {
 
     @Test
     void unsupportedMethodKeepsItsStatusInTheCommonErrorShape() throws Exception {
-        mockMvc.perform(patch("/api/users/me").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(delete("/api/users/me").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
