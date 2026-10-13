@@ -5,36 +5,76 @@ spring:
     name: gateway-service
   config:
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  data:
+    redis:
+      repositories:
+        enabled: false
   cloud:
     gateway:
+      # 브라우저(FE)가 다른 주소에서 Gateway를 호출할 수 있게 한다. 토큰은 쿠키가 아니라 Authorization 헤더로 오므로
+      # 자격 증명(쿠키) 허용은 켜지 않는다.
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+            allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+            allowedHeaders: "*"
+            maxAge: 3600
       routes:
         - id: user-service
           uri: lb://user-service
-          predicates: [Path=/api/v1/users/**]
+          predicates: [Path=/api/users/**]
         - id: user-service-auth
           uri: lb://user-service
-          predicates: [Path=/api/v1/auth/**]
-        - id: product-service
+          predicates: [Path=/api/auth/**]
+        - id: product-service-products
           uri: lb://product-service
-          predicates: [Path=/api/v1/products/**]
+          predicates: ["Path=/api/products,/api/products/**"]
+        - id: product-service-categories
+          uri: lb://product-service
+          predicates: ["Path=/api/categories,/api/categories/**"]
+        - id: product-service-wishlists
+          uri: lb://product-service
+          predicates: ["Path=/api/wishlists,/api/wishlists/**"]
+        - id: product-service-worldcups
+          uri: lb://product-service
+          predicates: ["Path=/api/worldcups,/api/worldcups/**"]
         - id: order-service
           uri: lb://order-service
           predicates: [Path=/api/v1/orders/**]
+        - id: order-service-orders
+          uri: lb://order-service
+          predicates: ["Path=/api/orders,/api/orders/**"]
+        - id: order-service-carts
+          uri: lb://order-service
+          predicates: ["Path=/api/carts,/api/carts/**"]
         - id: community-service
           uri: lb://community-service
-          predicates: [Path=/api/v1/community/**]
+          predicates: [Path=/api/community/**]
         - id: review-service
           uri: lb://review-service
-          predicates: [Path=/api/v1/reviews/**]
+          predicates: [Path=/api/reviews/**]
         - id: notification-service
           uri: lb://notification-service
-          predicates: [Path=/api/v1/notifications/**]
+          predicates: [Path=/api/notifications/**]
         - id: virtual-tryon-service
           uri: ${VIRTUAL_TRYON_URL:http://localhost:8091}
           predicates: [Path=/api/v1/tryon/**]
         - id: recommendation-service
           uri: ${RECOMMENDATION_URL:http://localhost:8092}
           predicates: [Path=/api/v1/recommendations/**]
+# Swagger UI는 Gateway 한 곳(/swagger-ui.html)에서 열고, 서비스는 오른쪽 위 목록에서 고른다.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /api-docs/user-service
+      - name: community-service
+        url: /api-docs/community-service
+      - name: notification-service
+        url: /api-docs/notification-service
 jwt:
   secret: ${JWT_SECRET}
 eureka:

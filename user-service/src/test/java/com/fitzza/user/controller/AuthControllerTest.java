@@ -46,7 +46,7 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class)))
                 .thenReturn(new LoginResponse("access", "refresh", 7L, "fitzza"));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": "password1"}
@@ -66,7 +66,7 @@ class AuthControllerTest {
         when(authService.login(any(LoginRequest.class)))
                 .thenThrow(new UserApiException(ErrorCode.INVALID_CREDENTIALS));
 
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": "wrong-password1"}
@@ -80,13 +80,13 @@ class AuthControllerTest {
      */
     @Test
     void loginRejectsBlankPasswordBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/login")
+        mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email": "fit@example.com", "password": ""}
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(authService);
     }
 
@@ -95,7 +95,7 @@ class AuthControllerTest {
         when(authService.reissue(new RefreshTokenRequest("old-refresh")))
                 .thenReturn(new TokenResponse("new-access", "new-refresh"));
 
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "old-refresh"}
@@ -110,7 +110,7 @@ class AuthControllerTest {
         when(authService.reissue(any(RefreshTokenRequest.class)))
                 .thenThrow(new UserApiException(ErrorCode.INVALID_REFRESH_TOKEN));
 
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "used-refresh"}
@@ -121,22 +121,59 @@ class AuthControllerTest {
 
     @Test
     void reissueRejectsMissingRefreshTokenBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/reissue")
+        mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(authService);
     }
 
     @Test
     void logoutPassesTheRefreshTokenAndReturnsOk() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/logout")
+        mockMvc.perform(post("/api/auth/signout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"refreshToken": "refresh"}
                                 """))
                 .andExpect(status().isOk());
-        verify(authService).logout(new RefreshTokenRequest("refresh"));
+        verify(authService).logout(new RefreshTokenRequest("refresh"), null);
+    }
+
+    @Test
+    void logoutPassesTheAccessTokenFromTheAuthorizationHeader() throws Exception {
+        mockMvc.perform(post("/api/auth/signout")
+                        .header("Authorization", "Bearer access-token ")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken": "refresh"}
+                                """))
+                .andExpect(status().isOk());
+        verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
+    }
+
+    // 게이트웨이는 bearer·BEARER도 받으므로, 로그아웃도 같은 토큰을 블랙리스트에 올려야 한다.
+    @Test
+    void logoutReadsTheBearerSchemeWithoutRegardToCase() throws Exception {
+        mockMvc.perform(post("/api/auth/signout")
+                        .header("Authorization", "bearer access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken": "refresh"}
+                                """))
+                .andExpect(status().isOk());
+        verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
+    }
+
+    @Test
+    void logoutIgnoresAnAuthorizationHeaderThatIsNotABearerToken() throws Exception {
+        mockMvc.perform(post("/api/auth/signout")
+                        .header("Authorization", "Basic dXNlcjpwYXNz")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken": "refresh"}
+                                """))
+                .andExpect(status().isOk());
+        verify(authService).logout(new RefreshTokenRequest("refresh"), null);
     }
 }

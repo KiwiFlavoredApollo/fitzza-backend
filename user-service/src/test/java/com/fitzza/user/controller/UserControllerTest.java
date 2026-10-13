@@ -4,16 +4,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fitzza.user.dto.DuplicateField;
 import com.fitzza.user.dto.SignupRequest;
+import com.fitzza.user.exception.DuplicateValueException;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.GlobalExceptionHandler;
-import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.service.UserService;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -42,7 +43,7 @@ class UserControllerTest {
     void signUpReturnsCreatedWithUserId() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isCreated())
@@ -54,11 +55,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsMalformedEmailBeforeCallingService() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("not-an-email", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -67,11 +68,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsEmailWithoutTopLevelDomain() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example", "password1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -80,11 +81,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordWithSpecialCharacter() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1!", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -93,11 +94,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordWithoutDigit() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "passwordonly", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -108,7 +109,7 @@ class UserControllerTest {
     void signUpAcceptsKoreanAndMixedCaseNickname() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "민준Fit1")))
                 .andExpect(status().isCreated());
@@ -119,11 +120,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameWithSpecialCharacter() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit_zza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -132,11 +133,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameWithWhitespace() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fit zza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -147,7 +148,7 @@ class UserControllerTest {
     void signUpAcceptsLowercaseOnlyPasswordAndNicknameAtLengthLimits() throws Exception {
         when(userService.signUp(any(SignupRequest.class))).thenReturn(7L);
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "abcdefghijklmnopqrstuvw1", "0123456789")))
                 .andExpect(status().isCreated());
@@ -158,11 +159,11 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsPasswordLongerThan24Characters() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "abcdefghijklmnopqrstuvwx1", "fitzza")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
@@ -171,61 +172,32 @@ class UserControllerTest {
      */
     @Test
     void signUpRejectsNicknameLongerThan10Characters() throws Exception {
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "01234567890")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(userService);
     }
 
     /**
-     * 이메일 중복 오류가 HTTP 409와 구체적인 오류 코드로 변환되는지 검증한다.
+     * 중복 오류가 HTTP 409, DUPLICATE_VALUE 코드, 중복 필드 목록(errors)으로 변환되는지 검증한다.
      */
     @Test
-    void signUpReturnsConflictForDuplicateEmail() throws Exception {
+    void signUpReturnsConflictWithEveryDuplicateField() throws Exception {
         when(userService.signUp(any(SignupRequest.class)))
-                .thenThrow(new UserApiException(ErrorCode.DUPLICATE_EMAIL));
+                .thenThrow(new DuplicateValueException(List.of(DuplicateField.EMAIL, DuplicateField.NICKNAME)));
 
-        mockMvc.perform(post("/api/v1/users/signup")
+        mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
-    }
-
-    /**
-     * 이메일 중복 조회 결과가 available 필드로 전달되는지 검증한다.
-     */
-    @Test
-    void checkEmailReturnsAvailability() throws Exception {
-        when(userService.isEmailAvailable("fit@example.com")).thenReturn(false);
-
-        mockMvc.perform(get("/api/v1/users/check-email").param("email", "fit@example.com"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.available").value(false));
-    }
-
-    /**
-     * 사용 가능한 닉네임 조회 결과가 available 필드로 전달되는지 검증한다.
-     */
-    @Test
-    void checkNicknameReturnsAvailability() throws Exception {
-        when(userService.isNicknameAvailable("fitzza")).thenReturn(true);
-
-        mockMvc.perform(get("/api/v1/users/check-nickname").param("nickname", "fitzza"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.available").value(true));
-    }
-
-    /**
-     * 필수 이메일 쿼리 매개변수 누락이 공통 HTTP 400 응답이 되는지 검증한다.
-     */
-    @Test
-    void checkEmailRejectsMissingParameter() throws Exception {
-        mockMvc.perform(get("/api/v1/users/check-email"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("DUPLICATE_VALUE"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.DUPLICATE_VALUE.getMessage()))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[0].field").value("email"))
+                .andExpect(jsonPath("$.errors[0].reason").value("이미 사용 중인 이메일입니다."))
+                .andExpect(jsonPath("$.errors[1].field").value("nickname"));
     }
 
     /**

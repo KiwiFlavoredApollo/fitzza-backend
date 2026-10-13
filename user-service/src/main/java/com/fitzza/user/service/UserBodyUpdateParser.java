@@ -1,7 +1,6 @@
 package com.fitzza.user.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fitzza.user.domain.BodyType;
 import com.fitzza.user.domain.FieldChange;
 import com.fitzza.user.domain.FitType;
 import com.fitzza.user.domain.Gender;
@@ -29,7 +28,6 @@ public class UserBodyUpdateParser {
     static final int MAX_SHOE_SIZE_MM = 350;
 
     private static final Set<String> GENDERS = namesOf(Gender.values());
-    private static final Set<String> BODY_TYPES = namesOf(BodyType.values());
     private static final Set<String> FIT_TYPES = namesOf(FitType.values());
     private static final Set<String> STYLE_TAGS = namesOf(StyleTag.values());
 
@@ -41,7 +39,6 @@ public class UserBodyUpdateParser {
                 parseDecimal(body, "height", MIN_HEIGHT_CM, MAX_HEIGHT_CM),
                 parseDecimal(body, "weight", MIN_WEIGHT_KG, MAX_WEIGHT_KG),
                 parseGender(body),
-                parseCode(body, "bodyType", BODY_TYPES),
                 parseCode(body, "preferredFit", FIT_TYPES),
                 parseCodes(body, "preferredStyles", STYLE_TAGS),
                 parseInteger(body, "shoeSize", MIN_SHOE_SIZE_MM, MAX_SHOE_SIZE_MM));
@@ -123,7 +120,7 @@ public class UserBodyUpdateParser {
     }
 
     private UserApiException invalid(String message) {
-        return new UserApiException(ErrorCode.INVALID_INPUT, message);
+        return new UserApiException(ErrorCode.INVALID_REQUEST, message);
     }
 
     private static Set<String> namesOf(Enum<?>[] values) {

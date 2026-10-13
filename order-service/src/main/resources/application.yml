@@ -1,5 +1,53 @@
+server:
+  port: ${SERVER_PORT:8083}
+
 spring:
   application:
     name: order-service
   config:
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fitzza}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 3000
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+fitzza:
+  # product-service 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
+  service-token: ${ORDER_SERVICE_TOKEN}
+  clients:
+    product:
+      # 비어 있으면 Eureka의 product-service 인스턴스로 로드밸런싱한다. 로컬 단독 실행 시 http://localhost:8082를 지정한다.
+      url: ${PRODUCT_SERVICE_URL:}

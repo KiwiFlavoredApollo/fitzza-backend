@@ -4,8 +4,8 @@ $endpoints = [ordered]@{
     'Config' = 'http://localhost:8888/actuator/health'
     'Discovery' = 'http://localhost:8761/actuator/health'
     'Gateway' = 'http://localhost:8080/actuator/health'
-    'User via Gateway' = 'http://localhost:8080/api/v1/users/status'
-    'Product via Gateway' = 'http://localhost:8080/api/v1/products/status'
+    'User via Gateway' = 'http://localhost:8080/api-docs/user-service'
+    'Product via Gateway' = 'http://localhost:8080/api/products'
     'Try-On via Gateway' = 'http://localhost:8080/api/v1/tryon/status'
     'Recommendation via Gateway' = 'http://localhost:8080/api/v1/recommendations/status'
 }

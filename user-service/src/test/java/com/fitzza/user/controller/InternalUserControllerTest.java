@@ -10,8 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitzza.user.dto.NicknameResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
+import com.fitzza.user.security.ServiceTokenSecurityConfig;
 import com.fitzza.user.service.ProfileService;
-import com.fitzza.user.security.InternalUserSecurityConfig;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -24,12 +24,15 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = InternalUserController.class, properties = {
-    "internal.call-token=test-only-internal-call-token",
+    "fitzza.service-tokens.community=" + InternalUserControllerTest.COMMUNITY_TOKEN,
+    "fitzza.service-tokens.recommendation=" + InternalUserControllerTest.RECOMMENDATION_TOKEN,
     "spring.cloud.config.enabled=false"
 })
 class InternalUserControllerTest {
 
-    private static final String INTERNAL_TOKEN = "test-only-internal-call-token";
+    static final String COMMUNITY_TOKEN = "test-only-community-service-token-32b";
+    static final String RECOMMENDATION_TOKEN = "test-only-recommendation-token-32bytes";
+    private static final String SERVICE_TOKEN = "X-Service-Token";
 
     @MockBean
     private ProfileService profileService;
@@ -38,8 +41,8 @@ class InternalUserControllerTest {
     private MockMvc mockMvc;
 
     @ParameterizedTest
-    @ValueSource(strings = {"/internal/users", "/internal/users/7/body", "/internal/users/7/body;ignored=value"})
-    void missingInternalTokenIsDeniedEvenWithUserIdentityHeaders(String path) throws Exception {
+    @ValueSource(strings = {"/users", "/users/7/body", "/users/7/body;ignored=value"})
+    void missingServiceTokenIsDeniedEvenWithUserIdentityHeaders(String path) throws Exception {
         mockMvc.perform(get(path).param("userIds", "7,8")
                         .header("X-User-Id", "7")
                         .header("Authorization", "Bearer external-user-token"))
@@ -50,27 +53,44 @@ class InternalUserControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "wrong-token"})
-    void invalidInternalTokensAreDenied(String token) throws Exception {
-        for (String path : List.of("/internal/users", "/internal/users/7/body")) {
-            mockMvc.perform(get(path).param("userIds", "7,8").header("X-Internal-Token", token))
+    void unknownServiceTokensAreDenied(String token) throws Exception {
+        for (String path : List.of("/users", "/users/7/body")) {
+            mockMvc.perform(get(path).param("userIds", "7,8").header(SERVICE_TOKEN, token))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
         }
         verifyNoInteractions(profileService);
     }
 
+    // community 토큰으로는 닉네임만, recommendation 토큰으로는 신체 정보만 볼 수 있다.
+    @Test
+    void eachServiceTokenOpensOnlyTheApisAllowedForThatService() throws Exception {
+        mockMvc.perform(get("/users/7/body").header(SERVICE_TOKEN, COMMUNITY_TOKEN))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/users").param("userIds", "7").header(SERVICE_TOKEN, RECOMMENDATION_TOKEN))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(profileService);
+    }
+
     @Test
     void authenticationRunsBeforeRequestParameterValidation() throws Exception {
-        mockMvc.perform(get("/internal/users"))
+        mockMvc.perform(get("/users"))
                 .andExpect(status().isUnauthorized());
         verifyNoInteractions(profileService);
     }
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {" "})
-    void missingOrBlankConfiguredTokenIsRejected(String token) {
-        assertThatThrownBy(() -> new InternalUserSecurityConfig(token))
+    @ValueSource(strings = {" ", "too-short"})
+    void missingBlankOrShortCommunityTokenIsRejected(String token) {
+        assertThatThrownBy(() -> new ServiceTokenSecurityConfig(token, RECOMMENDATION_TOKEN))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void recommendationTokenIsOptionalButMustDifferFromCommunity() {
+        new ServiceTokenSecurityConfig(COMMUNITY_TOKEN, "");
+        assertThatThrownBy(() -> new ServiceTokenSecurityConfig(COMMUNITY_TOKEN, COMMUNITY_TOKEN))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -79,7 +99,7 @@ class InternalUserControllerTest {
         when(profileService.findNicknames(List.of(7L, 8L)))
                 .thenReturn(List.of(new NicknameResponse(7L, "fitzza"), new NicknameResponse(8L, "newbie")));
 
-        mockMvc.perform(get("/internal/users").param("userIds", "7,8").header("X-Internal-Token", INTERNAL_TOKEN))
+        mockMvc.perform(get("/users").param("userIds", "7,8").header(SERVICE_TOKEN, COMMUNITY_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].userId").value(7))
                 .andExpect(jsonPath("$[0].nickname").value("fitzza"))
@@ -88,16 +108,16 @@ class InternalUserControllerTest {
 
     @Test
     void nicknameLookupRejectsNonNumericId() throws Exception {
-        mockMvc.perform(get("/internal/users").param("userIds", "7,abc").header("X-Internal-Token", INTERNAL_TOKEN))
+        mockMvc.perform(get("/users").param("userIds", "7,abc").header(SERVICE_TOKEN, COMMUNITY_TOKEN))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test
     void bodyLookupReturnsOnlyFilledFields() throws Exception {
         when(profileService.getFilledBodyFields(7L)).thenReturn(Map.of("height", 172.5f));
 
-        mockMvc.perform(get("/internal/users/7/body").header("X-Internal-Token", INTERNAL_TOKEN))
+        mockMvc.perform(get("/users/7/body").header(SERVICE_TOKEN, RECOMMENDATION_TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.height").value(172.5))
                 .andExpect(jsonPath("$.weight").doesNotExist());
@@ -107,7 +127,7 @@ class InternalUserControllerTest {
     void bodyLookupReturnsNotFoundForUnknownUser() throws Exception {
         when(profileService.getFilledBodyFields(999L)).thenThrow(new UserApiException(ErrorCode.USER_NOT_FOUND));
 
-        mockMvc.perform(get("/internal/users/999/body").header("X-Internal-Token", INTERNAL_TOKEN))
+        mockMvc.perform(get("/users/999/body").header(SERVICE_TOKEN, RECOMMENDATION_TOKEN))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("USER_NOT_FOUND"));
     }

@@ -15,7 +15,6 @@ import com.fitzza.user.domain.UserBody;
 import com.fitzza.user.domain.UserBodyUpdate;
 import com.fitzza.user.dto.MyProfileResponse;
 import com.fitzza.user.dto.NicknameResponse;
-import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
@@ -51,18 +50,6 @@ class ProfileServiceTest {
     }
 
     @Test
-    void optionsExposeEveryCodeWithItsLabel() {
-        ProfileOptionsResponse options = profileService.getOptions();
-
-        assertThat(options.bodyTypes()).extracting("code").contains("SLIM", "STANDARD", "MUSCULAR", "CHUBBY");
-        assertThat(options.fits())
-                .extracting("code")
-                .containsExactly("REGULAR", "RELAXED", "SLIM", "OVERSIZED", "CROPPED");
-        assertThat(options.styles()).extracting("code").contains("CASUAL", "MINIMAL");
-        assertThat(options.fits()).extracting("label").doesNotContainNull();
-    }
-
-    @Test
     void myProfileCombinesAccountAndBodyInformation() {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(storedUser(USER_ID, "fitzza")));
         when(userBodyRepository.findById(USER_ID)).thenReturn(Optional.of(filledBody()));
@@ -71,8 +58,10 @@ class ProfileServiceTest {
 
         assertThat(profile.email()).isEqualTo("fit@example.com");
         assertThat(profile.nickname()).isEqualTo("fitzza");
-        assertThat(profile.body().height()).isEqualTo(172.5f);
-        assertThat(profile.body().preferredStyles()).containsExactly("CASUAL", "MINIMAL");
+        assertThat(profile.gender()).isEqualTo(Gender.F);
+        assertThat(profile.height()).isEqualTo(172.5f);
+        assertThat(profile.shoeSize()).isEqualTo(245);
+        assertThat(profile.preferredStyles()).containsExactly("CASUAL", "MINIMAL");
     }
 
     @Test
@@ -80,11 +69,11 @@ class ProfileServiceTest {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(storedUser(USER_ID, "fitzza")));
         when(userBodyRepository.findById(USER_ID)).thenReturn(Optional.of(UserBody.emptyFor(USER_ID)));
 
-        UserBodyResponse body = profileService.getMyProfile(USER_ID).body();
+        MyProfileResponse profile = profileService.getMyProfile(USER_ID);
 
-        assertThat(body.height()).isNull();
-        assertThat(body.gender()).isNull();
-        assertThat(body.preferredStyles()).isEmpty();
+        assertThat(profile.height()).isNull();
+        assertThat(profile.gender()).isNull();
+        assertThat(profile.preferredStyles()).isEmpty();
     }
 
     @Test
@@ -96,7 +85,7 @@ class ProfileServiceTest {
         MyProfileResponse profile = profileService.getMyProfile(USER_ID);
 
         verify(userBodyRepository).save(any(UserBody.class));
-        assertThat(profile.body().height()).isNull();
+        assertThat(profile.height()).isNull();
     }
 
     @Test
@@ -118,7 +107,6 @@ class ProfileServiceTest {
                 FieldChange.of(null),
                 FieldChange.absent(),
                 FieldChange.absent(),
-                FieldChange.absent(),
                 FieldChange.of(List.of("STREET")),
                 FieldChange.absent());
 
@@ -126,8 +114,7 @@ class ProfileServiceTest {
 
         assertThat(body.height()).isEqualTo(180f);
         assertThat(body.weight()).isNull();
-        assertThat(body.gender()).isEqualTo(Gender.W);
-        assertThat(body.bodyType()).isEqualTo("STANDARD");
+        assertThat(body.gender()).isEqualTo(Gender.F);
         assertThat(body.preferredFit()).isEqualTo("OVERSIZED");
         assertThat(body.preferredStyles()).containsExactly("STREET");
         assertThat(body.shoeSize()).isEqualTo(245);
@@ -138,7 +125,6 @@ class ProfileServiceTest {
         when(userRepository.existsById(USER_ID)).thenReturn(true);
         when(userBodyRepository.findById(USER_ID)).thenReturn(Optional.of(filledBody()));
         UserBodyUpdate update = new UserBodyUpdate(
-                FieldChange.absent(),
                 FieldChange.absent(),
                 FieldChange.absent(),
                 FieldChange.absent(),
@@ -171,7 +157,6 @@ class ProfileServiceTest {
                 FieldChange.of(172.5f),
                 FieldChange.absent(),
                 FieldChange.absent(),
-                FieldChange.absent(),
                 FieldChange.of("OVERSIZED"),
                 FieldChange.absent(),
                 FieldChange.absent()));
@@ -202,11 +187,11 @@ class ProfileServiceTest {
         assertThatThrownBy(() -> profileService.findNicknames(List.of()))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
         assertThatThrownBy(() -> profileService.findNicknames(tooMany))
                 .isInstanceOf(UserApiException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
+                .isEqualTo(ErrorCode.INVALID_REQUEST);
     }
 
     private User storedUser(Long id, String nickname) {
@@ -220,8 +205,7 @@ class ProfileServiceTest {
         body.apply(new UserBodyUpdate(
                 FieldChange.of(172.5f),
                 FieldChange.of(64f),
-                FieldChange.of(Gender.W),
-                FieldChange.of("STANDARD"),
+                FieldChange.of(Gender.F),
                 FieldChange.of("OVERSIZED"),
                 FieldChange.of(List.of("CASUAL", "MINIMAL")),
                 FieldChange.of(245)));
@@ -230,7 +214,6 @@ class ProfileServiceTest {
 
     private UserBodyUpdate noChange() {
         return new UserBodyUpdate(
-                FieldChange.absent(),
                 FieldChange.absent(),
                 FieldChange.absent(),
                 FieldChange.absent(),

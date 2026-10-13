@@ -6,9 +6,19 @@
 Thumbs.db
 Desktop.ini
 
+# IDE 자동 생성 파일 (VS Code Java / Eclipse)
+.classpath
+.project
+.settings/
+.factorypath
+.apt_generated/
+.apt_generated_tests/
+
 # Java / Gradle
 **/target/
 **/build/
+**/bin/
+**/out/
 .gradle/
 .gradle-cache/
 **/out/
@@ -69,3 +79,6 @@ logs/
 *.sqlite3
 *.dump
 *.backup
+
+# Musinsa Crawled Dataset
+**/product-service/src/main/resources/final_products/

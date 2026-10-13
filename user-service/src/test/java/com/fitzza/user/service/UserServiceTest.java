@@ -9,9 +9,10 @@ import static org.mockito.Mockito.when;
 
 import com.fitzza.user.domain.User;
 import com.fitzza.user.domain.UserBody;
+import com.fitzza.user.dto.DuplicateField;
 import com.fitzza.user.dto.SignupRequest;
+import com.fitzza.user.exception.DuplicateValueException;
 import com.fitzza.user.exception.ErrorCode;
-import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.repository.UserBodyRepository;
 import com.fitzza.user.repository.UserRepository;
 import java.sql.SQLException;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -80,39 +82,51 @@ class UserServiceTest {
     }
 
     /**
-     * 이메일 중복이 감지되면 사용자 저장 전에 구체적인 중복 오류를 반환하는지 검증한다.
+     * 이메일만 중복이면 email 하나만 담아 사용자 저장 전에 거절하는지 검증한다.
      */
     @Test
     void signUpRejectsDuplicateEmail() {
         when(userRepository.existsByEmail("fit@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> userService.signUp(REQUEST))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
-        verify(userRepository, never()).saveAndFlush(any(User.class));
+        assertDuplicates(DuplicateField.EMAIL);
     }
 
     /**
-     * 닉네임 중복이 감지되면 사용자 저장 전에 구체적인 중복 오류를 반환하는지 검증한다.
+     * 닉네임만 중복이면 nickname 하나만 담아 사용자 저장 전에 거절하는지 검증한다.
      */
     @Test
     void signUpRejectsDuplicateNickname() {
         when(userRepository.existsByNickname("fitzza")).thenReturn(true);
 
+        assertDuplicates(DuplicateField.NICKNAME);
+    }
+
+    /**
+     * 이메일과 닉네임이 모두 중복이면 두 필드를 이메일·닉네임 순서로 함께 알리는지 검증한다.
+     */
+    @Test
+    void signUpReportsBothDuplicatesAtOnce() {
+        when(userRepository.existsByEmail("fit@example.com")).thenReturn(true);
+        when(userRepository.existsByNickname("fitzza")).thenReturn(true);
+
+        assertDuplicates(DuplicateField.EMAIL, DuplicateField.NICKNAME);
+    }
+
+    private void assertDuplicates(DuplicateField... expected) {
         assertThatThrownBy(() -> userService.signUp(REQUEST))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.DUPLICATE_NICKNAME);
+                .isInstanceOfSatisfying(DuplicateValueException.class, exception -> {
+                    assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_VALUE);
+                    assertThat(exception.getFields()).containsExactly(expected);
+                });
         verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 
     /**
-     * 중첩된 알려진 고유 제약 위반을 계정 중복으로 변환하고 프로필 저장을 중단하는지 검증한다.
+     * 중첩된 알려진 고유 제약 위반을 해당 필드의 중복으로 변환하고 프로필 저장을 중단하는지 검증한다.
      */
     @ParameterizedTest
-    @ValueSource(strings = {"uk_users_email", "uk_users_nickname"})
-    void signUpReportsConflictWhenUniqueConstraintFailsOnConcurrentRequest(String constraintName) {
+    @CsvSource({"uk_users_email, email", "uk_users_nickname, nickname"})
+    void signUpReportsConflictWhenUniqueConstraintFailsOnConcurrentRequest(String constraintName, String field) {
         when(passwordEncoder.encode("password1")).thenReturn("ENCODED");
         when(userRepository.saveAndFlush(any(User.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate key",
@@ -120,9 +134,9 @@ class UserServiceTest {
                                 "duplicate key", new SQLException("duplicate key", "23505"), constraintName))));
 
         assertThatThrownBy(() -> userService.signUp(REQUEST))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.DUPLICATE_ACCOUNT);
+                .isInstanceOfSatisfying(DuplicateValueException.class, exception -> assertThat(exception.getFields())
+                        .extracting(DuplicateField::field)
+                        .containsExactly(field));
         verify(userBodyRepository, never()).save(any(UserBody.class));
     }
 
@@ -164,66 +178,5 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.signUp(REQUEST)).isSameAs(exception);
         verify(userBodyRepository, never()).save(any(UserBody.class));
-    }
-
-    /**
-     * 중복 조회에서도 가입과 같은 이메일 정규화 규칙이 적용되는지 검증한다.
-     */
-    @Test
-    void emailIsAvailableOnlyWhenNoUserHasTheNormalizedEmail() {
-        when(userRepository.existsByEmail("fit@example.com")).thenReturn(true);
-        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
-
-        assertThat(userService.isEmailAvailable(" FIT@example.com")).isFalse();
-        assertThat(userService.isEmailAvailable("new@example.com")).isTrue();
-    }
-
-    /**
-     * 잘못된 이메일 형식의 중복 조회가 INVALID_INPUT으로 거부되는지 검증한다.
-     */
-    @Test
-    void emailAvailabilityCheckRejectsMalformedEmail() {
-        assertThatThrownBy(() -> userService.isEmailAvailable("fit@example"))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
-    }
-
-    /**
-     * 닉네임 존재 여부의 반대 값이 사용 가능 여부로 반환되는지 검증한다.
-     */
-    @Test
-    void nicknameIsAvailableOnlyWhenNoUserHasIt() {
-        when(userRepository.existsByNickname("fitzza")).thenReturn(true);
-        when(userRepository.existsByNickname("newbie")).thenReturn(false);
-
-        assertThat(userService.isNicknameAvailable("fitzza")).isFalse();
-        assertThat(userService.isNicknameAvailable("newbie")).isTrue();
-    }
-
-    /**
-     * 닉네임 중복 조회에도 특수문자 금지 규칙이 적용되는지 검증한다.
-     */
-    @Test
-    void nicknameAvailabilityCheckRejectsSpecialCharacter() {
-        assertThatThrownBy(() -> userService.isNicknameAvailable("fit_zza"))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
-    }
-
-    /**
-     * 공백 이메일과 빈 닉네임이 사용 가능 여부 조회에서 거부되는지 검증한다.
-     */
-    @Test
-    void availabilityCheckRejectsBlankValue() {
-        assertThatThrownBy(() -> userService.isEmailAvailable(" "))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
-        assertThatThrownBy(() -> userService.isNicknameAvailable(""))
-                .isInstanceOf(UserApiException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.INVALID_INPUT);
     }
 }

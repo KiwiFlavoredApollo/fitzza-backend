@@ -8,10 +8,13 @@ spring:
       repositories:
         enabled: false
 
-internal:
-  call-token: ${INTERNAL_CALL_TOKEN}
+# 이 서비스의 서비스 전용 API(/users)를 호출하는 서비스별 토큰. 서비스마다 다른 32바이트 이상 값을 쓴다.
+fitzza:
+  service-tokens:
+    community: ${COMMUNITY_SERVICE_TOKEN}
+    recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
 
 jwt:
   secret: ${JWT_SECRET}
-  expiration-seconds: ${JWT_EXPIRATION_SECONDS:604800}
+  expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
   refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:2592000}
