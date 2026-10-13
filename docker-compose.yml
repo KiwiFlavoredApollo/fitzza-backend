@@ -129,7 +129,10 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
     environment:
       <<: *java-environment
-      INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:-}
     depends_on: *domain-dependencies
     ports: ["8082:8082"]
 

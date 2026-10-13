@@ -108,5 +108,10 @@ class GatewayRouteTest {
         client.get().uri("/internal/worldcups/1").exchange().expectStatus().isNotFound();
         client.get().uri("/internal/products").exchange().expectStatus().isNotFound();
         client.get().uri("/internal/product-options").exchange().expectStatus().isNotFound();
+        client.get().uri("/products").exchange().expectStatus().isNotFound();
+        client.get().uri("/products/measurements").exchange().expectStatus().isNotFound();
+        client.get().uri("/product-options").exchange().expectStatus().isNotFound();
+        client.get().uri("/wishlists/check").exchange().expectStatus().isNotFound();
+        client.get().uri("/worldcups/1").exchange().expectStatus().isNotFound();
     }
 }
