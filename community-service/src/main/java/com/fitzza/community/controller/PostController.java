@@ -96,17 +96,31 @@ public class PostController {
 
     @Operation(
             summary = "일반 게시글 작성",
-            description = "제목 100자, 내용 5000자 이하. 투표글은 투표 게시글 작성 API를 쓴다.",
+            description = "제목 100자, 내용 5000자 이하. 투표글은 투표 게시글 작성 API를 쓴다. "
+                    + "월드컵 결과를 공유하려면 sharedType=WORLDCUP, sharedId=월드컵 이력 ID를 함께 보낸다. "
+                    + "본인 결과인지 상품 서비스에서 확인한 뒤 우승 상품을 스냅샷으로 저장한다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST: 빈 값이나 길이 초과",
+                description = "INVALID_REQUEST: 빈 값이나 길이 초과, 없는 sharedType, sharedType·sharedId 중 하나만 보냄",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
                 description = "UNAUTHENTICATED: 로그인 필요",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description = "NOT_SHARED_OWNER: 남의 월드컵 결과",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "SHARED_TARGET_NOT_FOUND: 없는 월드컵 결과",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "503",
+                description = "SHARE_LOOKUP_UNAVAILABLE: 상품 서비스에서 월드컵 결과를 확인하지 못함",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping

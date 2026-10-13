@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 
 // 투표 항목은 투표글에만 채워진다. 일반 글은 voteEndAt이 null이고 voteOptions가 비어 있다.
+// shared는 공유 글에만 있고, 공유 글이 아니면 null이다.
 public record PostDetailResponse(
         Long postId,
         String title,
@@ -14,6 +15,7 @@ public record PostDetailResponse(
         PostType postType,
         AuthorResponse author,
         String imageUrl,
+        SharedResponse shared,
         long likeCount,
         boolean liked,
         long commentCount,
