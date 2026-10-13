@@ -47,6 +47,8 @@ class AuthServiceTest {
     @Mock
     private AccessTokenBlacklist accessTokenBlacklist;
 
+    private static final String DUMMY_HASH = "DUMMY_HASH";
+
     private AuthService authService;
 
     /**
@@ -54,6 +56,7 @@ class AuthServiceTest {
      */
     @BeforeEach
     void setUp() {
+        when(passwordEncoder.encode(anyString())).thenReturn(DUMMY_HASH);
         authService = new AuthService(
                 userRepository, passwordEncoder, jwtTokenProvider, refreshTokenStore, accessTokenBlacklist);
     }
@@ -140,6 +143,18 @@ class AuthServiceTest {
     }
 
     /**
+     * 없는 이메일도 비밀번호 대조를 한 번 거쳐, 응답 시간으로 가입 여부가 드러나지 않는지 검증한다.
+     */
+    @Test
+    void loginComparesAPasswordEvenWhenTheEmailIsUnknown() {
+        when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+
+        assertInvalidCredentials(new LoginRequest("nobody@example.com", "password1"));
+
+        verify(passwordEncoder).matches("password1", DUMMY_HASH);
+    }
+
+    /**
      * 기존 계정의 비밀번호 불일치가 공통 인증 실패 코드로 처리되는지 검증한다.
      */
     @Test
@@ -151,12 +166,13 @@ class AuthServiceTest {
     }
 
     /**
-     * 정지된 계정이 비밀번호 대조 이전에 인증에서 제외되는지 검증한다.
+     * 정지된 계정은 비밀번호가 맞아도 인증에서 제외되는지 검증한다.
      */
     @Test
     void loginRejectsInactiveAccountEvenWithCorrectPassword() {
         when(userRepository.findByEmail("fit@example.com"))
                 .thenReturn(Optional.of(storedUser(UserStatus.SUSPENDED)));
+        when(passwordEncoder.matches("password1", "ENCODED")).thenReturn(true);
 
         assertInvalidCredentials(new LoginRequest("fit@example.com", "password1"));
     }

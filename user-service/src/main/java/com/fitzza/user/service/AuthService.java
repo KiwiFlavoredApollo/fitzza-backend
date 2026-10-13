@@ -11,6 +11,7 @@ import com.fitzza.user.repository.UserRepository;
 import com.fitzza.user.security.AccessTokenBlacklist;
 import com.fitzza.user.security.JwtTokenProvider;
 import com.fitzza.user.security.RefreshTokenStore;
+import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,8 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
     private final AccessTokenBlacklist accessTokenBlacklist;
+    // 없는 이메일로 로그인할 때 대조할 해시. 아무 비밀번호와도 맞지 않는 임의 값으로 만든다.
+    private final String dummyPasswordHash;
 
     /**
      * 계정 조회, 비밀번호 대조 및 토큰 발급에 사용할 의존성을 주입한다.
@@ -38,6 +41,7 @@ public class AuthService {
         this.jwtTokenProvider = jwtTokenProvider;
         this.refreshTokenStore = refreshTokenStore;
         this.accessTokenBlacklist = accessTokenBlacklist;
+        this.dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
     /**
@@ -50,10 +54,13 @@ public class AuthService {
      */
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(User.normalizeEmail(request.email()))
-                .filter(User::isActive)
-                .filter(found -> passwordEncoder.matches(request.password(), found.getPassword()))
-                .orElseThrow(() -> new UserApiException(ErrorCode.INVALID_CREDENTIALS));
+        User user = userRepository.findByEmail(User.normalizeEmail(request.email())).orElse(null);
+        // 계정이 없어도 비밀번호 대조를 한 번 해서, 응답 시간으로 가입된 이메일인지 알아낼 수 없게 한다.
+        String passwordHash = user == null ? dummyPasswordHash : user.getPassword();
+        boolean passwordMatches = passwordEncoder.matches(request.password(), passwordHash);
+        if (user == null || !user.isActive() || !passwordMatches) {
+            throw new UserApiException(ErrorCode.INVALID_CREDENTIALS);
+        }
 
         return new LoginResponse(
                 jwtTokenProvider.createAccessToken(user.getId()),
