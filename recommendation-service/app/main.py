@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response, status
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Fitzza Recommendation Service", version="0.1.0")
+app.state.ready = True
 
 
 class RecommendationRequest(BaseModel):
@@ -17,13 +18,21 @@ class RecommendationResponse(BaseModel):
     product_ids: list[UUID]
 
 
-@app.get("/api/v1/recommendations/status")
-def service_status() -> dict[str, str]:
-    return {
-        "service": "recommendation-service",
-        "status": "UP",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+class HealthResponse(BaseModel):
+    status: Literal["UP", "NOT_READY"]
+    liveness: Literal["UP"] = "UP"
+    readiness: Literal["UP", "DOWN"]
+
+
+@app.get("/health", response_model=HealthResponse)
+def health(request: Request, response: Response) -> HealthResponse:
+    ready = getattr(request.app.state, "ready", False)
+    if not ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return HealthResponse(
+        status="UP" if ready else "NOT_READY",
+        readiness="UP" if ready else "DOWN",
+    )
 
 
 @app.post("/api/v1/recommendations", response_model=RecommendationResponse)

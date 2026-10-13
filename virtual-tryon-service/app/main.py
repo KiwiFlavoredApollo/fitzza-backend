@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, Response, status
 from pydantic import BaseModel, HttpUrl
 
 app = FastAPI(title="Fitzza Virtual Try-On Service", version="0.1.0")
+app.state.ready = True
 
 
 class TryOnRequest(BaseModel):
@@ -19,13 +19,21 @@ class TryOnJob(BaseModel):
     state: Literal["QUEUED"] = "QUEUED"
 
 
-@app.get("/api/v1/tryon/status")
-def service_status() -> dict[str, str]:
-    return {
-        "service": "virtual-tryon-service",
-        "status": "UP",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+class HealthResponse(BaseModel):
+    status: Literal["UP", "NOT_READY"]
+    liveness: Literal["UP"] = "UP"
+    readiness: Literal["UP", "DOWN"]
+
+
+@app.get("/health", response_model=HealthResponse)
+def health(request: Request, response: Response) -> HealthResponse:
+    ready = getattr(request.app.state, "ready", False)
+    if not ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return HealthResponse(
+        status="UP" if ready else "NOT_READY",
+        readiness="UP" if ready else "DOWN",
+    )
 
 
 @app.post("/api/v1/tryon/jobs", response_model=TryOnJob, status_code=status.HTTP_202_ACCEPTED)

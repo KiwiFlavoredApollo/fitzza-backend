@@ -10,3 +10,9 @@ fitzza:
     community: ${COMMUNITY_SERVICE_TOKEN}
     recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
     vton: ${VTON_SERVICE_TOKEN:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        exclude: "*"

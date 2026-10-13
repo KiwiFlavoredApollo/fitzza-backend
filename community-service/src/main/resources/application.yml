@@ -11,3 +11,9 @@ fitzza:
 # product-service 내부 API는 아직 공통 토큰을 쓴다. product-service가 서비스별 토큰으로 바뀌면 지운다.
 internal:
   call-token: ${INTERNAL_CALL_TOKEN}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        exclude: "*"
