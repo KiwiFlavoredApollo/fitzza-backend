@@ -144,6 +144,19 @@ class UserAuthenticationGatewayTest {
     }
 
     @Test
+    void everyResponseCarriesARequestIdThatTheBrowserMayRead() {
+        client().get().uri("/api/users/me").exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().exists("X-Request-Id");
+        client().post().uri("/api/auth/signin").header("X-Request-Id", "fe-request-0001")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("X-Request-Id", "fe-request-0001");
+        client().post().uri("/api/auth/signin").header("Origin", "http://localhost:5173")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Expose-Headers", "X-Request-Id");
+    }
+
+    @Test
     void addsTheCorsHeaderToResponsesForAnAllowedOriginAndRejectsOtherOrigins() {
         client().post().uri("/api/auth/signin").header("Origin", "http://localhost:5173")
                 .exchange().expectStatus().isOk()

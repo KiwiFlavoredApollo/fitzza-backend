@@ -7,3 +7,8 @@ spring:
 # user·notification·product의 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
 fitzza:
   service-token: ${COMMUNITY_SERVICE_TOKEN}
+
+# 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
