@@ -24,6 +24,8 @@ public interface VoteRepository extends JpaRepository<Vote, String> {
 
     Optional<Vote> findByPostIdAndUserId(Long postId, Long userId);
 
+    boolean existsByPostId(Long postId);
+
     @Query("select new com.fitzza.community.repository.IdCount(v.voteOptionId, count(v)) "
             + "from Vote v where v.postId = :postId group by v.voteOptionId")
     List<IdCount> countByOption(@Param("postId") Long postId);
