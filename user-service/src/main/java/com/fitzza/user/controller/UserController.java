@@ -1,6 +1,7 @@
 package com.fitzza.user.controller;
 
 import com.fitzza.user.dto.ErrorResponse;
+import com.fitzza.user.dto.SignupConflictResponse;
 import com.fitzza.user.dto.SignupRequest;
 import com.fitzza.user.dto.SignupResponse;
 import com.fitzza.user.service.UserService;
@@ -47,8 +48,8 @@ public class UserController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "409",
-                description = "DUPLICATE_EMAIL / DUPLICATE_NICKNAME / DUPLICATE_ACCOUNT: 이미 사용 중",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+                description = "DUPLICATE_VALUE: 이메일·닉네임 중복. errors에 중복된 필드를 모두 담는다.",
+                content = @Content(schema = @Schema(implementation = SignupConflictResponse.class)))
     })
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)

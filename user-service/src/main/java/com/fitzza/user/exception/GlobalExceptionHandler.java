@@ -1,6 +1,7 @@
 package com.fitzza.user.exception;
 
 import com.fitzza.user.dto.ErrorResponse;
+import com.fitzza.user.dto.SignupConflictResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UserApiException.class)
     public ResponseEntity<ErrorResponse> handleUserApiException(UserApiException exception) {
         return toResponse(exception.getErrorCode(), exception.getMessage());
+    }
+
+    // 회원가입 중복은 어느 필드가 겹쳤는지 errors 배열로 함께 알린다.
+    @ExceptionHandler(DuplicateValueException.class)
+    public ResponseEntity<SignupConflictResponse> handleDuplicateValue(DuplicateValueException exception) {
+        ErrorCode errorCode = exception.getErrorCode();
+        return ResponseEntity.status(errorCode.getStatus()).body(new SignupConflictResponse(
+                errorCode.getStatus().value(), errorCode.name(), exception.getMessage(), exception.getFields()));
     }
 
     // 게이트웨이를 거치지 않았거나 토큰 없이 들어온 요청에는 사용자 헤더가 없다.
