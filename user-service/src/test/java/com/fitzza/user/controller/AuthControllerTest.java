@@ -152,6 +152,19 @@ class AuthControllerTest {
         verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
     }
 
+    // 게이트웨이는 bearer·BEARER도 받으므로, 로그아웃도 같은 토큰을 블랙리스트에 올려야 한다.
+    @Test
+    void logoutReadsTheBearerSchemeWithoutRegardToCase() throws Exception {
+        mockMvc.perform(post("/api/auth/signout")
+                        .header("Authorization", "bearer access-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken": "refresh"}
+                                """))
+                .andExpect(status().isOk());
+        verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
+    }
+
     @Test
     void logoutIgnoresAnAuthorizationHeaderThatIsNotABearerToken() throws Exception {
         mockMvc.perform(post("/api/auth/signout")
