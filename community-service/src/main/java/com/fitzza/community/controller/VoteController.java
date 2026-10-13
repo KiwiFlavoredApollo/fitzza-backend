@@ -2,6 +2,7 @@ package com.fitzza.community.controller;
 
 import com.fitzza.community.config.OpenApiConfig;
 import com.fitzza.community.dto.ErrorResponse;
+import com.fitzza.community.dto.PollCloseRequest;
 import com.fitzza.community.dto.VoteCastResponse;
 import com.fitzza.community.dto.VoteClosedResponse;
 import com.fitzza.community.dto.VotePostCreateRequest;
@@ -21,6 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -96,7 +98,7 @@ public class VoteController {
                 description = "VOTE_CLOSED: 마감된 투표",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/{postId}/votes")
+    @PostMapping("/{postId}/poll/votes")
     public VoteCastResponse vote(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
             @PathVariable("postId") Long postId,
@@ -119,7 +121,7 @@ public class VoteController {
                 description = "POST_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @GetMapping("/{postId}/votes")
+    @GetMapping("/{postId}/poll")
     public VoteResultResponse getResults(
             @PathVariable("postId") Long postId,
             @Parameter(hidden = true) @RequestHeader(name = AuthHeaders.USER_ID, required = false) Long userId) {
@@ -128,13 +130,14 @@ public class VoteController {
 
     @Operation(
             summary = "투표 조기 종료",
-            description = "작성자만 종료할 수 있다. 이미 종료된 투표에 다시 요청해도 closed=true다.",
+            description = "작성자만 종료할 수 있다. 바디는 {\"closed\": true}이며, 이미 종료된 투표에 다시 요청해도 "
+                    + "closed=true다. 다시 여는 요청(closed=false)은 받지 않는다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "종료됨"),
         @ApiResponse(
                 responseCode = "400",
-                description = "NOT_VOTE_POST: 투표글이 아님",
+                description = "NOT_VOTE_POST: 투표글이 아님 / INVALID_REQUEST: closed가 없거나 false",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -149,10 +152,11 @@ public class VoteController {
                 description = "POST_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/{postId}/votes/close")
+    @PatchMapping("/{postId}/poll")
     public VoteClosedResponse close(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
-            @PathVariable("postId") Long postId) {
+            @PathVariable("postId") Long postId,
+            @Valid @RequestBody PollCloseRequest request) {
         return voteService.close(userId, postId);
     }
 }
