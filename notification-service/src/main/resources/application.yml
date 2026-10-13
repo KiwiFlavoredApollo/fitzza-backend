@@ -10,3 +10,8 @@ fitzza:
     community: ${COMMUNITY_SERVICE_TOKEN}
     recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
     vton: ${VTON_SERVICE_TOKEN:}
+
+# 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"

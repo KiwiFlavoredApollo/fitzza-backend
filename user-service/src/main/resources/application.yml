@@ -18,3 +18,8 @@ jwt:
   secret: ${JWT_SECRET}
   expiration-seconds: ${JWT_EXPIRATION_SECONDS:900}
   refresh-expiration-seconds: ${JWT_REFRESH_EXPIRATION_SECONDS:2592000}
+
+# 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
