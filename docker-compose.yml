@@ -118,6 +118,12 @@ services:
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
       JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
     depends_on: *domain-dependencies
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   product-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
@@ -143,12 +149,24 @@ services:
       INTERNAL_CALL_TOKEN: ${INTERNAL_CALL_TOKEN:?INTERNAL_CALL_TOKEN must be set}
     depends_on: *domain-dependencies
     expose: ["8084"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   review-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: review-service } }
     environment: *java-environment
     depends_on: *domain-dependencies
     expose: ["8085"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8085/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   notification-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: notification-service } }
@@ -159,6 +177,12 @@ services:
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
     depends_on: *domain-dependencies
     expose: ["8086"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   virtual-tryon-service:
     build:
