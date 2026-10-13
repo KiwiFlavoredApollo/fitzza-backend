@@ -36,7 +36,7 @@ class ProductServiceClientTest {
     void asksTheProductServiceWhetherTheUserWishlistedTheProduct() {
         server.expect(requestTo(BASE_URL + "/internal/wishlists/check?userId=7&itemId=55"))
                 .andExpect(method(HttpMethod.GET))
-                .andExpect(header(UserServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(ProductServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
                 .andRespond(withSuccess("{\"wishlisted\":true}", MediaType.APPLICATION_JSON));
         server.expect(requestTo(BASE_URL + "/internal/wishlists/check?userId=8&itemId=55"))
                 .andRespond(withSuccess("{\"wishlisted\":false}", MediaType.APPLICATION_JSON));
@@ -50,7 +50,7 @@ class ProductServiceClientTest {
     void readsTheProductSummaryAndIgnoresFieldsItDoesNotUse() {
         server.expect(requestTo(BASE_URL + "/internal/products?productIds=55"))
                 .andExpect(method(HttpMethod.GET))
-                .andExpect(header(UserServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(ProductServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
                 .andRespond(withSuccess(
                         "[{\"productId\":55,\"brandName\":\"Fitzza\",\"productName\":\"오버핏 셔츠\","
                                 + "\"price\":39000,\"imageUrl\":\"https://cdn.example.com/55.png\",\"status\":\"ON_SALE\"}]",

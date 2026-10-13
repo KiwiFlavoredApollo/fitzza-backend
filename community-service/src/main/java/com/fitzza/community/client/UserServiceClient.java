@@ -19,8 +19,8 @@ import org.springframework.web.client.RestClientException;
 public class UserServiceClient implements UserDirectory {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceClient.class);
-    // user-service의 /internal API는 이 헤더의 값이 INTERNAL_CALL_TOKEN과 같아야 응답한다.
-    static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+    // user-service의 서비스 전용 API는 호출하는 서비스의 토큰을 이 헤더로 받는다.
+    static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
     // user-service는 한 번에 100명까지만 조회해 주고 넘으면 요청 전체를 거부한다.
     static final int LOOKUP_BATCH_SIZE = 100;
     private static final ParameterizedTypeReference<List<UserNickname>> NICKNAME_LIST =
@@ -31,13 +31,15 @@ public class UserServiceClient implements UserDirectory {
     public UserServiceClient(
             @LoadBalanced RestClient.Builder restClientBuilder,
             @Value("${fitzza.user-service.base-url:http://user-service}") String baseUrl,
-            @Value("${internal.call-token}") String internalCallToken) {
-        if (internalCallToken == null || internalCallToken.isBlank()) {
-            throw new IllegalArgumentException("INTERNAL_CALL_TOKEN must be set and non-blank");
+            @Value("${fitzza.service-token}") String serviceToken) {
+        if (serviceToken == null || serviceToken.isBlank()) {
+            throw new IllegalArgumentException("COMMUNITY_SERVICE_TOKEN must be set and non-blank");
         }
+        // 다른 클라이언트와 같은 빌더 빈을 쓰므로, 주소와 헤더가 섞이지 않게 복사본에 설정한다.
         this.restClient = restClientBuilder
+                .clone()
                 .baseUrl(baseUrl)
-                .defaultHeader(INTERNAL_TOKEN_HEADER, internalCallToken)
+                .defaultHeader(SERVICE_TOKEN_HEADER, serviceToken)
                 .build();
     }
 
@@ -64,7 +66,7 @@ public class UserServiceClient implements UserDirectory {
         List<UserNickname> found = restClient
                 .get()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/internal/users")
+                        .path("/users")
                         .queryParam("userIds", joinedIds)
                         .build())
                 .retrieve()
