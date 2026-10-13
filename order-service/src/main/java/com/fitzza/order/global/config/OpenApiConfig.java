@@ -3,6 +3,7 @@ package com.fitzza.order.global.config;
 import com.fitzza.order.global.constant.ApiHeaders;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
@@ -36,9 +37,13 @@ public class OpenApiConfig {
 
     @Bean
     public OperationCustomizer globalServiceHeaders() {
-        return (operation, handlerMethod) -> operation
-                .addParametersItem(header(ApiHeaders.USER_ID, "요청 사용자 ID. 게이트웨이가 검증한 값을 다른 서비스로도 그대로 전달한다."))
-                .addParametersItem(header(ApiHeaders.SERVICE_TOKEN, "호출하는 서비스의 토큰. 서비스 전용 API에서만 검사한다."));
+        return (operation, handlerMethod) -> {
+            addHeaderIfAbsent(operation, ApiHeaders.USER_ID,
+                    "요청 사용자 ID. 게이트웨이가 검증한 값을 다른 서비스로도 그대로 전달한다.");
+            addHeaderIfAbsent(operation, ApiHeaders.SERVICE_TOKEN,
+                    "호출하는 서비스의 토큰. 서비스 전용 API에서만 검사한다.");
+            return operation;
+        };
     }
 
     @Bean
@@ -47,6 +52,14 @@ public class OpenApiConfig {
                 .group("public")
                 .pathsToMatch("/api/**")
                 .build();
+    }
+
+    private static void addHeaderIfAbsent(Operation operation, String name, String description) {
+        if (operation.getParameters() != null && operation.getParameters().stream()
+                .anyMatch(parameter -> name.equals(parameter.getName()) && "header".equals(parameter.getIn()))) {
+            return;
+        }
+        operation.addParametersItem(header(name, description));
     }
 
     private static Parameter header(String name, String description) {
