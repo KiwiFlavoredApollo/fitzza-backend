@@ -20,6 +20,8 @@ spring:
             allowedOrigins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
             allowedMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
             allowedHeaders: "*"
+            # 브라우저 코드가 응답의 요청 ID를 읽어 오류 문의 때 알려줄 수 있게 한다.
+            exposedHeaders: [X-Request-Id]
             maxAge: 3600
       routes:
         - id: user-service
