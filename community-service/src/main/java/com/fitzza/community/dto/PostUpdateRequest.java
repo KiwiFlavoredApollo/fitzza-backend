@@ -5,13 +5,14 @@ import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.VoteOption;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
 // 보내지 않은 항목은 그대로 둔다. imageUrl만 null을 보낼 수 있고, 그때는 첨부 이미지를 뗀다.
-// options는 투표글에서만 보낼 수 있고, 보내면 선택지를 통째로 바꾼다(투표가 한 표라도 있으면 거절).
+// options는 투표글에서만 보낼 수 있고, 보내면 선택지를 통째로 바꾼다(투표가 한 표라도 있으면 거절). null은 받지 않는다.
 public class PostUpdateRequest {
 
     private static final String HAS_TEXT = "(?s).*\\S.*";
@@ -37,6 +38,8 @@ public class PostUpdateRequest {
 
     // "보내지 않음"과 "null로 보냄"을 구분하려고 setter가 불렸는지 기록한다.
     private boolean imageUrlSent;
+
+    private boolean optionsSent;
 
     public String getTitle() {
         return title;
@@ -77,6 +80,14 @@ public class PostUpdateRequest {
 
     public void setOptions(List<VoteOptionRequest> options) {
         this.options = options;
+        this.optionsSent = true;
+    }
+
+    // options를 null로 보내면 "보내지 않음"과 구분되지 않으므로 400으로 거절한다.
+    @JsonIgnore
+    @AssertTrue(message = "투표 선택지를 확인해주세요.")
+    public boolean isOptionsNotNullWhenSent() {
+        return !optionsSent || options != null;
     }
 
     @JsonIgnore

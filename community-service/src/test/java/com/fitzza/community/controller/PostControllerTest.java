@@ -266,6 +266,17 @@ class PostControllerTest {
     }
 
     @Test
+    void updateRejectsOptionsSentAsNull() throws Exception {
+        mockMvc.perform(patch(POSTS + "/3")
+                        .header(USER_ID_HEADER, "7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"새 제목\",\"options\":null}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(postService);
+    }
+
+    @Test
     void updateOfAVoteThatAlreadyHasVotesIsAConflict() throws Exception {
         doThrow(new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED))
                 .when(postService)
