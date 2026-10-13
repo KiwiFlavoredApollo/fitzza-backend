@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedSnapshot;
+import com.fitzza.community.domain.SharedType;
 import com.fitzza.community.support.PostgresModeJpaTest;
 import java.time.Duration;
 import java.time.Instant;
@@ -174,6 +176,26 @@ class PostRepositoryTest {
                 .containsExactly(notTriedYet.getId(), failedLongAgo.getId(), failedRecently.getId());
         assertThat(postRepository.findPostIdsAwaitingVoteCloseNotification(PageRequest.of(0, 1)))
                 .containsExactly(notTriedYet.getId());
+    }
+
+    @Test
+    void aSharedPostKeepsItsTargetAndSnapshot() {
+        Post post = Post.createNormal(AUTHOR_ID, "월드컵 결과", "우승 상품", PostCategory.FASHION, null);
+        post.attachShared(SharedType.WORLDCUP, 9L,
+                new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, "https://cdn.example.com/55.png"));
+        Long postId = save(post).getId();
+        Long normalId = save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY, null)).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        Post loaded = postRepository.findById(postId).orElseThrow();
+        assertThat(loaded.getSharedType()).isEqualTo(SharedType.WORLDCUP);
+        assertThat(loaded.getSharedId()).isEqualTo(9L);
+        assertThat(loaded.getSharedSnapshot().getProductName()).isEqualTo("오버핏 셔츠");
+        assertThat(loaded.getSharedSnapshot().getImageUrl()).isEqualTo("https://cdn.example.com/55.png");
+        Post normal = postRepository.findById(normalId).orElseThrow();
+        assertThat(normal.isShared()).isFalse();
+        assertThat(normal.getSharedSnapshot()).isNull();
     }
 
     private Post save(Post post) {

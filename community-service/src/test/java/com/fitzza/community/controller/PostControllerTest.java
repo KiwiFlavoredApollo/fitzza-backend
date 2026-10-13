@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedType;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
 import com.fitzza.community.dto.LikeStatusResponse;
@@ -166,6 +167,42 @@ class PostControllerTest {
         assertThat(captor.getValue().title()).isEqualTo("오늘의 코디");
         assertThat(captor.getValue().category()).isEqualTo(PostCategory.DAILY);
         assertThat(captor.getValue().imageUrl()).isNull();
+    }
+
+    @Test
+    void createPassesTheSharedTargetAndRejectsAnIncompleteOrUnknownOne() throws Exception {
+        when(postService.create(eq(7L), any(PostCreateRequest.class))).thenReturn(new PostCreatedResponse(3L));
+        String base = "\"title\":\"월드컵 결과\",\"content\":\"우승\",\"category\":\"FASHION\"";
+
+        mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + base + ",\"sharedType\":\"WORLDCUP\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + base + ",\"sharedType\":\"FITTING\",\"sharedId\":9}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        verifyNoInteractions(postService);
+
+        mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{" + base + ",\"sharedType\":\"WORLDCUP\",\"sharedId\":9}"))
+                .andExpect(status().isCreated());
+        ArgumentCaptor<PostCreateRequest> captor = ArgumentCaptor.forClass(PostCreateRequest.class);
+        verify(postService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().sharedType()).isEqualTo(SharedType.WORLDCUP);
+        assertThat(captor.getValue().sharedId()).isEqualTo(9L);
+    }
+
+    @Test
+    void createOfSomeoneElsesResultIsForbidden() throws Exception {
+        when(postService.create(eq(7L), any(PostCreateRequest.class)))
+                .thenThrow(new CommunityApiException(ErrorCode.NOT_SHARED_OWNER));
+
+        mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"t\",\"content\":\"c\",\"category\":\"FASHION\","
+                                + "\"sharedType\":\"WORLDCUP\",\"sharedId\":9}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("NOT_SHARED_OWNER"));
     }
 
     @Test
@@ -366,6 +403,7 @@ class PostControllerTest {
                 PostCategory.DAILY,
                 PostType.NORMAL,
                 new AuthorResponse(7L, "fitzza"),
+                null,
                 null,
                 4,
                 liked,
