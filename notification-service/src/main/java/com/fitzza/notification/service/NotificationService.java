@@ -4,7 +4,6 @@ import com.fitzza.notification.domain.Notification;
 import com.fitzza.notification.dto.NotificationEventRequest;
 import com.fitzza.notification.dto.NotificationPageResponse;
 import com.fitzza.notification.dto.NotificationResponse;
-import com.fitzza.notification.dto.UnreadCountResponse;
 import com.fitzza.notification.exception.ErrorCode;
 import com.fitzza.notification.exception.NotificationApiException;
 import com.fitzza.notification.repository.NotificationRepository;
@@ -48,11 +47,6 @@ public class NotificationService {
         Page<Notification> notifications = notificationRepository.findByUserId(userId, pageable);
         return NotificationPageResponse.of(
                 notifications.getContent().stream().map(NotificationResponse::from).toList(), notifications);
-    }
-
-    @Transactional(readOnly = true)
-    public UnreadCountResponse countUnread(Long userId) {
-        return new UnreadCountResponse(notificationRepository.countByUserIdAndReadFalse(userId));
     }
 
     // 이미 읽은 알림을 다시 읽음 처리해도 결과는 같다.

@@ -8,11 +8,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fitzza.user.dto.DuplicateField;
 import com.fitzza.user.dto.SignupRequest;
+import com.fitzza.user.exception.DuplicateValueException;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.GlobalExceptionHandler;
-import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.service.UserService;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -179,18 +181,23 @@ class UserControllerTest {
     }
 
     /**
-     * 이메일 중복 오류가 HTTP 409와 구체적인 오류 코드로 변환되는지 검증한다.
+     * 중복 오류가 HTTP 409, DUPLICATE_VALUE 코드, 중복 필드 목록(errors)으로 변환되는지 검증한다.
      */
     @Test
-    void signUpReturnsConflictForDuplicateEmail() throws Exception {
+    void signUpReturnsConflictWithEveryDuplicateField() throws Exception {
         when(userService.signUp(any(SignupRequest.class)))
-                .thenThrow(new UserApiException(ErrorCode.DUPLICATE_EMAIL));
+                .thenThrow(new DuplicateValueException(List.of(DuplicateField.EMAIL, DuplicateField.NICKNAME)));
 
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(signupJson("fit@example.com", "password1", "fitzza")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("DUPLICATE_EMAIL"));
+                .andExpect(jsonPath("$.code").value("DUPLICATE_VALUE"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.DUPLICATE_VALUE.getMessage()))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[0].field").value("email"))
+                .andExpect(jsonPath("$.errors[0].reason").value("이미 사용 중인 이메일입니다."))
+                .andExpect(jsonPath("$.errors[1].field").value("nickname"));
     }
 
     /**

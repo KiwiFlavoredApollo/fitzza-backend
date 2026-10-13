@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitzza.notification.domain.NotificationType;
 import com.fitzza.notification.dto.NotificationPageResponse;
 import com.fitzza.notification.dto.NotificationResponse;
-import com.fitzza.notification.dto.UnreadCountResponse;
 import com.fitzza.notification.exception.ErrorCode;
 import com.fitzza.notification.exception.GlobalExceptionHandler;
 import com.fitzza.notification.exception.NotificationApiException;
@@ -115,25 +114,8 @@ class NotificationControllerTest {
     }
 
     @Test
-    void unreadCountReturnsTheCount() throws Exception {
-        when(notificationService.countUnread(7L)).thenReturn(new UnreadCountResponse(3));
-
-        mockMvc.perform(get(NOTIFICATIONS + "/unread-count").header(USER_ID_HEADER, "7"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.count").value(3));
-    }
-
-    @Test
-    void unreadCountRequiresTheUserHeader() throws Exception {
-        mockMvc.perform(get(NOTIFICATIONS + "/unread-count"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
-        verifyNoInteractions(notificationService);
-    }
-
-    @Test
     void markReadReturnsOkForTheOwner() throws Exception {
-        mockMvc.perform(patch(NOTIFICATIONS + "/" + NOTIFICATION_ID + "/read").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(patch(NOTIFICATIONS + "/" + NOTIFICATION_ID).header(USER_ID_HEADER, "7"))
                 .andExpect(status().isOk());
 
         verify(notificationService).markRead(7L, NOTIFICATION_ID);
@@ -145,7 +127,7 @@ class NotificationControllerTest {
                 .when(notificationService)
                 .markRead(8L, NOTIFICATION_ID);
 
-        mockMvc.perform(patch(NOTIFICATIONS + "/" + NOTIFICATION_ID + "/read").header(USER_ID_HEADER, "8"))
+        mockMvc.perform(patch(NOTIFICATIONS + "/" + NOTIFICATION_ID).header(USER_ID_HEADER, "8"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("NOT_OWNER"));
     }
@@ -156,16 +138,17 @@ class NotificationControllerTest {
                 .when(notificationService)
                 .markRead(7L, "missing");
 
-        mockMvc.perform(patch(NOTIFICATIONS + "/missing/read").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(patch(NOTIFICATIONS + "/missing").header(USER_ID_HEADER, "7"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOTIFICATION_NOT_FOUND"));
     }
 
     @Test
     void unexpectedFailureReturnsInternalServerErrorWithoutLeakingTheCause() throws Exception {
-        when(notificationService.countUnread(7L)).thenThrow(new IllegalStateException("jdbc url and password"));
+        when(notificationService.getNotifications(7L, 0, 20))
+                .thenThrow(new IllegalStateException("jdbc url and password"));
 
-        mockMvc.perform(get(NOTIFICATIONS + "/unread-count").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(get(NOTIFICATIONS).header(USER_ID_HEADER, "7"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
                 .andExpect(jsonPath("$.message").value(ErrorCode.INTERNAL_SERVER_ERROR.getMessage()));
@@ -173,7 +156,7 @@ class NotificationControllerTest {
 
     @Test
     void unsupportedMethodKeepsItsStatusInTheCommonErrorShape() throws Exception {
-        mockMvc.perform(post(NOTIFICATIONS + "/unread-count").header(USER_ID_HEADER, "7"))
+        mockMvc.perform(post(NOTIFICATIONS).header(USER_ID_HEADER, "7"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }

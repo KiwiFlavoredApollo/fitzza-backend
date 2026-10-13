@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Comment;
+import com.fitzza.community.domain.CommentLikeId;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.dto.CommentCreateRequest;
@@ -19,6 +20,7 @@ import com.fitzza.community.dto.CommentCreatedResponse;
 import com.fitzza.community.dto.CommentResponse;
 import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.notification.CommentCreatedEvent;
@@ -306,6 +308,29 @@ class CommentServiceTest {
 
         verify(commentLikeRepository).deleteLike(1L, OTHER_ID);
         assertThat(response.likeCount()).isZero();
+    }
+
+    @Test
+    void likeStatusReturnsTheCountAndWhetherTheUserLikedIt() {
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(comment(1L, POST_ID, AUTHOR_ID, "댓글")));
+        when(commentLikeRepository.countByCommentId(1L)).thenReturn(2L);
+        when(commentLikeRepository.existsById(new CommentLikeId(1L, OTHER_ID))).thenReturn(false);
+
+        LikeStatusResponse response = commentService.getLikeStatus(OTHER_ID, 1L);
+
+        assertThat(response.likeCount()).isEqualTo(2);
+        assertThat(response.liked()).isFalse();
+    }
+
+    @Test
+    void likeStatusOfACommentOfADeletedPostIsNotFound() {
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(comment(1L, POST_ID, AUTHOR_ID, "댓글")));
+        when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> commentService.getLikeStatus(OTHER_ID, 1L))
+                .isInstanceOf(CommunityApiException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.COMMENT_NOT_FOUND);
     }
 
     @Test

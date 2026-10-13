@@ -24,7 +24,7 @@ class UserAuthenticationFilterTest {
     private final UserAuthenticationFilter filter = new UserAuthenticationFilter();
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me/body"})
+    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me"})
     void forwardsRequestsTheTokenFilterAuthenticated(String endpoint) {
         AtomicReference<ServerWebExchange> forwarded = filter(exchange(endpoint, "user-service", "42"));
 
@@ -34,8 +34,8 @@ class UserAuthenticationFilterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me/body",
-            "GET /api/users/new-private-endpoint", "POST /api/users/profile/options",
+    @ValueSource(strings = {"GET /api/users/me", "PATCH /api/users/me",
+            "GET /api/users/new-private-endpoint", "GET /api/users/profile/options",
             "GET /api/users/%6de", "GET /api/users/me/"})
     void rejectsUserRouteRequestsWithoutAnAuthenticatedUser(String endpoint) {
         MockServerWebExchange exchange = exchange(endpoint, "user-service", null);
@@ -50,8 +50,7 @@ class UserAuthenticationFilterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"POST /api/auth/signin", "POST /api/auth/refresh", "POST /api/auth/signout",
-            "POST /api/auth/signup",
-            "GET /api/users/profile/options"})
+            "POST /api/auth/signup"})
     void keepsPublicEndpointsAccessibleWithoutLogin(String endpoint) {
         assertThat(filter(exchange(endpoint, "user-service", null)).get()).isNotNull();
     }

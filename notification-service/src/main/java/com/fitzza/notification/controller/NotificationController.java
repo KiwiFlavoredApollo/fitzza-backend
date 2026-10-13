@@ -3,7 +3,6 @@ package com.fitzza.notification.controller;
 import com.fitzza.notification.config.OpenApiConfig;
 import com.fitzza.notification.dto.ErrorResponse;
 import com.fitzza.notification.dto.NotificationPageResponse;
-import com.fitzza.notification.dto.UnreadCountResponse;
 import com.fitzza.notification.security.AuthHeaders;
 import com.fitzza.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "알림", description = "내 알림 목록, 안 읽은 수, 읽음 처리. 모두 로그인이 필요하다.")
+@Tag(name = "알림", description = "내 알림 목록과 읽음 처리. 모두 로그인이 필요하다.")
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH)
 @RestController
 @RequestMapping("/api/notifications")
@@ -61,20 +60,6 @@ public class NotificationController {
         return notificationService.getNotifications(userId, page, size);
     }
 
-    @Operation(summary = "안 읽은 알림 수", description = "헤더의 알림 아이콘 표시용.")
-    @ApiResponses({
-        @ApiResponse(responseCode = "200", description = "조회 성공"),
-        @ApiResponse(
-                responseCode = "401",
-                description = "UNAUTHENTICATED: 로그인 필요",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    @GetMapping("/unread-count")
-    public UnreadCountResponse countUnread(
-            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId) {
-        return notificationService.countUnread(userId);
-    }
-
     @Operation(summary = "알림 읽음 처리", description = "이미 읽은 알림에 다시 요청해도 200이다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "읽음 처리됨(응답 본문 없음)", content = @Content),
@@ -91,7 +76,7 @@ public class NotificationController {
                 description = "NOTIFICATION_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PatchMapping("/{notificationId}/read")
+    @PatchMapping("/{notificationId}")
     public void markRead(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
             @PathVariable("notificationId") String notificationId) {

@@ -2,6 +2,7 @@ package com.fitzza.community.service;
 
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Comment;
+import com.fitzza.community.domain.CommentLikeId;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.CommentCreateRequest;
@@ -9,6 +10,7 @@ import com.fitzza.community.dto.CommentCreatedResponse;
 import com.fitzza.community.dto.CommentResponse;
 import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.notification.CommentCreatedEvent;
@@ -119,6 +121,14 @@ public class CommentService {
     @Transactional
     public void delete(Long userId, Long commentId) {
         findOwnComment(userId, commentId).delete();
+    }
+
+    @Transactional(readOnly = true)
+    public LikeStatusResponse getLikeStatus(Long userId, Long commentId) {
+        findActiveComment(commentId);
+        return new LikeStatusResponse(
+                commentLikeRepository.countByCommentId(commentId),
+                commentLikeRepository.existsById(new CommentLikeId(commentId, userId)));
     }
 
     @Transactional

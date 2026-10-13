@@ -1,21 +1,15 @@
 package com.fitzza.user.service;
 
-import com.fitzza.user.domain.BodyType;
-import com.fitzza.user.domain.FitType;
-import com.fitzza.user.domain.StyleTag;
 import com.fitzza.user.domain.User;
 import com.fitzza.user.domain.UserBody;
 import com.fitzza.user.domain.UserBodyUpdate;
 import com.fitzza.user.dto.MyProfileResponse;
 import com.fitzza.user.dto.NicknameResponse;
-import com.fitzza.user.dto.OptionResponse;
-import com.fitzza.user.dto.ProfileOptionsResponse;
 import com.fitzza.user.dto.UserBodyResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.repository.UserBodyRepository;
 import com.fitzza.user.repository.UserRepository;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,25 +29,11 @@ public class ProfileService {
         this.userBodyRepository = userBodyRepository;
     }
 
-    public ProfileOptionsResponse getOptions() {
-        return new ProfileOptionsResponse(
-                Arrays.stream(BodyType.values())
-                        .map(type -> new OptionResponse(type.name(), type.getLabel()))
-                        .toList(),
-                Arrays.stream(FitType.values())
-                        .map(type -> new OptionResponse(type.name(), type.getLabel()))
-                        .toList(),
-                Arrays.stream(StyleTag.values())
-                        .map(tag -> new OptionResponse(tag.name(), tag.getLabel()))
-                        .toList());
-    }
-
     @Transactional
     public MyProfileResponse getMyProfile(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserApiException(ErrorCode.USER_NOT_FOUND));
-        return new MyProfileResponse(
-                user.getEmail(), user.getNickname(), UserBodyResponse.from(findOrCreateBody(userId)));
+        return MyProfileResponse.of(user, findOrCreateBody(userId));
     }
 
     @Transactional
@@ -74,7 +54,6 @@ public class ProfileService {
         putIfPresent(filled, "height", body.getHeight());
         putIfPresent(filled, "weight", body.getWeight());
         putIfPresent(filled, "gender", body.getGender());
-        putIfPresent(filled, "bodyType", body.getBodyType());
         putIfPresent(filled, "preferredFit", body.getPreferredFit());
         if (!body.getPreferredStyles().isEmpty()) {
             filled.put("preferredStyles", body.getPreferredStyles());

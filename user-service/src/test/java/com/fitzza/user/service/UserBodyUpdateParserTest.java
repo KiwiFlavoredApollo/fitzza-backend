@@ -24,8 +24,7 @@ class UserBodyUpdateParserTest {
                 {
                   "height": 172.5,
                   "weight": 64,
-                  "gender": "W",
-                  "bodyType": "STANDARD",
+                  "gender": "F",
                   "preferredFit": "OVERSIZED",
                   "preferredStyles": ["CASUAL", "MINIMAL", "CASUAL"],
                   "shoeSize": 245
@@ -34,8 +33,7 @@ class UserBodyUpdateParserTest {
 
         assertThat(update.height().value()).isEqualTo(172.5f);
         assertThat(update.weight().value()).isEqualTo(64f);
-        assertThat(update.gender().value()).isEqualTo(Gender.W);
-        assertThat(update.bodyType().value()).isEqualTo("STANDARD");
+        assertThat(update.gender().value()).isEqualTo(Gender.F);
         assertThat(update.preferredFit().value()).isEqualTo("OVERSIZED");
         assertThat(update.preferredStyles().value()).isEqualTo(List.of("CASUAL", "MINIMAL"));
         assertThat(update.shoeSize().value()).isEqualTo(245);
@@ -53,7 +51,6 @@ class UserBodyUpdateParserTest {
         assertThat(update.preferredStyles().value()).isNull();
         assertThat(update.weight().present()).isFalse();
         assertThat(update.gender().present()).isFalse();
-        assertThat(update.bodyType().present()).isFalse();
         assertThat(update.preferredFit().present()).isFalse();
         assertThat(update.shoeSize().present()).isFalse();
     }
@@ -101,7 +98,7 @@ class UserBodyUpdateParserTest {
                 {"gender": "X"}
                 """);
         assertInvalid("""
-                {"bodyType": "UNKNOWN"}
+                {"gender": "W"}
                 """);
         assertInvalid("""
                 {"preferredFit": "regular"}
