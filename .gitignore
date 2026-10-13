@@ -56,6 +56,9 @@ htmlcov/
 **/bootstrap-local.yml
 **/bootstrap-local.yaml
 **/bootstrap-local.properties
+**/bootstrap-secret.yml
+**/bootstrap-secret.yaml
+**/bootstrap-secret.properties
 docker-compose.override.yml
 compose.override.yml
 
