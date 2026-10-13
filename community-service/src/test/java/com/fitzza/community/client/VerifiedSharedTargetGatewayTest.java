@@ -13,6 +13,10 @@ import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 class VerifiedSharedTargetGatewayTest {
@@ -55,6 +59,24 @@ class VerifiedSharedTargetGatewayTest {
         when(worldcupResults.findWorldcup(9L, 7L)).thenThrow(new ResourceAccessException("connection refused"));
 
         assertRejected(7L, ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
+    }
+
+    @Test
+    void aProductServiceErrorAlsoRefusesTheShare() {
+        when(worldcupResults.findWorldcup(9L, 7L)).thenThrow(
+                HttpServerErrorException.create(HttpStatus.BAD_GATEWAY, "bad gateway", HttpHeaders.EMPTY, null, null));
+
+        assertRejected(7L, ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
+    }
+
+    // 서비스 토큰이 틀린 401 같은 설정 문제는 503(잠시 후 재시도)으로 감추지 않는다.
+    @Test
+    void aRejectedServiceTokenIsNotReportedAsATemporaryOutage() {
+        when(worldcupResults.findWorldcup(9L, 7L)).thenThrow(
+                HttpClientErrorException.create(HttpStatus.UNAUTHORIZED, "unauthorized", HttpHeaders.EMPTY, null, null));
+
+        assertThatThrownBy(() -> gateway.resolve(7L, SharedType.WORLDCUP, 9L))
+                .isInstanceOf(HttpClientErrorException.class);
     }
 
     private void assertRejected(Long userId, ErrorCode expected) {

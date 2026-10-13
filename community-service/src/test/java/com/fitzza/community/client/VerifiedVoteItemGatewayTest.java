@@ -15,6 +15,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 class VerifiedVoteItemGatewayTest {
@@ -99,6 +102,15 @@ class VerifiedVoteItemGatewayTest {
         assertRejectedWith(() -> resolveWishlist(USER_ID, "55"), ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
     }
 
+    // 서비스 토큰이 틀린 401 같은 설정 문제는 503(잠시 후 재시도)으로 감추지 않는다.
+    @Test
+    void aRejectedServiceTokenIsNotReportedAsATemporaryOutage() {
+        catalog.failure = HttpClientErrorException.create(
+                HttpStatus.UNAUTHORIZED, "unauthorized", HttpHeaders.EMPTY, null, null);
+
+        assertThatThrownBy(() -> resolveWishlist(USER_ID, "55")).isInstanceOf(HttpClientErrorException.class);
+    }
+
     @Test
     void uploadsAndAiRecommendationsAreNotCheckedYet() {
         VoteItemSnapshot upload =
@@ -126,6 +138,7 @@ class VerifiedVoteItemGatewayTest {
         private final Set<String> wishlists = new HashSet<>();
         private final Map<Long, ProductSummary> products = new HashMap<>();
         private boolean down;
+        private RuntimeException failure;
         private int calls;
 
         void wishlist(Long userId, long productId) {
@@ -141,6 +154,9 @@ class VerifiedVoteItemGatewayTest {
             calls++;
             if (down) {
                 throw new ResourceAccessException("product-service is down");
+            }
+            if (failure != null) {
+                throw failure;
             }
             return wishlists.contains(userId + ":" + productId);
         }

@@ -8,9 +8,11 @@ import com.fitzza.community.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
-// 상품 서비스가 응답하지 않으면 확인 없이 글을 쓰지 않고 거절한다(남의 결과가 공유되지 않게).
+// 상품 서비스가 응답하지 않거나 5xx면 확인 없이 글을 쓰지 않고 503으로 거절한다(남의 결과가 공유되지 않게).
+// 401·400 같은 4xx는 일시 장애가 아니라 토큰·요청 설정 문제이므로 그대로 던져 500으로 드러나게 한다.
 @Component
 public class VerifiedSharedTargetGateway implements SharedTargetGateway {
 
@@ -28,7 +30,7 @@ public class VerifiedSharedTargetGateway implements SharedTargetGateway {
         try {
             result = worldcupResults.findWorldcup(sharedId, userId)
                     .orElseThrow(() -> new CommunityApiException(ErrorCode.SHARED_TARGET_NOT_FOUND));
-        } catch (RestClientException exception) {
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
             log.warn("상품 서비스에서 월드컵 결과를 확인하지 못해 공유 글 작성을 거부합니다: {}", exception.getMessage());
             throw new CommunityApiException(ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
         }
