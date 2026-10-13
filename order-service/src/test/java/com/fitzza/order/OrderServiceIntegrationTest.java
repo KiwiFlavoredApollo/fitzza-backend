@@ -67,6 +67,9 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/carts'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].patch").exists())
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].delete").exists())
+                .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-User-Id')]").isNotEmpty())
+                .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-Service-Token')]").isNotEmpty())
+                .andExpect(jsonPath("$.components.securitySchemes.serviceToken.name").value("X-Service-Token"))
                 .andExpect(jsonPath("$.paths['/api/orders']").doesNotExist());
     }
 
