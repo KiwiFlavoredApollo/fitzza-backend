@@ -4,28 +4,68 @@
 *.iml
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Java / Gradle
 **/target/
 **/build/
 .gradle/
 .gradle-cache/
+**/out/
 *.class
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 *.war
 *.log
+*.hprof
 hs_err_pid*
 
 # Python
 **/__pycache__/
 **/.pytest_cache/
 **/.venv/
+**/.mypy_cache/
+**/.ruff_cache/
 *.py[cod]
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Local configuration
 .env
+.env.*
 !.env.example
+!.env.*.example
+**/application-local.yml
+**/application-local.yaml
+**/application-local.properties
+**/application-secret.yml
+**/application-secret.yaml
+**/application-secret.properties
+**/bootstrap-local.yml
+**/bootstrap-local.yaml
+**/bootstrap-local.properties
+docker-compose.override.yml
+compose.override.yml
+
+# Credentials / private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+service-account*.json
+firebase-adminsdk*.json
 
 # Runtime data
 .data/
+logs/
+*.pid
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.backup
