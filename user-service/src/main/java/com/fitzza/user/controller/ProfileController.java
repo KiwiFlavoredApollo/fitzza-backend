@@ -38,7 +38,8 @@ public class ProfileController {
 
     @Operation(
             summary = "내 프로필 조회",
-            description = "계정 정보와 신체·취향 정보를 한 단계로 펼쳐서 내려준다. 입력하지 않은 항목은 null이다.",
+            description = "계정 정보와 신체·취향 정보를 한 단계로 펼쳐서 내려준다. 입력하지 않은 항목은 null이고, "
+                    + "preferredStyles만 입력하지 않으면 빈 배열([])이다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
