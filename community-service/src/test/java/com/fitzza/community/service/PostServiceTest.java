@@ -19,6 +19,7 @@ import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOption;
 import com.fitzza.community.domain.VoteOptionSource;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.PostDetailResponse;
@@ -311,6 +312,28 @@ class PostServiceTest {
 
         verify(postLikeRepository).deleteLike(POST_ID, OTHER_ID);
         assertThat(response.likeCount()).isZero();
+    }
+
+    @Test
+    void likeStatusReturnsTheCountAndWhetherTheUserLikedIt() {
+        when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(true);
+        when(postLikeRepository.countByPostId(POST_ID)).thenReturn(4L);
+        when(postLikeRepository.existsById(new PostLikeId(POST_ID, OTHER_ID))).thenReturn(true);
+
+        LikeStatusResponse response = postService.getLikeStatus(OTHER_ID, POST_ID);
+
+        assertThat(response.likeCount()).isEqualTo(4);
+        assertThat(response.liked()).isTrue();
+    }
+
+    @Test
+    void likeStatusOfMissingOrDeletedPostIsNotFound() {
+        when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> postService.getLikeStatus(OTHER_ID, POST_ID))
+                .isInstanceOf(CommunityApiException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.POST_NOT_FOUND);
     }
 
     @Test

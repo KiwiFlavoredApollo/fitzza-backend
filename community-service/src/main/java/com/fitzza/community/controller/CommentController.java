@@ -7,6 +7,7 @@ import com.fitzza.community.dto.CommentResponse;
 import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.ErrorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.security.AuthHeaders;
 import com.fitzza.community.service.CommentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -153,6 +154,28 @@ public class CommentController {
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
             @PathVariable("commentId") Long commentId) {
         commentService.delete(userId, commentId);
+    }
+
+    @Operation(
+            summary = "댓글 좋아요 조회",
+            description = "좋아요 수와 내가 좋아요했는지(liked)를 돌려준다. 경로는 명세서대로 단수 like다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "좋아요 수와 내 좋아요 여부"),
+        @ApiResponse(
+                responseCode = "401",
+                description = "UNAUTHENTICATED: 로그인 필요",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "COMMENT_NOT_FOUND",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/comments/{commentId}/like")
+    public LikeStatusResponse getLikeStatus(
+            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
+            @PathVariable("commentId") Long commentId) {
+        return commentService.getLikeStatus(userId, commentId);
     }
 
     @Operation(
