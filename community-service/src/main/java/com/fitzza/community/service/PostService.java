@@ -18,6 +18,7 @@ import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
+import com.fitzza.community.repository.PostImage;
 import com.fitzza.community.repository.PostLikeRepository;
 import com.fitzza.community.repository.PostRepository;
 import com.fitzza.community.repository.PostSpecifications;
@@ -73,6 +74,7 @@ public class PostService {
         Map<Long, Long> commentCounts = IdCount.toMap(commentRepository.countActiveByPostIds(postIds));
         Map<Long, String> nicknames = userDirectory.findNicknames(
                 posts.getContent().stream().map(Post::getUserId).toList());
+        Map<Long, String> firstOptionImages = firstOptionImagesOf(posts.getContent());
 
         List<PostSummaryResponse> content = posts.getContent().stream()
                 .map(post -> new PostSummaryResponse(
@@ -82,11 +84,35 @@ public class PostService {
                         post.getPostType(),
                         nicknames.get(post.getUserId()),
                         post.getCreatedAt(),
-                        post.getImageUrl(),
+                        thumbnailOf(post, firstOptionImages),
                         likeCounts.getOrDefault(post.getId(), 0L),
                         commentCounts.getOrDefault(post.getId(), 0L)))
                 .toList();
         return PostPageResponse.of(content, posts);
+    }
+
+    // 썸네일은 첨부 이미지, 없으면 투표글의 첫 번째 선택지 이미지 순으로 고른다.
+    private static String thumbnailOf(Post post, Map<Long, String> firstOptionImages) {
+        if (hasText(post.getImageUrl())) {
+            return post.getImageUrl();
+        }
+        return firstOptionImages.get(post.getId());
+    }
+
+    // 첨부 이미지가 없는 투표글만 선택지 이미지를 찾는다. 해당하는 글이 없으면 조회하지 않는다.
+    private Map<Long, String> firstOptionImagesOf(List<Post> posts) {
+        List<Long> voteIdsWithoutImage = posts.stream()
+                .filter(post -> post.isVote() && !hasText(post.getImageUrl()))
+                .map(Post::getId)
+                .toList();
+        if (voteIdsWithoutImage.isEmpty()) {
+            return Map.of();
+        }
+        return PostImage.toMap(voteOptionRepository.findFirstOptionImages(voteIdsWithoutImage));
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     // 상세를 열 때마다 조회수가 오른다. viewerId는 비로그인이면 null이다.
