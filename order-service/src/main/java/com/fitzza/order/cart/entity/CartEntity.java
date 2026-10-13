@@ -59,4 +59,9 @@ public class CartEntity {
     public void changeQuantity(int quantity) {
         this.quantity = quantity;
     }
+
+    public void changeOption(Long optionId, int quantity) {
+        this.optionId = optionId;
+        this.quantity = quantity;
+    }
 }

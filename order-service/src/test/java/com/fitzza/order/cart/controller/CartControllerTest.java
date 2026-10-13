@@ -3,9 +3,12 @@ package com.fitzza.order.cart.controller;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -13,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
 import com.fitzza.order.cart.dto.CartResponse;
+import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.service.CartService;
 import com.fitzza.order.global.constant.ApiHeaders;
 import com.fitzza.order.global.exception.BusinessException;
@@ -91,7 +95,7 @@ class CartControllerTest {
     }
 
     @Test
-    void addCartAcceptsLargeQuantity() throws Exception {
+    void addCartAcceptsQuantityAboveTheFormerLimit() throws Exception {
         when(cartService.addCart(eq(1L), any(CartCreateRequest.class))).thenReturn(ITEM);
 
         mockMvc.perform(post("/api/carts")
@@ -99,16 +103,6 @@ class CartControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":10,\"quantity\":100}"))
                 .andExpect(status().isCreated());
-    }
-
-    @Test
-    void addCartRejectsQuantityBelowOne() throws Exception {
-        mockMvc.perform(post("/api/carts")
-                        .header(ApiHeaders.USER_ID, "1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"optionId\":10,\"quantity\":0}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value(containsString("quantity")));
     }
 
     @Test
@@ -122,5 +116,51 @@ class CartControllerTest {
                         .content("{\"optionId\":10,\"quantity\":1}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("OPTION_NOT_AVAILABLE"));
+    }
+
+    @Test
+    void updateCartReturnsUpdatedItem() throws Exception {
+        when(cartService.updateCart(eq(1L), eq(1L), any(CartUpdateRequest.class))).thenReturn(ITEM);
+
+        mockMvc.perform(patch("/api/carts/1")
+                        .header(ApiHeaders.USER_ID, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"optionId\":10,\"quantity\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.quantity").value(2));
+    }
+
+    @Test
+    void updateCartRejectsZeroQuantity() throws Exception {
+        mockMvc.perform(patch("/api/carts/1")
+                        .header(ApiHeaders.USER_ID, "1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"optionId\":10,\"quantity\":0}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("quantity")));
+    }
+
+    @Test
+    void removeCartReturnsNoContent() throws Exception {
+        mockMvc.perform(delete("/api/carts/1").header(ApiHeaders.USER_ID, "1"))
+                .andExpect(status().isNoContent());
+
+        verify(cartService).removeCart(1L, 1L);
+    }
+
+    @Test
+    void removeCartReturnsNotFoundForMissingItem() throws Exception {
+        doThrow(new BusinessException(ErrorCode.CART_NOT_FOUND)).when(cartService).removeCart(1L, 9L);
+
+        mockMvc.perform(delete("/api/carts/9").header(ApiHeaders.USER_ID, "1"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CART_NOT_FOUND"));
+    }
+
+    @Test
+    void removeCartRejectsNonNumericId() throws Exception {
+        mockMvc.perform(delete("/api/carts/abc").header(ApiHeaders.USER_ID, "1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 }

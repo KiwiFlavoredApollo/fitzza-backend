@@ -3,6 +3,7 @@ package com.fitzza.order.cart.service;
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
 import com.fitzza.order.cart.dto.CartResponse;
+import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.entity.CartEntity;
 import com.fitzza.order.cart.repository.CartRepository;
 import com.fitzza.order.global.client.ProductOptionClient;
@@ -42,6 +43,21 @@ public class CartService {
         return CartItemResponse.of(cart, option);
     }
 
+    public CartItemResponse updateCart(Long userId, Long cartId, CartUpdateRequest request) {
+        requireOwnedCart(userId, cartId);
+        ProductOptionResponse option = requireSellableOption(request.optionId());
+        CartEntity cart = saveCartUpdate(userId, cartId, request);
+        return CartItemResponse.of(cart, option);
+    }
+
+    public void removeCart(Long userId, Long cartId) {
+        transactionTemplate.executeWithoutResult(status -> {
+            CartEntity cart = cartRepository.findByCartIdAndUserId(cartId, userId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
+            cartRepository.delete(cart);
+        });
+    }
+
     private CartEntity saveOrMergeCart(Long userId, CartCreateRequest request) {
         try {
             return transactionTemplate.execute(status -> upsertCart(userId, request));
@@ -63,6 +79,41 @@ public class CartService {
                 .optionId(request.optionId())
                 .quantity(request.quantity())
                 .build());
+    }
+
+    private void requireOwnedCart(Long userId, Long cartId) {
+        transactionTemplate.executeWithoutResult(status -> cartRepository.findByCartIdAndUserId(cartId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND)));
+    }
+
+    private CartEntity saveCartUpdate(Long userId, Long cartId, CartUpdateRequest request) {
+        try {
+            return transactionTemplate.execute(status -> applyCartUpdate(userId, cartId, request));
+        } catch (DataIntegrityViolationException exception) {
+            // 옵션을 바꾸는 동안 같은 옵션 항목이 생기면 한 번 더 시도해 기존 항목에 합산한다.
+            return transactionTemplate.execute(status -> applyCartUpdate(userId, cartId, request));
+        }
+    }
+
+    private CartEntity applyCartUpdate(Long userId, Long cartId, CartUpdateRequest request) {
+        CartEntity cart = cartRepository.findByCartIdAndUserId(cartId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
+        if (cart.getOptionId().equals(request.optionId())) {
+            cart.changeQuantity(request.quantity());
+            return cartRepository.saveAndFlush(cart);
+        }
+        Optional<CartEntity> sameOptionCart = cartRepository.findByUserIdAndOptionId(userId, request.optionId());
+        if (sameOptionCart.isPresent()) {
+            return mergeIntoExistingCart(cart, sameOptionCart.get(), request.quantity());
+        }
+        cart.changeOption(request.optionId(), request.quantity());
+        return cartRepository.saveAndFlush(cart);
+    }
+
+    private CartEntity mergeIntoExistingCart(CartEntity source, CartEntity target, int quantity) {
+        target.changeQuantity(sumQuantity(target.getQuantity(), quantity));
+        cartRepository.delete(source);
+        return cartRepository.saveAndFlush(target);
     }
 
     // int 범위를 넘기면 음수로 저장되므로, 상한 없이 그 경우만 거절한다.

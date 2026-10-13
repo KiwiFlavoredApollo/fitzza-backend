@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
 import com.fitzza.order.cart.dto.CartResponse;
+import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.entity.CartEntity;
 import com.fitzza.order.cart.repository.CartRepository;
 import com.fitzza.order.global.client.ProductOptionClient;
@@ -164,6 +165,111 @@ class CartServiceTest {
 
         assertThat(response.cartId()).isEqualTo(5L);
         assertThat(response.quantity()).isEqualTo(2);
+    }
+
+    @Test
+    void updateCartChangesQuantityWhenOptionIsUnchanged() {
+        stubSellableOption(10L, 30000);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.of(cart(5L, USER_ID, 10L, 2)));
+        stubSaveReturnsArgument();
+
+        CartItemResponse response = cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(10L, 7));
+
+        assertThat(response.quantity()).isEqualTo(7);
+        verify(cartRepository, never()).findByUserIdAndOptionId(any(), any());
+    }
+
+    @Test
+    void updateCartMovesItemToNewOptionWhenNotInCart() {
+        stubSellableOption(11L, 45000);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.of(cart(5L, USER_ID, 10L, 2)));
+        when(cartRepository.findByUserIdAndOptionId(USER_ID, 11L)).thenReturn(Optional.empty());
+        stubSaveReturnsArgument();
+
+        CartItemResponse response = cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(11L, 3));
+
+        assertThat(response.cartId()).isEqualTo(5L);
+        assertThat(response.optionId()).isEqualTo(11L);
+        assertThat(response.quantity()).isEqualTo(3);
+        assertThat(response.unitPrice()).isEqualTo(45000);
+    }
+
+    @Test
+    void updateCartMergesIntoItemThatAlreadyHasTheNewOption() {
+        stubSellableOption(11L, 45000);
+        CartEntity source = cart(5L, USER_ID, 10L, 2);
+        CartEntity target = cart(6L, USER_ID, 11L, 4);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.of(source));
+        when(cartRepository.findByUserIdAndOptionId(USER_ID, 11L)).thenReturn(Optional.of(target));
+        stubSaveReturnsArgument();
+
+        CartItemResponse response = cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(11L, 3));
+
+        assertThat(response.cartId()).isEqualTo(6L);
+        assertThat(response.quantity()).isEqualTo(7);
+        verify(cartRepository).delete(source);
+    }
+
+    @Test
+    void updateCartMergesQuantityWithoutAnUpperBound() {
+        stubSellableOption(11L, 45000);
+        CartEntity source = cart(5L, USER_ID, 10L, 2);
+        CartEntity target = cart(6L, USER_ID, 11L, 99);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.of(source));
+        when(cartRepository.findByUserIdAndOptionId(USER_ID, 11L)).thenReturn(Optional.of(target));
+        stubSaveReturnsArgument();
+
+        CartItemResponse response = cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(11L, 1));
+
+        assertThat(response.quantity()).isEqualTo(100);
+        verify(cartRepository).delete(source);
+    }
+
+    @Test
+    void updateCartRejectsCartOfAnotherUserBeforeCheckingTheOption() {
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+
+        assertErrorCode(() -> cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(99L, 1)),
+                ErrorCode.CART_NOT_FOUND);
+        verify(productOptionClient, never()).findOptions(any());
+    }
+
+    @Test
+    void updateCartRetriesAndMergesWhenChangingToAnOptionCreatedConcurrently() {
+        stubSellableOption(11L, 45000);
+        CartEntity source = cart(5L, USER_ID, 10L, 2);
+        CartEntity reloaded = cart(5L, USER_ID, 10L, 2);
+        CartEntity createdConcurrently = cart(6L, USER_ID, 11L, 4);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID))
+                .thenReturn(Optional.of(source), Optional.of(source), Optional.of(reloaded));
+        when(cartRepository.findByUserIdAndOptionId(USER_ID, 11L))
+                .thenReturn(Optional.empty(), Optional.of(createdConcurrently));
+        when(cartRepository.saveAndFlush(any(CartEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate"))
+                .thenAnswer(call -> call.getArgument(0));
+
+        CartItemResponse response = cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(11L, 3));
+
+        assertThat(response.cartId()).isEqualTo(6L);
+        assertThat(response.quantity()).isEqualTo(7);
+        verify(cartRepository).delete(reloaded);
+    }
+
+    @Test
+    void removeCartDeletesTheUsersItem() {
+        CartEntity existing = cart(5L, USER_ID, 10L, 2);
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.of(existing));
+
+        cartService.removeCart(USER_ID, 5L);
+
+        verify(cartRepository).delete(existing);
+    }
+
+    @Test
+    void removeCartRejectsMissingItem() {
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+
+        assertErrorCode(() -> cartService.removeCart(USER_ID, 5L), ErrorCode.CART_NOT_FOUND);
     }
 
     private void stubSellableOption(Long optionId, int price) {
