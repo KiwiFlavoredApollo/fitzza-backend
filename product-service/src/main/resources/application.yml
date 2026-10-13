@@ -46,10 +46,14 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
 
-internal:
-  call-token: ${INTERNAL_CALL_TOKEN}
-
+# 이 서비스가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다.
+# 이 서비스의 서비스 전용 API를 호출하는 서비스별 토큰. 서비스마다 다른 32바이트 이상 값을 쓴다.
 fitzza:
+  service-token: ${PRODUCT_SERVICE_TOKEN:}
+  service-tokens:
+    community: ${COMMUNITY_SERVICE_TOKEN}
+    order: ${ORDER_SERVICE_TOKEN}
+    recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
   seed:
     musinsa:
       # 시작 시 무신사 크롤링 JSON을 DB에 저장한다. 이미 저장된 상품은 건너뛴다.

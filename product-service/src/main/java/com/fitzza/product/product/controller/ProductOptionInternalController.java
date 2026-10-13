@@ -1,7 +1,10 @@
 package com.fitzza.product.product.controller;
 
+import com.fitzza.product.global.config.OpenApiConfig;
 import com.fitzza.product.global.constant.PagingConstants;
 import com.fitzza.product.global.exception.ApiErrorResponse;
+import com.fitzza.product.global.security.ServiceApi;
+import com.fitzza.product.global.security.ServiceCallers;
 import com.fitzza.product.product.dto.ProductOptionInternalResponse;
 import com.fitzza.product.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -21,9 +25,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Product Option Internal", description = "장바구니·주문 서비스용 상품 옵션 내부 API")
+@Tag(name = "서비스 전용 API", description = "서비스끼리만 호출한다. 호출하는 서비스의 X-Service-Token이 필요하고 "
+        + "Gateway로는 호출할 수 없다.")
+@SecurityRequirement(name = OpenApiConfig.SERVICE_TOKEN)
+@ServiceApi(callers = {})
 @RestController
-@RequestMapping("/internal/product-options")
+@RequestMapping("/product-options")
 @RequiredArgsConstructor
 public class ProductOptionInternalController {
 
@@ -35,8 +42,11 @@ public class ProductOptionInternalController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "400", description = "옵션 ID가 없거나 100개를 초과함",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "UNAUTHENTICATED: order-service 토큰이 아님",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
+    @ServiceApi(callers = ServiceCallers.ORDER)
     @GetMapping
     public List<ProductOptionInternalResponse> getProductOptions(
             @Parameter(description = "옵션 ID 목록(쉼표 구분, 최대 100개)", example = "1,2,3")

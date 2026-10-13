@@ -31,7 +31,7 @@ public final class TestFixtures {
 
     public static FeignException feignException(int status) {
         Request request = Request.create(
-                Request.HttpMethod.GET, "/internal/product-options", Map.of(), null, StandardCharsets.UTF_8, null);
+                Request.HttpMethod.GET, "/product-options", Map.of(), null, StandardCharsets.UTF_8, null);
         return FeignException.errorStatus("getOptions", feign.Response.builder()
                 .status(status)
                 .reason("test")
