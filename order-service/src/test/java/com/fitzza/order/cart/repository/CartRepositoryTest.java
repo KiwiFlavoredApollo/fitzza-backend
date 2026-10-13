@@ -73,6 +73,7 @@ class CartRepositoryTest {
         assertThat(cartRepository.findByUserIdAndOptionId(USER_ID, 10L)).get()
                 .extracting(CartEntity::getCartId).isEqualTo(cart.getCartId());
         assertThat(cartRepository.findByUserIdAndOptionId(OTHER_USER_ID, 10L)).isEmpty();
+        assertThat(cartRepository.findByCartIdAndUserId(cart.getCartId(), OTHER_USER_ID)).isEmpty();
     }
 
     private CartEntity persistCart(Long userId, Long optionId) {

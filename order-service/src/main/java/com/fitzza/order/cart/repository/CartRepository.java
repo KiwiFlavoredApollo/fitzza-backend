@@ -11,6 +11,8 @@ public interface CartRepository extends JpaRepository<CartEntity, Long> {
 
     List<CartEntity> findAllByUserIdOrderByCartIdDesc(Long userId);
 
+    Optional<CartEntity> findByCartIdAndUserId(Long cartId, Long userId);
+
     // 같은 옵션을 동시에 담을 때 읽은 수량을 덮어쓰지 않도록 행을 잠근다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<CartEntity> findByUserIdAndOptionId(Long userId, Long optionId);
