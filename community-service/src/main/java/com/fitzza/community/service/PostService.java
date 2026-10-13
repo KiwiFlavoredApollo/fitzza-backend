@@ -7,6 +7,7 @@ import com.fitzza.community.domain.PostLikeId;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.PostDetailResponse;
@@ -175,6 +176,14 @@ public class PostService {
     @Transactional
     public void delete(Long userId, Long postId) {
         findOwnPost(userId, postId).delete();
+    }
+
+    @Transactional(readOnly = true)
+    public LikeStatusResponse getLikeStatus(Long userId, Long postId) {
+        requireVisiblePost(postId);
+        return new LikeStatusResponse(
+                postLikeRepository.countByPostId(postId),
+                postLikeRepository.existsById(new PostLikeId(postId, userId)));
     }
 
     @Transactional

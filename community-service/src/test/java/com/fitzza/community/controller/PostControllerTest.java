@@ -19,6 +19,7 @@ import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.PostDetailResponse;
@@ -291,6 +292,17 @@ class PostControllerTest {
         mockMvc.perform(delete(POSTS + "/3/likes").header(USER_ID_HEADER, "8"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(4));
+    }
+
+    @Test
+    void likeStatusReturnsTheCountAndTheViewerLike() throws Exception {
+        when(postService.getLikeStatus(8L, 3L)).thenReturn(new LikeStatusResponse(5, true));
+
+        mockMvc.perform(get(POSTS + "/3/likes").header(USER_ID_HEADER, "8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(5))
+                .andExpect(jsonPath("$.liked").value(true));
+        mockMvc.perform(get(POSTS + "/3/likes")).andExpect(status().isUnauthorized());
     }
 
     @Test

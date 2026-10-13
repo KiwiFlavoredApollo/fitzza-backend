@@ -21,6 +21,7 @@ import com.fitzza.community.dto.CommentCreatedResponse;
 import com.fitzza.community.dto.CommentResponse;
 import com.fitzza.community.dto.CommentUpdateRequest;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.exception.GlobalExceptionHandler;
@@ -178,6 +179,17 @@ class CommentControllerTest {
     void deleteRequiresTheUserHeader() throws Exception {
         mockMvc.perform(delete(COMMENTS + "/11")).andExpect(status().isUnauthorized());
         verifyNoInteractions(commentService);
+    }
+
+    @Test
+    void likeStatusReturnsTheCountAndTheViewerLike() throws Exception {
+        when(commentService.getLikeStatus(8L, 11L)).thenReturn(new LikeStatusResponse(2, false));
+
+        mockMvc.perform(get(COMMENTS + "/11/like").header(USER_ID_HEADER, "8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(2))
+                .andExpect(jsonPath("$.liked").value(false));
+        mockMvc.perform(get(COMMENTS + "/11/like")).andExpect(status().isUnauthorized());
     }
 
     @Test

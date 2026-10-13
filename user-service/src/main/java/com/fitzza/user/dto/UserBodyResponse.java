@@ -5,22 +5,20 @@ import com.fitzza.user.domain.UserBody;
 import java.util.List;
 
 public record UserBodyResponse(
+        Gender gender,
         Float height,
         Float weight,
-        Gender gender,
-        String bodyType,
+        Integer shoeSize,
         String preferredFit,
-        List<String> preferredStyles,
-        Integer shoeSize) {
+        List<String> preferredStyles) {
 
     public static UserBodyResponse from(UserBody body) {
         return new UserBodyResponse(
+                body.getGender(),
                 body.getHeight(),
                 body.getWeight(),
-                body.getGender(),
-                body.getBodyType(),
+                body.getShoeSize(),
                 body.getPreferredFit(),
-                body.getPreferredStyles(),
-                body.getShoeSize());
+                body.getPreferredStyles());
     }
 }

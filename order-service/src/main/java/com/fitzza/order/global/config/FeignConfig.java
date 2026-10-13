@@ -12,11 +12,11 @@ import org.springframework.context.annotation.Configuration;
 public class FeignConfig {
 
     @Bean
-    public RequestInterceptor internalCallTokenRequestInterceptor(
-            @Value("${internal.call-token}") String internalCallToken) {
-        if (internalCallToken == null || internalCallToken.isBlank()) {
-            throw new IllegalArgumentException("INTERNAL_CALL_TOKEN must be set and non-blank");
+    public RequestInterceptor serviceTokenRequestInterceptor(
+            @Value("${fitzza.service-token}") String serviceToken) {
+        if (serviceToken == null || serviceToken.isBlank()) {
+            throw new IllegalArgumentException("ORDER_SERVICE_TOKEN must be set and non-blank");
         }
-        return template -> template.header(ApiHeaders.INTERNAL_TOKEN, internalCallToken);
+        return template -> template.header(ApiHeaders.SERVICE_TOKEN, serviceToken);
     }
 }

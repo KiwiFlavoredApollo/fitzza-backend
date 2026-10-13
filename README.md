@@ -22,7 +22,7 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 
 ```bash
 cp .env.example .env
-# .env의 JWT_SECRET, INTERNAL_CALL_TOKEN, COMMUNITY_SERVICE_TOKEN에 서로 다른 32바이트 이상의 무작위 비밀값을 입력한 뒤 실행합니다.
+# .env의 JWT_SECRET, COMMUNITY_SERVICE_TOKEN, ORDER_SERVICE_TOKEN에 서로 다른 32바이트 이상의 무작위 비밀값을 입력한 뒤 실행합니다.
 docker compose up --build -d
 ```
 
@@ -30,17 +30,19 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
-서비스끼리 호출하는 API는 `/api` 없이 시작하며(예: user-service `GET /users`, `GET /users/{userId}/body`, notification-service `POST /notifications/events`) Gateway 라우트가 없습니다. Gateway에 `/api`로 시작하지 않는 라우트를 추가하지 않습니다. 호출하는 서비스는 자기 토큰을 `X-Service-Token` 헤더로 보내고, 받는 서비스는 API마다 허용한 서비스의 토큰인지 확인합니다. 토큰은 서비스마다 다른 32바이트 이상 값입니다.
+서비스끼리 호출하는 API는 `/api` 없이 시작하며(예: user-service `GET /users`, product-service `GET /products`, `GET /product-options`, notification-service `POST /notifications/events`) Gateway 라우트가 없습니다. Gateway에 `/api`로 시작하지 않는 라우트를 추가하지 않습니다. 호출하는 서비스는 자기 토큰을 `X-Service-Token` 헤더로 보내고, 받는 서비스는 API마다 허용한 서비스의 토큰인지 확인합니다. 현재 요청의 `X-User-Id`는 다른 서비스로 그대로 전달합니다. 토큰은 서비스마다 다른 32바이트 이상 값입니다.
 
 | 토큰 | 보내는 서비스 | 호출할 수 있는 API |
 | --- | --- | --- |
-| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events` |
-| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events` |
+| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}` |
+| `ORDER_SERVICE_TOKEN` | order-service | product `GET /product-options` |
+| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`, product `GET /products/measurements` |
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
+| `PRODUCT_SERVICE_TOKEN` | product-service | product-service가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다. |
 
-`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
+`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
 
-product-service 내부 API(`/internal/...`)는 아직 공통 `INTERNAL_CALL_TOKEN`을 `X-Internal-Token` 헤더로 받습니다. community-service와 order-service가 이 값으로 product-service를 호출합니다. user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
+user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
 브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
 
@@ -48,7 +50,7 @@ product-service 내부 API(`/internal/...`)는 아직 공통 `INTERNAL_CALL_TOKE
 
 로그아웃(`POST /api/auth/signout`)은 Body의 Refresh Token을 Redis에서 지웁니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
 
-알림 API(`GET /api/notifications`, `GET /api/notifications/unread-count`, `PATCH /api/notifications/{notificationId}/read`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다. 투표는 community-service가 1분마다(`fitzza.vote.close-check-delay-ms`, 기본 60000) 마감 시각이 지난 글을 찾아 마감 처리하고, 작성자에게 `VOTE_CLOSED` 알림을 보냅니다. 알림 서비스가 꺼져 있어 보내지 못한 알림은 다음 실행에서 성공할 때까지 다시 보냅니다. 실패한 글은 재시도 순서가 뒤로 밀려 새로 마감된 투표의 알림을 막지 않습니다. 작성자가 직접 조기 종료한 투표에는 알림을 보내지 않습니다.
+알림 API(`GET /api/notifications`, `PATCH /api/notifications/{notificationId}`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다. 투표는 community-service가 1분마다(`fitzza.vote.close-check-delay-ms`, 기본 60000) 마감 시각이 지난 글을 찾아 마감 처리하고, 작성자에게 `VOTE_CLOSED` 알림을 보냅니다. 알림 서비스가 꺼져 있어 보내지 못한 알림은 다음 실행에서 성공할 때까지 다시 보냅니다. 실패한 글은 재시도 순서가 뒤로 밀려 새로 마감된 투표의 알림을 막지 않습니다. 작성자가 직접 조기 종료한 투표에는 알림을 보내지 않습니다.
 
 order-service(8083), community-service(8084), review-service(8085)도 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
 
@@ -56,7 +58,7 @@ notification-service의 8086 포트는 호스트에 공개하지 않습니다. �
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
-`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`과 `GET /api/users/profile/options`는 토큰 없이 호출할 수 있습니다. 그 외 사용자 API에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
+`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/users/me
@@ -76,7 +78,7 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 Gateway를 통한 예시 호출:
 
 ```bash
-curl http://localhost:8080/api/users/profile/options
+curl http://localhost:8080/api-docs/user-service
 curl http://localhost:8080/api/products
 curl -X POST http://localhost:8080/api/v1/recommendations \
   -H 'Content-Type: application/json' \
@@ -86,6 +88,13 @@ curl -X POST http://localhost:8080/api/v1/recommendations \
 ## 기존 사용자 DB 업그레이드
 
 기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 JPA가 명시한 이름으로 제약을 생성합니다.
+
+성별 코드가 `W`/`M`에서 `F`/`M`으로 바뀌었습니다. 예전 DB에는 `gender`에 `W`/`M`만 허용하는 검사 제약이 남아 있어 `F`를 저장하지 못하므로, 기존 DB를 재사용하면 아래를 한 번 실행합니다. 체형(`body_type`) 컬럼은 더 이상 쓰지 않으며 남아 있어도 동작에는 영향이 없습니다.
+
+```sql
+ALTER TABLE user_service.user_body DROP CONSTRAINT IF EXISTS user_body_gender_check;
+UPDATE user_service.user_body SET gender = 'F' WHERE gender = 'W';
+```
 
 ## 로컬 빌드
 
@@ -122,4 +131,4 @@ scripts/                 운영 보조 스크립트
 - 서비스별 데이터 소유권을 전제로 PostgreSQL 스키마를 분리했습니다.
 - 비동기 연동의 개발 환경은 LocalStack의 SQS/S3로 대체합니다.
 - 운영 비밀값은 저장소에 커밋하지 않고 환경 변수로 주입합니다.
-- 인증은 Gateway의 Access Token 검증, Redis에 저장하는 Refresh Token, 로그아웃 시 Access Token 블랙리스트로 구현되어 있습니다. 서비스 간 호출은 서비스별 토큰(`X-Service-Token`, product-service는 아직 공통 `X-Internal-Token`)으로 인증하며, 관측성 대시보드는 아직 구성하지 않았습니다.
+- 인증은 Gateway의 Access Token 검증, Redis에 저장하는 Refresh Token, 로그아웃 시 Access Token 블랙리스트로 구현되어 있습니다. 서비스 간 호출은 서비스별 토큰(`X-Service-Token`)으로 인증하며, 관측성 대시보드는 아직 구성하지 않았습니다.

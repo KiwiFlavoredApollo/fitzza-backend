@@ -1,9 +1,8 @@
 package com.fitzza.user.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -27,15 +26,12 @@ public class UserBody {
     @Column(name = "weight")
     private Float weight;
 
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = GenderConverter.class)
     @Column(name = "gender", length = 1)
     private Gender gender;
 
     @Column(name = "preferred_styles")
     private String preferredStyles;
-
-    @Column(name = "body_type", length = 50)
-    private String bodyType;
 
     @Column(name = "preferred_fit", length = 50)
     private String preferredFit;
@@ -82,7 +78,6 @@ public class UserBody {
         update.height().ifPresent(value -> this.height = value);
         update.weight().ifPresent(value -> this.weight = value);
         update.gender().ifPresent(value -> this.gender = value);
-        update.bodyType().ifPresent(value -> this.bodyType = value);
         update.preferredFit().ifPresent(value -> this.preferredFit = value);
         update.preferredStyles().ifPresent(value -> this.preferredStyles = joinStyles(value));
         update.shoeSize().ifPresent(value -> this.shoeSize = value);
@@ -105,10 +100,6 @@ public class UserBody {
 
     public Gender getGender() {
         return gender;
-    }
-
-    public String getBodyType() {
-        return bodyType;
     }
 
     public String getPreferredFit() {

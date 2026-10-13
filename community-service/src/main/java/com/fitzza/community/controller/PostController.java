@@ -5,6 +5,7 @@ import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.dto.ErrorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
+import com.fitzza.community.dto.LikeStatusResponse;
 import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.PostDetailResponse;
@@ -180,6 +181,28 @@ public class PostController {
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
             @PathVariable("postId") Long postId) {
         postService.delete(userId, postId);
+    }
+
+    @Operation(
+            summary = "게시글 좋아요 조회",
+            description = "좋아요 수와 내가 좋아요했는지(liked)를 돌려준다.",
+            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "좋아요 수와 내 좋아요 여부"),
+        @ApiResponse(
+                responseCode = "401",
+                description = "UNAUTHENTICATED: 로그인 필요",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "POST_NOT_FOUND",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/{postId}/likes")
+    public LikeStatusResponse getLikeStatus(
+            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
+            @PathVariable("postId") Long postId) {
+        return postService.getLikeStatus(userId, postId);
     }
 
     @Operation(

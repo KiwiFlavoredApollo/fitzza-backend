@@ -20,7 +20,7 @@ import org.springframework.web.client.RestClientException;
 class ProductServiceClientTest {
 
     private static final String BASE_URL = "http://product-service";
-    private static final String INTERNAL_TOKEN = "test-internal-token";
+    private static final String SERVICE_TOKEN = "test-community-service-token";
 
     private MockRestServiceServer server;
     private ProductServiceClient client;
@@ -29,16 +29,16 @@ class ProductServiceClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new ProductServiceClient(builder, BASE_URL, INTERNAL_TOKEN);
+        client = new ProductServiceClient(builder, BASE_URL, SERVICE_TOKEN);
     }
 
     @Test
     void asksTheProductServiceWhetherTheUserWishlistedTheProduct() {
-        server.expect(requestTo(BASE_URL + "/internal/wishlists/check?userId=7&itemId=55"))
+        server.expect(requestTo(BASE_URL + "/wishlists/check?userId=7&itemId=55"))
                 .andExpect(method(HttpMethod.GET))
-                .andExpect(header(ProductServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(ProductServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
                 .andRespond(withSuccess("{\"wishlisted\":true}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(BASE_URL + "/internal/wishlists/check?userId=8&itemId=55"))
+        server.expect(requestTo(BASE_URL + "/wishlists/check?userId=8&itemId=55"))
                 .andRespond(withSuccess("{\"wishlisted\":false}", MediaType.APPLICATION_JSON));
 
         assertThat(client.isWishlisted(7L, 55L)).isTrue();
@@ -48,9 +48,9 @@ class ProductServiceClientTest {
 
     @Test
     void readsTheProductSummaryAndIgnoresFieldsItDoesNotUse() {
-        server.expect(requestTo(BASE_URL + "/internal/products?productIds=55"))
+        server.expect(requestTo(BASE_URL + "/products?productIds=55"))
                 .andExpect(method(HttpMethod.GET))
-                .andExpect(header(ProductServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(ProductServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
                 .andRespond(withSuccess(
                         "[{\"productId\":55,\"brandName\":\"Fitzza\",\"productName\":\"오버핏 셔츠\","
                                 + "\"price\":39000,\"imageUrl\":\"https://cdn.example.com/55.png\",\"status\":\"ON_SALE\"}]",
@@ -63,7 +63,7 @@ class ProductServiceClientTest {
 
     @Test
     void findsNothingWhenTheProductDoesNotExist() {
-        server.expect(requestTo(BASE_URL + "/internal/products?productIds=404"))
+        server.expect(requestTo(BASE_URL + "/products?productIds=404"))
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
 
         assertThat(client.findProduct(404L)).isEmpty();
@@ -72,7 +72,7 @@ class ProductServiceClientTest {
 
     @Test
     void passesTheFailureOnWhenTheProductServiceIsDown() {
-        server.expect(requestTo(BASE_URL + "/internal/wishlists/check?userId=7&itemId=55"))
+        server.expect(requestTo(BASE_URL + "/wishlists/check?userId=7&itemId=55"))
                 .andRespond(withServerError());
 
         assertThatThrownBy(() -> client.isWishlisted(7L, 55L)).isInstanceOf(RestClientException.class);
