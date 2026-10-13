@@ -62,6 +62,25 @@ class VoteOptionRepositoryTest {
         assertThat(voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(POST_ID)).hasSize(2);
     }
 
+    @Test
+    void firstOptionImagesComeBackOnlyForTheRequestedPosts() {
+        voteOptionRepository.saveAll(List.of(
+                option(POST_ID, 1, "https://cdn.example.com/a.png"),
+                option(POST_ID, 2, "https://cdn.example.com/b.png"),
+                option(OTHER_POST_ID, 1, "https://cdn.example.com/other.png"),
+                option(30L, 1, "https://cdn.example.com/not-requested.png")));
+
+        assertThat(voteOptionRepository.findFirstOptionImages(List.of(POST_ID, OTHER_POST_ID)))
+                .containsExactlyInAnyOrder(
+                        new PostImage(POST_ID, "https://cdn.example.com/a.png"),
+                        new PostImage(OTHER_POST_ID, "https://cdn.example.com/other.png"));
+    }
+
+    private static VoteOption option(Long postId, int displayOrder, String imageUrl) {
+        return VoteOption.of(
+                postId, displayOrder, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, imageUrl, null, null);
+    }
+
     private static VoteOption product(Long postId, int displayOrder, String itemId) {
         return VoteOption.of(
                 postId, displayOrder, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, itemId, IMAGE_URL, "셔츠", 39000);

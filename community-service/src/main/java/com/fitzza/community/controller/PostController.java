@@ -50,7 +50,8 @@ public class PostController {
     @Operation(
             summary = "게시글 목록",
             description = "최신순. 삭제된 글은 빠진다. 투표 탭은 postType=VOTE로 조회한다. "
-                    + "page는 0 이상, size는 1~100이며 벗어나면 400이다.")
+                    + "page는 0 이상, size는 1~100이며 벗어나면 400이다. "
+                    + "thumbnailUrl은 첨부 이미지, 없으면 투표글의 첫 번째 선택지 이미지다. 둘 다 없으면 null.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공(결과가 없으면 빈 목록)"),
         @ApiResponse(

@@ -23,11 +23,13 @@ import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.PostDetailResponse;
 import com.fitzza.community.dto.PostPageResponse;
+import com.fitzza.community.dto.PostSummaryResponse;
 import com.fitzza.community.dto.PostUpdateRequest;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
+import com.fitzza.community.repository.PostImage;
 import com.fitzza.community.repository.PostLikeRepository;
 import com.fitzza.community.repository.PostRepository;
 import com.fitzza.community.repository.VoteOptionRepository;
@@ -52,6 +54,7 @@ class PostServiceTest {
     private static final Long OTHER_ID = 8L;
     private static final Long POST_ID = 10L;
     private static final String IMAGE_URL = "https://cdn.example.com/posts/1.png";
+    private static final String OPTION_IMAGE_URL = "https://cdn.example.com/options/a.png";
 
     private final PostRepository postRepository = mock(PostRepository.class);
     private final PostLikeRepository postLikeRepository = mock(PostLikeRepository.class);
@@ -108,6 +111,27 @@ class PostServiceTest {
         assertThat(feed.content().get(1).nickname()).isNull();
         assertThat(feed.content().get(1).likeCount()).isZero();
         assertThat(feed.content().get(1).commentCount()).isEqualTo(5);
+    }
+
+    // 첨부 이미지가 없는 투표글은 첫 번째 선택지 이미지를 썸네일로 쓰고, 이미지가 있는 글은 선택지를 조회하지 않는다.
+    @Test
+    void voteWithoutAnAttachmentUsesItsFirstOptionImageAsTheThumbnail() {
+        Post voteWithoutImage = votePost(3L);
+        Post voteWithImage = votePost(4L);
+        ReflectionTestUtils.setField(voteWithImage, "imageUrl", IMAGE_URL);
+        Post normalWithoutImage = post(5L, AUTHOR_ID, null);
+        when(postRepository.findAll(ArgumentMatchers.<Specification<Post>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(
+                        List.of(voteWithoutImage, voteWithImage, normalWithoutImage), PageRequest.of(0, 20), 3));
+        when(voteOptionRepository.findFirstOptionImages(List.of(3L)))
+                .thenReturn(List.of(new PostImage(3L, OPTION_IMAGE_URL)));
+
+        PostPageResponse feed = postService.getFeed(null, null, null, 0, 20);
+
+        assertThat(feed.content())
+                .extracting(PostSummaryResponse::thumbnailUrl)
+                .containsExactly(OPTION_IMAGE_URL, IMAGE_URL, null);
+        verify(voteOptionRepository).findFirstOptionImages(List.of(3L));
     }
 
     @Test
@@ -298,6 +322,12 @@ class PostServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
         verify(postLikeRepository, never()).insertIfAbsent(anyLong(), anyLong());
+    }
+
+    private static Post votePost(Long postId) {
+        Post post = Post.createVote(AUTHOR_ID, "둘 중 뭐가 나아요", "골라주세요", PostCategory.FASHION, Instant.now());
+        ReflectionTestUtils.setField(post, "id", postId);
+        return post;
     }
 
     private static Post post(Long postId, Long userId, String imageUrl) {
