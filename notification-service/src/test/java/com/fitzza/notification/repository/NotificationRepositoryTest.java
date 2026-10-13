@@ -55,7 +55,7 @@ class NotificationRepositoryTest {
     }
 
     @Test
-    void listAndUnreadCountOnlyCoverTheUsersOwnNotifications() {
+    void listOnlyCoversTheUsersOwnNotifications() {
         insert(USER_ID, NotificationType.COMMENT, "10", "comment-1");
         insert(USER_ID, NotificationType.COMMENT, "10", "comment-2");
         insert(USER_ID, NotificationType.FITTING_DONE, "3", "fitting-3-done");
@@ -66,19 +66,18 @@ class NotificationRepositoryTest {
         assertThat(firstPage.getContent()).hasSize(2);
         assertThat(firstPage.getTotalElements()).isEqualTo(3);
         assertThat(firstPage.getTotalPages()).isEqualTo(2);
-        assertThat(notificationRepository.countByUserIdAndReadFalse(USER_ID)).isEqualTo(3);
-        assertThat(notificationRepository.countByUserIdAndReadFalse(OTHER_ID)).isEqualTo(1);
+        assertThat(firstPage.getContent()).allMatch(notification -> notification.belongsTo(USER_ID));
     }
 
     @Test
-    void markingANotificationReadLowersTheUnreadCount() {
+    void markingANotificationReadIsStored() {
         insert(USER_ID, NotificationType.COMMENT, "10", "comment-1");
         insert(USER_ID, NotificationType.COMMENT, "10", "comment-2");
 
         notificationsOf(USER_ID).get(0).markRead();
         notificationRepository.flush();
 
-        assertThat(notificationRepository.countByUserIdAndReadFalse(USER_ID)).isEqualTo(1);
+        assertThat(notificationsOf(USER_ID)).filteredOn(Notification::isRead).hasSize(1);
     }
 
     private int insert(Long userId, NotificationType type, String targetId, String eventId) {

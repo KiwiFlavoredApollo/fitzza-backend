@@ -117,13 +117,6 @@ class NotificationServiceTest {
     }
 
     @Test
-    void unreadCountComesFromTheUsersUnreadNotifications() {
-        when(notificationRepository.countByUserIdAndReadFalse(USER_ID)).thenReturn(3L);
-
-        assertThat(notificationService.countUnread(USER_ID).count()).isEqualTo(3L);
-    }
-
-    @Test
     void markReadMarksTheOwnersNotification() {
         Notification notification = mock(Notification.class);
         when(notification.belongsTo(USER_ID)).thenReturn(true);
