@@ -20,8 +20,8 @@ import org.springframework.web.client.RestClient;
 
 class NotificationServiceClientTest {
 
-    private static final String EVENTS_API = "http://notification-service/internal/notifications/events";
-    private static final String INTERNAL_TOKEN = "test-internal-token";
+    private static final String EVENTS_API = "http://notification-service/notifications/events";
+    private static final String SERVICE_TOKEN = "test-community-service-token";
     private static final NotificationEvent EVENT =
             new NotificationEvent("comment-100", "COMMENT", 7L, "10", "내 게시글에 새 댓글이 달렸어요: 잘 어울려요");
 
@@ -32,14 +32,14 @@ class NotificationServiceClientTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new NotificationServiceClient(builder, "http://notification-service", INTERNAL_TOKEN);
+        client = new NotificationServiceClient(builder, "http://notification-service", SERVICE_TOKEN);
     }
 
     @Test
     void postsTheEventWithTheInternalToken() {
         server.expect(requestTo(EVENTS_API))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header(NotificationServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(NotificationServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("{\"eventId\":\"comment-100\",\"type\":\"COMMENT\",\"userId\":7,"
                         + "\"targetId\":\"10\",\"content\":\"내 게시글에 새 댓글이 달렸어요: 잘 어울려요\"}"))

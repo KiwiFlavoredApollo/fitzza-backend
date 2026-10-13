@@ -3,6 +3,8 @@ package com.fitzza.notification.controller;
 import com.fitzza.notification.config.OpenApiConfig;
 import com.fitzza.notification.dto.ErrorResponse;
 import com.fitzza.notification.dto.NotificationEventRequest;
+import com.fitzza.notification.security.ServiceApi;
+import com.fitzza.notification.security.ServiceCallers;
 import com.fitzza.notification.service.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,11 +21,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-// 게이트웨이에는 라우트가 없다. 다른 서비스가 X-Internal-Token을 붙여 직접 호출한다.
-@Tag(name = "내부 API", description = "서비스끼리만 호출한다. X-Internal-Token 헤더가 필요하고 Gateway로는 호출할 수 없다.")
-@SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN)
+// /api로 시작하지 않아 게이트웨이 라우트가 없다. 다른 서비스가 자기 X-Service-Token을 붙여 직접 호출한다.
+@Tag(name = "서비스 전용 API", description = "서비스끼리만 호출한다. 호출하는 서비스의 X-Service-Token이 필요하고 "
+        + "Gateway로는 호출할 수 없다.")
+@SecurityRequirement(name = OpenApiConfig.SERVICE_TOKEN)
+// 메서드에 허용 서비스를 적지 않으면 아무 서비스도 부를 수 없다. 새 API를 실수로 열어 두지 않기 위해서다.
+@ServiceApi(callers = {})
 @RestController
-@RequestMapping("/internal/notifications")
+@RequestMapping("/notifications")
 public class InternalNotificationController {
 
     private final NotificationService notificationService;
@@ -44,9 +49,10 @@ public class InternalNotificationController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
-                description = "UNAUTHENTICATED: X-Internal-Token이 없거나 다름",
+                description = "UNAUTHENTICATED: community·recommendation·vton 서비스 토큰이 아님",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @ServiceApi(callers = {ServiceCallers.COMMUNITY, ServiceCallers.RECOMMENDATION, ServiceCallers.VTON})
     @PostMapping("/events")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void receive(@Valid @RequestBody NotificationEventRequest request) {

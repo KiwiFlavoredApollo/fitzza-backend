@@ -13,15 +13,15 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     public static final String BEARER_AUTH = "bearerAuth";
-    public static final String INTERNAL_TOKEN = "internalToken";
+    public static final String SERVICE_TOKEN = "serviceToken";
 
     @Bean
     public OpenAPI userOpenApi() {
         return new OpenAPI()
                 .info(new Info()
                         .title("Fitzza User Service API")
-                        .description("회원가입, 로그인·토큰, 프로필 API. 오류 응답은 모두 {code, message} 형태다. "
-                                + "/internal 로 시작하는 API는 서비스끼리만 호출하며 Gateway로는 호출할 수 없다.")
+                        .description("회원가입, 로그인·토큰, 프로필 API. 오류 응답은 모두 {status, code, message} 형태다. "
+                                + "/api로 시작하지 않는 API는 서비스끼리만 호출하며 Gateway로는 호출할 수 없다.")
                         .version("v1"))
                 // 문서는 Gateway의 Swagger UI에서 열리므로 호출 주소를 Gateway 기준 상대 경로로 둔다.
                 .servers(List.of(new Server().url("/")))
@@ -33,10 +33,10 @@ public class OpenApiConfig {
                                         .scheme("bearer")
                                         .bearerFormat("JWT"))
                         .addSecuritySchemes(
-                                INTERNAL_TOKEN,
+                                SERVICE_TOKEN,
                                 new SecurityScheme()
                                         .type(SecurityScheme.Type.APIKEY)
                                         .in(SecurityScheme.In.HEADER)
-                                        .name("X-Internal-Token")));
+                                        .name("X-Service-Token")));
     }
 }

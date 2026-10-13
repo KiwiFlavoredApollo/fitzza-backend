@@ -153,7 +153,10 @@ class UserAuthenticationGatewayTest {
     }
 
     @Test
-    void doesNotExposeInternalUserEndpoints() {
+    void doesNotExposeServiceOnlyEndpoints() {
+        client().get().uri("/users/42/body").exchange().expectStatus().isNotFound();
+        client().get().uri("/users?userIds=42").exchange().expectStatus().isNotFound();
+        client().post().uri("/notifications/events").exchange().expectStatus().isNotFound();
         client().get().uri("/internal/users/42/body").exchange().expectStatus().isNotFound();
         assertThat(routes.getRoutes().collectList().block()).isNotEmpty();
     }

@@ -3,6 +3,8 @@ package com.fitzza.user.controller;
 import com.fitzza.user.config.OpenApiConfig;
 import com.fitzza.user.dto.ErrorResponse;
 import com.fitzza.user.dto.NicknameResponse;
+import com.fitzza.user.security.ServiceApi;
+import com.fitzza.user.security.ServiceCallers;
 import com.fitzza.user.service.ProfileService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,11 +22,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 다른 서비스만 호출하는 API. 게이트웨이 라우트에 올리지 않는다.
-@Tag(name = "내부 API", description = "서비스끼리만 호출한다. X-Internal-Token 헤더가 필요하고 Gateway로는 호출할 수 없다.")
-@SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN)
+// 다른 서비스만 호출하는 API. /api로 시작하지 않아 게이트웨이 라우트가 없다.
+@Tag(name = "서비스 전용 API", description = "서비스끼리만 호출한다. 호출하는 서비스의 X-Service-Token이 필요하고 "
+        + "Gateway로는 호출할 수 없다.")
+@SecurityRequirement(name = OpenApiConfig.SERVICE_TOKEN)
+// 메서드에 허용 서비스를 적지 않으면 아무 서비스도 부를 수 없다. 새 API를 실수로 열어 두지 않기 위해서다.
+@ServiceApi(callers = {})
 @RestController
-@RequestMapping("/internal/users")
+@RequestMapping("/users")
 public class InternalUserController {
 
     private final ProfileService profileService;
@@ -44,9 +49,10 @@ public class InternalUserController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
-                description = "UNAUTHENTICATED: X-Internal-Token이 없거나 다름",
+                description = "UNAUTHENTICATED: community-service 토큰이 아님",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @ServiceApi(callers = ServiceCallers.COMMUNITY)
     @GetMapping
     public List<NicknameResponse> findNicknames(
             @Parameter(description = "사용자 ID 목록(쉼표 구분)", example = "7,8") @RequestParam("userIds")
@@ -61,13 +67,14 @@ public class InternalUserController {
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(
                 responseCode = "401",
-                description = "UNAUTHENTICATED: X-Internal-Token이 없거나 다름",
+                description = "UNAUTHENTICATED: recommendation-service 토큰이 아님",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "404",
                 description = "USER_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
+    @ServiceApi(callers = ServiceCallers.RECOMMENDATION)
     @GetMapping("/{userId}/body")
     public Map<String, Object> getFilledBodyFields(@PathVariable("userId") Long userId) {
         return profileService.getFilledBodyFields(userId);

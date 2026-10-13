@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fitzza.notification.domain.NotificationType;
 import com.fitzza.notification.dto.NotificationEventRequest;
-import com.fitzza.notification.security.InternalCallSecurityConfig;
+import com.fitzza.notification.security.ServiceTokenSecurityConfig;
 import com.fitzza.notification.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,14 +24,16 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = InternalNotificationController.class, properties = {
-    "internal.call-token=test-only-internal-call-token",
+    "fitzza.service-tokens.community=" + InternalNotificationControllerTest.COMMUNITY_TOKEN,
+    "fitzza.service-tokens.vton=" + InternalNotificationControllerTest.VTON_TOKEN,
     "spring.cloud.config.enabled=false"
 })
 class InternalNotificationControllerTest {
 
-    private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
-    private static final String INTERNAL_TOKEN = "test-only-internal-call-token";
-    private static final String EVENTS = "/internal/notifications/events";
+    static final String COMMUNITY_TOKEN = "test-only-community-service-token-32b";
+    static final String VTON_TOKEN = "test-only-vton-service-token-32-bytes";
+    private static final String SERVICE_TOKEN = "X-Service-Token";
+    private static final String EVENTS = "/notifications/events";
     private static final String COMMENT_EVENT = "{\"eventId\":\"comment-55\",\"type\":\"COMMENT\",\"userId\":7,"
             + "\"targetId\":\"10\",\"content\":\"새 댓글이 달렸습니다.\"}";
 
@@ -44,7 +46,7 @@ class InternalNotificationControllerTest {
     @Test
     void acceptsAnEventFromATrustedService() throws Exception {
         mockMvc.perform(post(EVENTS)
-                        .header(INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(SERVICE_TOKEN, COMMUNITY_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(COMMENT_EVENT))
                 .andExpect(status().isAccepted());
@@ -59,7 +61,7 @@ class InternalNotificationControllerTest {
     }
 
     @Test
-    void missingInternalTokenIsDeniedEvenWithUserIdentityHeaders() throws Exception {
+    void missingServiceTokenIsDeniedEvenWithUserIdentityHeaders() throws Exception {
         mockMvc.perform(post(EVENTS)
                         .header("X-User-Id", "7")
                         .header("Authorization", "Bearer external-user-token")
@@ -72,9 +74,9 @@ class InternalNotificationControllerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "wrong-token"})
-    void invalidInternalTokensAreDenied(String token) throws Exception {
+    void unknownServiceTokensAreDenied(String token) throws Exception {
         mockMvc.perform(post(EVENTS)
-                        .header(INTERNAL_TOKEN_HEADER, token)
+                        .header(SERVICE_TOKEN, token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(COMMENT_EVENT))
                 .andExpect(status().isUnauthorized())
@@ -89,11 +91,27 @@ class InternalNotificationControllerTest {
         verifyNoInteractions(notificationService);
     }
 
+    // 피팅 서비스(vton)도 자기 토큰으로 알림을 보낼 수 있다.
+    @Test
+    void acceptsAnEventFromTheFittingServiceWithItsOwnToken() throws Exception {
+        mockMvc.perform(post(EVENTS)
+                        .header(SERVICE_TOKEN, VTON_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(COMMENT_EVENT))
+                .andExpect(status().isAccepted());
+    }
+
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = {" "})
-    void missingOrBlankConfiguredTokenIsRejected(String token) {
-        assertThatThrownBy(() -> new InternalCallSecurityConfig(token))
+    @ValueSource(strings = {" ", "too-short"})
+    void missingBlankOrShortCommunityTokenIsRejected(String token) {
+        assertThatThrownBy(() -> new ServiceTokenSecurityConfig(token, "", ""))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void twoServicesCannotShareOneToken() {
+        assertThatThrownBy(() -> new ServiceTokenSecurityConfig(COMMUNITY_TOKEN, "", COMMUNITY_TOKEN))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -109,7 +127,7 @@ class InternalNotificationControllerTest {
     })
     void rejectsAnEventWithMissingOrInvalidFields(String body) throws Exception {
         mockMvc.perform(post(EVENTS)
-                        .header(INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(SERVICE_TOKEN, COMMUNITY_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())
@@ -123,7 +141,7 @@ class InternalNotificationControllerTest {
                 + "가".repeat(501) + "\"}";
 
         mockMvc.perform(post(EVENTS)
-                        .header(INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN)
+                        .header(SERVICE_TOKEN, COMMUNITY_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isBadRequest())

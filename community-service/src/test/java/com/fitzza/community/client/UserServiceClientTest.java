@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
@@ -23,24 +24,25 @@ import org.springframework.web.client.RestClient;
 
 class UserServiceClientTest {
 
-    private static final String NICKNAME_API = "http://user-service/internal/users";
-    private static final String INTERNAL_TOKEN = "test-internal-token";
+    private static final String NICKNAME_API = "http://user-service/users";
+    private static final String SERVICE_TOKEN = "test-community-service-token";
 
+    private RestClient.Builder builder;
     private MockRestServiceServer server;
     private UserServiceClient client;
 
     @BeforeEach
     void setUp() {
-        RestClient.Builder builder = RestClient.builder();
+        builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        client = new UserServiceClient(builder, "http://user-service", INTERNAL_TOKEN);
+        client = new UserServiceClient(builder, "http://user-service", SERVICE_TOKEN);
     }
 
     @Test
     void returnsNicknamesKeyedByUserId() {
         server.expect(requestTo(startsWith(NICKNAME_API + "?userIds=")))
                 .andExpect(method(HttpMethod.GET))
-                .andExpect(header(UserServiceClient.INTERNAL_TOKEN_HEADER, INTERNAL_TOKEN))
+                .andExpect(header(UserServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
                 .andRespond(withSuccess(
                         "[{\"userId\":7,\"nickname\":\"fitzza\"},{\"userId\":8,\"nickname\":\"coordi\"}]",
                         MediaType.APPLICATION_JSON));
@@ -48,6 +50,18 @@ class UserServiceClientTest {
         Map<Long, String> nicknames = client.findNicknames(Arrays.asList(7L, 8L, 7L, null));
 
         assertThat(nicknames).containsOnly(Map.entry(7L, "fitzza"), Map.entry(8L, "coordi"));
+        server.verify();
+    }
+
+    // 공용 빌더 빈에 토큰이 남으면 다른 서비스로 가는 요청에도 community 토큰이 실린다.
+    @Test
+    void doesNotLeaveItsServiceTokenOnTheSharedBuilder() {
+        server.expect(requestTo("http://product-service/anything"))
+                .andExpect(headerDoesNotExist(UserServiceClient.SERVICE_TOKEN_HEADER))
+                .andRespond(withSuccess());
+
+        builder.build().get().uri("http://product-service/anything").retrieve().toBodilessEntity();
+
         server.verify();
     }
 

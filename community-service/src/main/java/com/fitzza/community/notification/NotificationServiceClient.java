@@ -13,24 +13,24 @@ import org.springframework.web.client.RestClientException;
 public class NotificationServiceClient implements NotificationSender {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationServiceClient.class);
-    // notification-service의 내부 API는 이 헤더의 값이 INTERNAL_CALL_TOKEN과 같아야 받는다.
-    static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
-    static final String EVENTS_PATH = "/internal/notifications/events";
+    // notification-service의 서비스 전용 API는 호출하는 서비스의 토큰을 이 헤더로 받는다.
+    static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
+    static final String EVENTS_PATH = "/notifications/events";
 
     private final RestClient restClient;
 
     public NotificationServiceClient(
             @LoadBalanced RestClient.Builder restClientBuilder,
             @Value("${fitzza.notification-service.base-url:http://notification-service}") String baseUrl,
-            @Value("${internal.call-token}") String internalCallToken) {
-        if (internalCallToken == null || internalCallToken.isBlank()) {
-            throw new IllegalArgumentException("INTERNAL_CALL_TOKEN must be set and non-blank");
+            @Value("${fitzza.service-token}") String serviceToken) {
+        if (serviceToken == null || serviceToken.isBlank()) {
+            throw new IllegalArgumentException("COMMUNITY_SERVICE_TOKEN must be set and non-blank");
         }
         // 다른 클라이언트와 같은 빌더 빈을 쓰므로, 주소와 헤더가 섞이지 않게 복사본에 설정한다.
         this.restClient = restClientBuilder
                 .clone()
                 .baseUrl(baseUrl)
-                .defaultHeader(INTERNAL_TOKEN_HEADER, internalCallToken)
+                .defaultHeader(SERVICE_TOKEN_HEADER, serviceToken)
                 .build();
     }
 

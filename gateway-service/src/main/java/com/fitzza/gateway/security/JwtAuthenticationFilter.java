@@ -29,6 +29,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
 
     static final String USER_ID_HEADER = "X-User-Id";
     static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+    static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTH_PATH_PREFIX = "/api/auth/";
@@ -111,6 +112,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
                 .headers(headers -> {
                     headers.remove(USER_ID_HEADER);
                     headers.remove(INTERNAL_TOKEN_HEADER);
+                    headers.remove(SERVICE_TOKEN_HEADER);
                     if (userId != null) {
                         headers.set(USER_ID_HEADER, userId);
                     }

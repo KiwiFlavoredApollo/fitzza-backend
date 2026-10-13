@@ -15,10 +15,13 @@ public class ProductServiceClient implements ProductCatalog {
     private static final ParameterizedTypeReference<List<ProductSummary>> PRODUCT_LIST =
             new ParameterizedTypeReference<>() {};
 
+    static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
+
     private final RestClient restClient;
 
     // 공용 빌더를 그대로 고치면 다른 클라이언트의 주소가 바뀌므로 복사해서 쓴다.
-    // product-service의 /internal API는 이 헤더의 값이 INTERNAL_CALL_TOKEN과 같아야 응답한다.
+    // product-service의 /internal API는 아직 공통 INTERNAL_CALL_TOKEN을 받는다.
+    // product-service가 서비스별 토큰으로 바뀌면 이 클라이언트도 COMMUNITY_SERVICE_TOKEN과 새 주소로 바꾼다.
     public ProductServiceClient(
             @LoadBalanced RestClient.Builder restClientBuilder,
             @Value("${fitzza.product-service.base-url:http://product-service}") String baseUrl,
@@ -29,7 +32,7 @@ public class ProductServiceClient implements ProductCatalog {
         this.restClient = restClientBuilder
                 .clone()
                 .baseUrl(baseUrl)
-                .defaultHeader(UserServiceClient.INTERNAL_TOKEN_HEADER, internalCallToken)
+                .defaultHeader(INTERNAL_TOKEN_HEADER, internalCallToken)
                 .build();
     }
 
