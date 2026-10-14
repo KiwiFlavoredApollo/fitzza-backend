@@ -218,7 +218,7 @@ class ProductServiceIntegrationTest {
         String created = mockMvc.perform(post("/api/wishlists")
                         .header(ApiHeaders.USER_ID, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"" + itemId + "\"}"))
+                        .content("{\"itemId\":" + itemId + "}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.wishlistId").isNumber())
                 .andReturn()
@@ -227,7 +227,7 @@ class ProductServiceIntegrationTest {
         String existing = mockMvc.perform(post("/api/wishlists")
                         .header(ApiHeaders.USER_ID, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"" + itemId + "\"}"))
+                        .content("{\"itemId\":" + itemId + "}"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -242,7 +242,8 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.content[0].name").value("셔츠"))
                 .andExpect(jsonPath("$.content[0].price").value(30000))
-                .andExpect(jsonPath("$.content[0].categoryL1").value("TOP"));
+                .andExpect(jsonPath("$.content[0].categoryL1").value("TOP"))
+                .andExpect(jsonPath("$.content[0].itemId").value(shirt.getProductId()));
 
         mockMvc.perform(ServiceTokenFixture.community(get("/wishlists/check"))
                         .param("userId", USER_ID)
@@ -328,7 +329,7 @@ class ProductServiceIntegrationTest {
         mockMvc.perform(post("/api/wishlists")
                         .header(ApiHeaders.USER_ID, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"" + productId + "\"}"))
+                        .content("{\"itemId\":" + productId + "}"))
                 .andExpect(status().isOk());
     }
 

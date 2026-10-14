@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @Schema(description = "찜 목록 항목")
 public record WishlistItemResponse(
         @Schema(description = "찜 ID", example = "1") Long wishlistId,
-        @Schema(description = "상품 ID", example = "1") String itemId,
+        @Schema(description = "상품 ID", example = "1") Long itemId,
         @Schema(description = "상품명", example = "오버핏 코튼 셔츠") String name,
         @Schema(description = "가격(원)", example = "39000") Integer price,
         @Schema(description = "대표 이미지 URL") String imageUrl,
@@ -18,7 +18,7 @@ public record WishlistItemResponse(
     public static WishlistItemResponse of(WishlistEntity wishlist, ProductEntity product) {
         return new WishlistItemResponse(
                 wishlist.getWishlistId(),
-                wishlist.getItemId(),
+                Long.valueOf(wishlist.getItemId()),
                 product == null ? null : product.getProductName(),
                 product == null ? null : product.getPrice(),
                 product == null ? null : product.getImageUrl(),
