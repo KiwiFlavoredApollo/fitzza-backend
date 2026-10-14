@@ -26,15 +26,15 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
 
     @Override
     public VoteItemSnapshot resolve(
-            Long userId, VoteOptionSource source, VoteItemType itemType, String itemId, String imageUrl) {
+            Long userId, VoteOptionSource source, VoteItemType itemType, Long itemId, String imageUrl) {
         if (source != VoteOptionSource.WISHLIST) {
             return new VoteItemSnapshot(imageUrl, null, null);
         }
         // 찜 목록에는 상품만 담긴다.
-        if (itemType != VoteItemType.PRODUCT) {
+        if (itemType != VoteItemType.PRODUCT || itemId == null) {
             throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
         }
-        long productId = parseProductId(itemId);
+        long productId = itemId;
 
         ProductCatalog.ProductSummary product;
         try {
@@ -53,19 +53,5 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
         String snapshotImage =
                 product.imageUrl() == null || product.imageUrl().isBlank() ? imageUrl : product.imageUrl();
         return new VoteItemSnapshot(snapshotImage, product.productName(), product.price());
-    }
-
-    // "055"·"+55"처럼 같은 숫자를 다르게 쓴 ID는 거부한다. 선택지 중복 검사와 저장이 원래 문자열 기준이라,
-    // 받아 주면 같은 상품이 한 투표에 두 번 들어갈 수 있다.
-    private static long parseProductId(String itemId) {
-        try {
-            long productId = Long.parseLong(itemId);
-            if (productId > 0 && String.valueOf(productId).equals(itemId)) {
-                return productId;
-            }
-        } catch (NumberFormatException ignored) {
-            // 아래에서 같은 오류로 거부한다.
-        }
-        throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
     }
 }

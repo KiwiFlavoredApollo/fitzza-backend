@@ -5,8 +5,6 @@ import com.fitzza.community.dto.ErrorResponse;
 import com.fitzza.community.dto.PollCloseRequest;
 import com.fitzza.community.dto.VoteCastResponse;
 import com.fitzza.community.dto.VoteClosedResponse;
-import com.fitzza.community.dto.VotePostCreateRequest;
-import com.fitzza.community.dto.VotePostCreatedResponse;
 import com.fitzza.community.dto.VoteRequest;
 import com.fitzza.community.dto.VoteResultResponse;
 import com.fitzza.community.security.AuthHeaders;
@@ -20,7 +18,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,10 +25,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "투표", description = "투표 게시글 작성, 투표 참여, 결과 조회, 조기 종료")
+@Tag(name = "투표", description = "투표 참여, 결과 조회, 조기 종료. 투표 글 작성은 게시글 작성(postType=VOTE)으로 한다.")
 @RestController
 @RequestMapping("/api/community/posts")
 public class VoteController {
@@ -40,39 +36,6 @@ public class VoteController {
 
     public VoteController(VoteService voteService) {
         this.voteService = voteService;
-    }
-
-    @Operation(
-            summary = "투표 게시글 작성",
-            description = "선택지는 2~4개. 마감 시각은 서버가 작성 시각 + 6시간으로 정한다. 직접 올린 사진은 "
-                    + "source=UPLOAD, itemType=IMAGE로 보내고 itemId는 비운다. 찜한 상품은 source=WISHLIST, "
-                    + "itemType=PRODUCT, itemId=상품 ID로 보내며, 이미지·상품명·가격은 상품 서비스 값으로 저장한다.",
-            security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
-    @ApiResponses({
-        @ApiResponse(responseCode = "201", description = "작성 성공"),
-        @ApiResponse(
-                responseCode = "400",
-                description = "INVALID_REQUEST: 빈 값·선택지 개수 / INVALID_VOTE_OPTIONS: 선택지 구성 오류(중복 등)",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-        @ApiResponse(
-                responseCode = "401",
-                description = "UNAUTHENTICATED: 로그인 필요",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-        @ApiResponse(
-                responseCode = "403",
-                description = "NOT_WISHLISTED_ITEM: 내가 찜하지 않은 상품을 골랐음",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-        @ApiResponse(
-                responseCode = "503",
-                description = "PRODUCT_LOOKUP_UNAVAILABLE: 상품 서비스에서 찜 상품을 확인하지 못함",
-                content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    @PostMapping("/vote")
-    @ResponseStatus(HttpStatus.CREATED)
-    public VotePostCreatedResponse createVotePost(
-            @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,
-            @Valid @RequestBody VotePostCreateRequest request) {
-        return voteService.createVotePost(userId, request);
     }
 
     @Operation(

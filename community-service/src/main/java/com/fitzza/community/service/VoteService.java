@@ -7,12 +7,12 @@ import com.fitzza.community.domain.Vote;
 import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOption;
 import com.fitzza.community.domain.VoteOptionSource;
+import com.fitzza.community.dto.PostCreateRequest;
+import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.VoteCastResponse;
 import com.fitzza.community.dto.VoteClosedResponse;
 import com.fitzza.community.dto.VoteOptionRequest;
 import com.fitzza.community.dto.VoteOptionResult;
-import com.fitzza.community.dto.VotePostCreateRequest;
-import com.fitzza.community.dto.VotePostCreatedResponse;
 import com.fitzza.community.dto.VoteResultResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
@@ -50,9 +50,10 @@ public class VoteService {
         this.voteItemGateway = voteItemGateway;
     }
 
-    // 글과 선택지를 한 트랜잭션에 저장한다. 선택지 저장이 실패하면 글도 남지 않는다.
+    // POST /community/posts에 postType=VOTE로 들어온 글. 글과 선택지를 한 트랜잭션에 저장한다.
+    // 선택지 저장이 실패하면 글도 남지 않는다.
     @Transactional
-    public VotePostCreatedResponse createVotePost(Long userId, VotePostCreateRequest request) {
+    public PostCreatedResponse createVotePost(Long userId, PostCreateRequest request) {
         List<VoteOptionRequest> requested = request.options();
         requireConsistentOptions(requested);
 
@@ -60,9 +61,10 @@ public class VoteService {
         List<VoteItemSnapshot> snapshots = resolveSnapshots(userId, requested);
 
         Post post = postRepository.save(
-                Post.createVote(userId, request.title(), request.content(), request.category(), Instant.now()));
+                Post.createVote(userId, request.title(), request.content(), request.category(), request.imageUrl(),
+                        Instant.now()));
         voteOptionRepository.saveAll(toOptions(post.getId(), requested, snapshots));
-        return new VotePostCreatedResponse(post.getId(), post.getVoteEndAt());
+        return new PostCreatedResponse(post.getId());
     }
 
     // 게시글 수정에서 선택지를 보냈을 때 통째로 바꾼다. 글 행을 잠그므로 투표 접수(vote)와 겹치지 않는다.
@@ -175,7 +177,7 @@ public class VoteService {
             }
             boolean uploaded = option.source() == VoteOptionSource.UPLOAD;
             boolean image = option.itemType() == VoteItemType.IMAGE;
-            String itemId = itemIdOf(option);
+            Long itemId = option.itemId();
             if (uploaded != image || (image && itemId != null) || (!image && itemId == null)) {
                 throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
             }
@@ -189,7 +191,7 @@ public class VoteService {
         List<VoteItemSnapshot> snapshots = new ArrayList<>();
         for (VoteOptionRequest option : requested) {
             snapshots.add(voteItemGateway.resolve(
-                    userId, option.source(), option.itemType(), itemIdOf(option), option.imageUrl().trim()));
+                    userId, option.source(), option.itemType(), option.itemId(), option.imageUrl().trim()));
         }
         return snapshots;
     }
@@ -205,16 +207,11 @@ public class VoteService {
                     index + 1,
                     option.source(),
                     option.itemType(),
-                    itemIdOf(option),
+                    option.itemId() == null ? null : String.valueOf(option.itemId()),
                     snapshot.imageUrl(),
                     snapshot.name(),
                     snapshot.price()));
         }
         return options;
-    }
-
-    private static String itemIdOf(VoteOptionRequest option) {
-        String itemId = option.itemId();
-        return itemId == null || itemId.isBlank() ? null : itemId.trim();
     }
 }

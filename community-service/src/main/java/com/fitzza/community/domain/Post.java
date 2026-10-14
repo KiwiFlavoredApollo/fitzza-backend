@@ -118,7 +118,12 @@ public class Post {
 
     // 마감 시각은 서버가 정한다. 클라이언트가 보낸 값은 받지 않는다.
     public static Post createVote(Long userId, String title, String content, PostCategory category, Instant now) {
-        Post post = new Post(userId, title, content, category, null);
+        return createVote(userId, title, content, category, null, now);
+    }
+
+    public static Post createVote(
+            Long userId, String title, String content, PostCategory category, String imageUrl, Instant now) {
+        Post post = new Post(userId, title, content, category, imageUrl);
         post.postType = PostType.VOTE;
         post.voteEndAt = now.plus(VOTE_DURATION);
         return post;

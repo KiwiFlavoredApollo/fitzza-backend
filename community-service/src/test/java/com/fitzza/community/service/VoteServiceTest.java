@@ -23,8 +23,8 @@ import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOption;
 import com.fitzza.community.domain.VoteOptionSource;
 import com.fitzza.community.dto.VoteOptionRequest;
-import com.fitzza.community.dto.VotePostCreateRequest;
-import com.fitzza.community.dto.VotePostCreatedResponse;
+import com.fitzza.community.dto.PostCreateRequest;
+import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.VoteResultResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
@@ -70,18 +70,19 @@ class VoteServiceTest {
         });
         Instant before = Instant.now();
 
-        VotePostCreatedResponse response = voteService.createVotePost(
+        PostCreatedResponse response = voteService.createVotePost(
                 AUTHOR_ID,
                 request(
-                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, " 55 ", IMAGE_URL),
+                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL),
                         new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL)));
 
         assertThat(response.postId()).isEqualTo(POST_ID);
-        assertThat(response.voteEndAt())
-                .isBetween(before.plus(Post.VOTE_DURATION), Instant.now().plus(Post.VOTE_DURATION));
         ArgumentCaptor<Post> post = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(post.capture());
+        assertThat(post.getValue().getVoteEndAt())
+                .isBetween(before.plus(Post.VOTE_DURATION), Instant.now().plus(Post.VOTE_DURATION));
         assertThat(post.getValue().getPostType()).isEqualTo(PostType.VOTE);
+        assertThat(post.getValue().getImageUrl()).isEqualTo("https://cdn.example.com/cover.png");
         assertThat(post.getValue().getUserId()).isEqualTo(AUTHOR_ID);
 
         @SuppressWarnings("unchecked")
@@ -102,7 +103,7 @@ class VoteServiceTest {
     @Test
     void createRejectsOptionsThatDoNotFitTogether() {
         VoteOptionRequest product =
-                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "55", IMAGE_URL);
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL);
         VoteOptionRequest upload = new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL);
 
         assertRejected(() -> voteService.createVotePost(AUTHOR_ID, request(product)), ErrorCode.INVALID_VOTE_OPTIONS);
@@ -123,7 +124,7 @@ class VoteServiceTest {
                         request(
                                 upload,
                                 new VoteOptionRequest(
-                                        VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, " ", IMAGE_URL))),
+                                        VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, IMAGE_URL))),
                 ErrorCode.INVALID_VOTE_OPTIONS);
         verifyNoInteractions(postRepository, voteOptionRepository);
     }
@@ -246,8 +247,8 @@ class VoteServiceTest {
 
         voteService.replaceOptions(AUTHOR_ID, POST_ID, List.of(
                 new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL),
-                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "56", IMAGE_URL),
-                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "57", IMAGE_URL)));
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 57L, IMAGE_URL)));
 
         InOrder order = inOrder(voteOptionRepository);
         order.verify(voteOptionRepository).deleteByPostId(POST_ID);
@@ -292,7 +293,7 @@ class VoteServiceTest {
     void replacementOptionsFollowTheSameRulesAsCreation() {
         when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
         VoteOptionRequest product =
-                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "55", IMAGE_URL);
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL);
 
         assertRejected(
                 () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, List.of(product, product)),
@@ -305,8 +306,10 @@ class VoteServiceTest {
         return List.of(upload, upload);
     }
 
-    private static VotePostCreateRequest request(VoteOptionRequest... options) {
-        return new VotePostCreateRequest("뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, List.of(options));
+    private static PostCreateRequest request(VoteOptionRequest... options) {
+        return new PostCreateRequest(
+                "뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, "https://cdn.example.com/cover.png",
+                null, null, PostType.VOTE, List.of(options));
     }
 
     private static Post openVotePost() {
