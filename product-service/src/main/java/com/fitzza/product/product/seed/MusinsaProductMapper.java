@@ -36,6 +36,7 @@ import org.springframework.util.StringUtils;
  *   <li>name → productName, price.sale → price, price.normal → normalPrice, images[0] → imageUrl(썸네일)</li>
  *   <li>option_items의 활성(activated) 조합만 옵션으로 만들고, 활성 옵션이 없으면 상품을 SOLD_OUT으로 둔다.</li>
  *   <li>옵션 값 중 이름에 사이즈가 들어간 그룹의 값을 size로, 나머지를 color로 둔다.</li>
+ *   <li>color_image_mappings의 색 이름과 같은 옵션에는 그 색의 썸네일을 둔다.</li>
  *   <li>실측값 0 이하는 "측정값 없음"이므로 저장하지 않는다.</li>
  * </ul>
  */
@@ -155,6 +156,7 @@ public class MusinsaProductMapper {
                             .color(attributes.color())
                             .size(attributes.size())
                             .additionalPrice(item.priceDelta())
+                            .imageUrl(colorImageUrl(document, attributes.color()))
                             .build();
                 })
                 .toList();
@@ -224,6 +226,19 @@ public class MusinsaProductMapper {
             }
         });
         return spec;
+    }
+
+    private String colorImageUrl(MusinsaProductDocument document, String color) {
+        if (!StringUtils.hasText(color) || document.colorImageMappings() == null) {
+            return null;
+        }
+        return document.colorImageMappings().stream()
+                .filter(mapping -> color.equals(mapping.colorRaw()))
+                .map(MusinsaProductDocument.ColorImageMapping::imageUrl)
+                .map(this::blankToNull)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     private OptionAttributes resolveAttributes(List<OptionGroupInfo> groups, OptionItemInfo item) {

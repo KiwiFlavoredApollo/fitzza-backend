@@ -49,6 +49,10 @@ public class ProductOptionEntity {
     @Column(name = "additional_price", nullable = false)
     private Integer additionalPrice;
 
+    /** 이 색의 썸네일. 색 이미지가 없으면 null이며 상품 대표 이미지를 쓴다. */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
     @Builder
     private ProductOptionEntity(
             ProductEntity product,
@@ -56,13 +60,15 @@ public class ProductOptionEntity {
             String managedCode,
             String color,
             String size,
-            Integer additionalPrice) {
+            Integer additionalPrice,
+            String imageUrl) {
         this.product = product;
         this.sourceOptionId = sourceOptionId;
         this.managedCode = managedCode;
         this.color = color;
         this.size = size;
         this.additionalPrice = additionalPrice == null ? 0 : additionalPrice;
+        this.imageUrl = imageUrl;
     }
 
     /** 상품 가격에 옵션 추가 금액을 더한 실제 판매가를 계산한다. */
