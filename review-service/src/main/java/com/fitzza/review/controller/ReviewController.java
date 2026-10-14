@@ -50,12 +50,12 @@ public class ReviewController {
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST: productId가 없거나 page(0~10000)·size(1~100)·sort가 잘못됨",
+                description = "INVALID_REQUEST: productId가 없거나 1 미만, 또는 page(0~10000)·size(1~100)·sort가 잘못됨",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping
     public ReviewPageResponse findByProduct(
-            @Parameter(description = "상품 ID") @RequestParam("productId") Long productId,
+            @Parameter(description = "상품 ID(1 이상)") @RequestParam("productId") Long productId,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size,
             @RequestParam(name = "sort", defaultValue = "LATEST") ReviewSort sort) {
