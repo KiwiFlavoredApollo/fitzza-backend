@@ -1,19 +1,21 @@
 $ErrorActionPreference = 'Stop'
 
 $endpoints = [ordered]@{
-    'Config' = 'http://localhost:8888/actuator/health'
-    'Discovery' = 'http://localhost:8761/actuator/health'
-    'Gateway' = 'http://localhost:8080/actuator/health'
-    'User via Gateway' = 'http://localhost:8080/api-docs/user-service'
-    'Product via Gateway' = 'http://localhost:8080/api/products'
-    'Try-On via Gateway' = 'http://localhost:8080/api/v1/tryon/status'
-    'Recommendation via Gateway' = 'http://localhost:8080/api/v1/recommendations/status'
+    'Config' = 'http://localhost:8888/health'
+    'Discovery' = 'http://localhost:8761/health'
+    'Gateway' = 'http://localhost:8080/health'
+    'Virtual Try-On' = 'http://localhost:8091/health'
+    'Recommendation' = 'http://localhost:8092/health'
 }
 
 $failed = $false
 foreach ($entry in $endpoints.GetEnumerator()) {
     try {
         $response = Invoke-WebRequest -Uri $entry.Value -UseBasicParsing -TimeoutSec 5
+        $health = $response.Content | ConvertFrom-Json
+        if ($health.status -ne 'UP' -or $health.liveness -ne 'UP' -or $health.readiness -ne 'UP') {
+            throw "unexpected health response: $($response.Content)"
+        }
         Write-Host "[OK] $($entry.Key) ($($response.StatusCode))" -ForegroundColor Green
     }
     catch {

@@ -73,7 +73,8 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 .\scripts\health-check.ps1
 ```
 
-- Gateway 상태: <http://localhost:8080/actuator/health>
+- 애플리케이션 상태는 서비스 컨테이너에 직접 `GET /health`로 확인합니다. 정상일 때는 `200`과 `{"status":"UP","liveness":"UP","readiness":"UP"}`을, 준비되지 않았을 때는 `503`과 `{"status":"NOT_READY","liveness":"UP","readiness":"DOWN"}`을 반환합니다. Gateway는 다른 서비스의 `/health`를 프록시하지 않습니다.
+- 로컬에서 직접 확인 가능한 상태 주소: Config <http://localhost:8888/health>, Discovery <http://localhost:8761/health>, Gateway <http://localhost:8080/health>, Virtual Try-On <http://localhost:8091/health>, Recommendation <http://localhost:8092/health>
 - Eureka 대시보드: <http://localhost:8761>
 - LocalStack 상태: <http://localhost:4566/_localstack/health>
 
@@ -82,7 +83,10 @@ Gateway를 통한 예시 호출:
 ```bash
 curl http://localhost:8080/api-docs/user-service
 curl http://localhost:8080/api/products
-curl http://localhost:8080/api/v1/recommendations/status
+curl -X POST http://localhost:8080/api/v1/recommendations \
+  -H 'Authorization: Bearer <access-token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id":"00000000-0000-0000-0000-000000000001","limit":10}'
 ```
 
 ## 기존 사용자 DB 업그레이드

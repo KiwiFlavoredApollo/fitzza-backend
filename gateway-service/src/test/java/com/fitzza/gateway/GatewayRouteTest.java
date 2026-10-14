@@ -99,9 +99,6 @@ class GatewayRouteTest {
                 .expectBody(String.class).isEqualTo("order-service:/api/carts");
         client.get().uri("/api/orders").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/orders");
-        client.get().uri("/api/v1/products/status").exchange().expectStatus().isNotFound();
-        client.get().uri("/api/v1/orders/status").exchange().expectStatus().isOk()
-                .expectBody(String.class).isEqualTo("order-service:/api/v1/orders/status");
         client.post().uri("/api/auth/signin").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("user-service:/api/auth/signin");
         client.get().uri("/internal/wishlists/check").exchange().expectStatus().isNotFound();
@@ -113,5 +110,18 @@ class GatewayRouteTest {
         client.get().uri("/product-options").exchange().expectStatus().isNotFound();
         client.get().uri("/wishlists/check").exchange().expectStatus().isNotFound();
         client.get().uri("/worldcups/1").exchange().expectStatus().isNotFound();
+    }
+
+    @Test
+    void servesOnlyTheLocalUnifiedHealthEndpoint() {
+        WebTestClient client = WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+
+        client.get().uri("/health").exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo("UP")
+                .jsonPath("$.liveness").isEqualTo("UP")
+                .jsonPath("$.readiness").isEqualTo("UP");
+        client.get().uri("/actuator/health").exchange().expectStatus().isNotFound();
     }
 }

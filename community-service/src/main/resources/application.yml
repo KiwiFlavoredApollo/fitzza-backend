@@ -8,6 +8,12 @@ spring:
 fitzza:
   service-token: ${COMMUNITY_SERVICE_TOKEN}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        exclude: "*"
+
 # 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
 logging:
   pattern:

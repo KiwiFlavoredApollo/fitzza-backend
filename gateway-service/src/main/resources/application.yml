@@ -92,8 +92,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
-  endpoint:
-    health:
-      probes:
-        enabled: true
+        exclude: "*"

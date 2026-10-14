@@ -25,8 +25,7 @@ x-domain-dependencies: &domain-dependencies
   postgres:
     condition: service_healthy
 
-x-java-healthcheck: &java-healthcheck
-  test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/actuator/health"]
+x-app-healthcheck: &app-healthcheck
   interval: 10s
   timeout: 5s
   retries: 12
@@ -89,11 +88,8 @@ services:
     ports:
       - "8888:8888"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8888/actuator/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-      start_period: 20s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8888/health"]
 
   discovery-service:
     build:
@@ -103,11 +99,8 @@ services:
     ports:
       - "8761:8761"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8761/actuator/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-      start_period: 20s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8761/health"]
 
   user-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: user-service } }
@@ -119,11 +112,8 @@ services:
       JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
     depends_on: *domain-dependencies
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
 
   product-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
@@ -135,6 +125,9 @@ services:
       PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:-}
     depends_on: *domain-dependencies
     expose: ["8082"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/health"]
 
   order-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
@@ -143,6 +136,9 @@ services:
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
     depends_on: *domain-dependencies
     expose: ["8083"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8083/health"]
 
   community-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: community-service } }
@@ -152,11 +148,8 @@ services:
     depends_on: *domain-dependencies
     expose: ["8084"]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
 
   review-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: review-service } }
@@ -166,11 +159,8 @@ services:
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8085/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8085/health"]
 
   notification-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: notification-service } }
@@ -182,11 +172,8 @@ services:
     depends_on: *domain-dependencies
     expose: ["8086"]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/actuator/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/health"]
 
   virtual-tryon-service:
     build:
@@ -204,10 +191,8 @@ services:
       localstack: { condition: service_healthy }
     ports: ["8091:8000"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/tryon/status')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      <<: *app-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
   recommendation-service:
     build:
@@ -220,10 +205,8 @@ services:
       redis: { condition: service_healthy }
     ports: ["8092:8000"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/recommendations/status')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      <<: *app-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
   gateway-service:
     build:
@@ -242,6 +225,9 @@ services:
       virtual-tryon-service: { condition: service_healthy }
       recommendation-service: { condition: service_healthy }
     ports: ["8080:8080"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
 
 volumes:
   postgres-data:
