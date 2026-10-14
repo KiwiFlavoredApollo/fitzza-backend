@@ -1,5 +1,6 @@
 package com.fitzza.product.product.controller;
 
+import com.fitzza.product.global.constant.ApiHeaders;
 import com.fitzza.product.global.constant.PagingConstants;
 import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.ApiErrorResponse;
@@ -19,6 +20,7 @@ import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,7 +52,8 @@ public class ProductController {
         return productService.findProducts(category, sort, page, size);
     }
 
-    @Operation(summary = "상품 상세 조회", description = "상품 기본 정보와 옵션별 실측 정보를 함께 조회한다.")
+    @Operation(summary = "상품 상세 조회",
+            description = "상품 기본 정보와 옵션별 실측 정보를 함께 조회한다. X-User-Id가 있으면 wished를 포함한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "404", description = "상품 없음 또는 비노출 상품",
@@ -58,7 +61,9 @@ public class ProductController {
     })
     @GetMapping("/{productId}")
     public ProductDetailResponse getProduct(
-            @Parameter(description = "상품 ID", example = "1") @PathVariable Long productId) {
-        return productService.findProduct(productId);
+            @Parameter(description = "상품 ID", example = "1") @PathVariable Long productId,
+            @Parameter(description = "요청 사용자 ID. 있으면 찜 여부를 포함한다.")
+            @RequestHeader(value = ApiHeaders.USER_ID, required = false) Long userId) {
+        return productService.findProduct(productId, userId);
     }
 }

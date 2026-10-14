@@ -55,6 +55,11 @@ public class WishlistService {
     }
 
     @Transactional(readOnly = true)
+    public boolean isWishlisted(Long userId, Long productId) {
+        return wishlistRepository.existsByUserIdAndItemId(userId, String.valueOf(productId));
+    }
+
+    @Transactional(readOnly = true)
     public WishlistCheckResponse checkWishlist(Long userId, String itemId) {
         return new WishlistCheckResponse(wishlistRepository.existsByUserIdAndItemId(userId, normalizeItemId(itemId)));
     }

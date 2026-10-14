@@ -124,12 +124,16 @@ class ProductServiceIntegrationTest {
 
         mockMvc.perform(get("/api/products/" + shirt.getProductId()))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wished").doesNotExist())
                 .andExpect(jsonPath("$.brandName").value("Fitzza"))
                 .andExpect(jsonPath("$.options.length()").value(2))
                 .andExpect(jsonPath("$.options[0].price").value(30000))
                 .andExpect(jsonPath("$.sizeGuide.measurements.length()").value(1))
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].size").value("M"))
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].values['총장']").value(70));
+        mockMvc.perform(get("/api/products/" + shirt.getProductId()).header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wished").value(false));
 
         mockMvc.perform(ServiceTokenFixture.community(get("/products"))
                         .param("productIds", knit.getProductId() + "," + shirt.getProductId()))
@@ -224,6 +228,9 @@ class ProductServiceIntegrationTest {
                 .getResponse()
                 .getContentAsString();
         assertThat(existing).isEqualTo(created);
+        mockMvc.perform(get("/api/products/" + shirt.getProductId()).header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.wished").value(true));
 
         mockMvc.perform(get("/api/wishlists").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())

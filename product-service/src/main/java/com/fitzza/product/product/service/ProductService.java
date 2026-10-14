@@ -22,6 +22,7 @@ import com.fitzza.product.product.repository.ProductOptionRepository;
 import com.fitzza.product.product.repository.ProductRepository;
 import com.fitzza.product.product.repository.ProductSizeGuideRepository;
 import com.fitzza.product.product.repository.ProductSpecifications;
+import com.fitzza.product.wishlist.service.WishlistService;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,7 @@ public class ProductService {
     private final OptionMeasurementRepository optionMeasurementRepository;
     private final ProductImageRepository productImageRepository;
     private final ProductSizeGuideRepository productSizeGuideRepository;
+    private final WishlistService wishlistService;
 
     public PageResponse<ProductListResponse> findProducts(
             String category, ProductSortType sortType, int page, int size) {
@@ -68,7 +70,7 @@ public class ProductService {
         }
     }
 
-    public ProductDetailResponse findProduct(Long productId) {
+    public ProductDetailResponse findProduct(Long productId, Long userId) {
         ProductEntity product = productRepository.findWithBrandByProductId(productId)
                 .filter(found -> found.getStatus() != ProductStatus.HIDDEN)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
@@ -80,7 +82,8 @@ public class ProductService {
                 sizeGuide,
                 options,
                 loadMeasurements(options),
-                categoryService.findNamesByCode(categoryCodesOf(product)));
+                categoryService.findNamesByCode(categoryCodesOf(product)),
+                userId == null ? null : wishlistService.isWishlisted(userId, productId));
     }
 
     private Set<String> categoryCodesOf(ProductEntity product) {
