@@ -72,6 +72,8 @@ compose.override.yml
 credentials*.json
 service-account*.json
 firebase-adminsdk*.json
+infra/k8s/**/secret.yaml
+infra/k8s/**/secrets.yaml
 
 # Runtime data
 .data/
