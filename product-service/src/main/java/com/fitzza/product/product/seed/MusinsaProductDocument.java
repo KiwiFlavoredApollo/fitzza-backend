@@ -25,7 +25,8 @@ public record MusinsaProductDocument(
         Map<String, List<String>> features,
         SizeInfo size,
         List<OptionGroupInfo> options,
-        @JsonProperty("option_items") List<OptionItemInfo> optionItems) {
+        @JsonProperty("option_items") List<OptionItemInfo> optionItems,
+        @JsonProperty("color_image_mappings") List<ColorImageMapping> colorImageMappings) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record GenderInfo(String normalized) {
@@ -69,6 +70,13 @@ public record MusinsaProductDocument(
     /** 옵션 그룹(예: 컬러, 사이즈). 옵션 항목의 values는 이 목록과 같은 순서로 값이 들어 있다. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record OptionGroupInfo(String name) {
+    }
+
+    /** 색 이름과 그 색의 썸네일. 색이 없는 상품에는 없다. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ColorImageMapping(
+            @JsonProperty("color_raw") String colorRaw,
+            @JsonProperty("image_url") String imageUrl) {
     }
 
     /** 실제 주문 단위인 옵션 조합(SKU). */

@@ -14,7 +14,7 @@ public record ProductOptionInternalResponse(
         @Schema(description = "색상. 색상 구분이 없는 상품은 null", example = "BLACK") String color,
         @Schema(description = "사이즈", example = "M") String size,
         @Schema(description = "옵션 적용 판매가(원). 상품 판매가에 옵션 추가 금액을 더한 값", example = "42000") Integer price,
-        @Schema(description = "대표 이미지 URL") String imageUrl,
+        @Schema(description = "썸네일 URL. 색 이미지가 있으면 그 주소, 없으면 상품 대표 이미지") String imageUrl,
         @Schema(description = "판매 가능 여부. 상품 상태가 ON_SALE일 때만 true", example = "true") Boolean available,
         @Schema(description = "상품 판매 상태") ProductStatus status) {
 
@@ -28,7 +28,7 @@ public record ProductOptionInternalResponse(
                 option.getColor(),
                 option.getSize(),
                 option.calculatePrice(),
-                product.getImageUrl(),
+                option.getImageUrl() != null ? option.getImageUrl() : product.getImageUrl(),
                 product.getStatus() == ProductStatus.ON_SALE,
                 product.getStatus());
     }

@@ -57,7 +57,12 @@ class ProductServiceIntegrationTest {
         entityManager.persist(brand);
         shirt = persistProduct(brand, "셔츠", "TOP", "SHIRT", 30000, ProductStatus.ON_SALE);
         knit = persistProduct(brand, "니트", "TOP", "KNIT", 50000, ProductStatus.ON_SALE);
-        shirtOption = ProductOptionEntity.builder().product(shirt).color("BLACK").size("M").build();
+        shirtOption = ProductOptionEntity.builder()
+                .product(shirt)
+                .color("BLACK")
+                .size("M")
+                .imageUrl("https://image.example.com/black.jpg")
+                .build();
         entityManager.persist(shirtOption);
         entityManager.persist(ProductOptionEntity.builder().product(shirt).color("BLACK").size("L").build());
         entityManager.persist(OptionMeasurementEntity.builder()
@@ -133,6 +138,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.brandName").value("Fitzza"))
                 .andExpect(jsonPath("$.options.length()").value(2))
                 .andExpect(jsonPath("$.options[0].price").value(30000))
+                .andExpect(jsonPath("$.options[0].imageUrl").value("https://image.example.com/black.jpg"))
                 .andExpect(jsonPath("$.sizeGuide.measurements.length()").value(1))
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].size").value("M"))
                 .andExpect(jsonPath("$.sizeGuide.measurements[0].values['총장']").value(70));
@@ -201,6 +207,7 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$[0].price").value(30000))
                 .andExpect(jsonPath("$[0].color").value("BLACK"))
                 .andExpect(jsonPath("$[0].size").value("M"))
+                .andExpect(jsonPath("$[0].imageUrl").value("https://image.example.com/black.jpg"))
                 .andExpect(jsonPath("$[0].available").value(true))
                 .andExpect(jsonPath("$[0].status").value("ON_SALE"))
                 .andExpect(jsonPath("$[1].price").value(21500))
