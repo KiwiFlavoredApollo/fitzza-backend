@@ -228,9 +228,10 @@ class CartServiceTest {
     @Test
     void updateCartRejectsCartOfAnotherUserBeforeCheckingTheOption() {
         when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.of(cart(5L, 99L, 10L, 1)));
 
         assertErrorCode(() -> cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(99L, 1)),
-                ErrorCode.CART_NOT_FOUND);
+                ErrorCode.CART_FORBIDDEN);
         verify(productOptionClient, never()).findOptions(any());
     }
 
@@ -268,8 +269,17 @@ class CartServiceTest {
     @Test
     void removeCartRejectsMissingItem() {
         when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.empty());
 
         assertErrorCode(() -> cartService.removeCart(USER_ID, 5L), ErrorCode.CART_NOT_FOUND);
+    }
+
+    @Test
+    void removeCartRejectsAnotherUsersItem() {
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.of(cart(5L, 99L, 10L, 1)));
+
+        assertErrorCode(() -> cartService.removeCart(USER_ID, 5L), ErrorCode.CART_FORBIDDEN);
     }
 
     private void stubSellableOption(Long optionId, int price) {

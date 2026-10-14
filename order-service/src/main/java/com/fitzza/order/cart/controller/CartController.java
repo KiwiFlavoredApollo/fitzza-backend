@@ -54,11 +54,7 @@ public class CartController {
     @Operation(summary = "장바구니 추가", description = "이미 담긴 옵션이면 수량을 합산한다. 판매 중인 옵션만 담을 수 있다.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "추가 성공"),
-            @ApiResponse(responseCode = "400", description = "수량이 1보다 작음",
-                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "옵션 없음",
-                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "판매 중이 아닌 옵션",
+            @ApiResponse(responseCode = "400", description = "수량이 없거나 1보다 작음, 또는 옵션 오류",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PostMapping
@@ -73,9 +69,11 @@ public class CartController {
     @Operation(summary = "장바구니 수정", description = "옵션과 수량을 변경한다. 바꾼 옵션이 이미 담겨 있으면 해당 항목에 수량이 합산된다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "수정 성공"),
-            @ApiResponse(responseCode = "404", description = "장바구니 항목 또는 옵션 없음",
+            @ApiResponse(responseCode = "400", description = "수량 또는 옵션 오류",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "판매 중이 아닌 옵션",
+            @ApiResponse(responseCode = "403", description = "다른 사용자의 장바구니 항목",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "장바구니 항목 없음",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @PatchMapping("/{cartId}")
@@ -90,6 +88,8 @@ public class CartController {
     @Operation(summary = "장바구니 삭제")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "삭제 성공"),
+            @ApiResponse(responseCode = "403", description = "다른 사용자의 장바구니 항목",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "장바구니 항목 없음",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })

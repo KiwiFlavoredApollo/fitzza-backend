@@ -93,13 +93,13 @@ class OrderServiceIntegrationTest {
                         .header(ApiHeaders.USER_ID, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":12,\"quantity\":1}"))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OPTION_NOT_AVAILABLE"));
         mockMvc.perform(post("/api/carts")
                         .header(ApiHeaders.USER_ID, USER_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":99,\"quantity\":1}"))
-                .andExpect(status().isNotFound())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OPTION_NOT_FOUND"));
 
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
@@ -121,6 +121,8 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.totalPrice").value(3 * 45000));
 
         mockMvc.perform(delete("/api/carts/" + secondCartId).header(ApiHeaders.USER_ID, OTHER_USER_ID))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/carts/999999").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/carts/" + secondCartId).header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isNoContent());
