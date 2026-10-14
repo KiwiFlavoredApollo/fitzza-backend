@@ -84,6 +84,7 @@ Gateway를 통한 예시 호출:
 curl http://localhost:8080/api-docs/user-service
 curl http://localhost:8080/api/products
 curl -X POST http://localhost:8080/api/v1/recommendations \
+  -H 'Authorization: Bearer <access-token>' \
   -H 'Content-Type: application/json' \
   -d '{"user_id":"00000000-0000-0000-0000-000000000001","limit":10}'
 ```
