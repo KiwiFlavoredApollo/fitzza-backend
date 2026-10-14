@@ -53,7 +53,7 @@ public class CartService {
     public void removeCart(Long userId, Long cartId) {
         transactionTemplate.executeWithoutResult(status -> {
             CartEntity cart = cartRepository.findByCartIdAndUserId(cartId, userId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND));
+                    .orElseThrow(() -> ownershipError(cartId));
             cartRepository.delete(cart);
         });
     }
@@ -82,8 +82,16 @@ public class CartService {
     }
 
     private void requireOwnedCart(Long userId, Long cartId) {
-        transactionTemplate.executeWithoutResult(status -> cartRepository.findByCartIdAndUserId(cartId, userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.CART_NOT_FOUND)));
+        if (cartRepository.findByCartIdAndUserId(cartId, userId).isEmpty()) {
+            throw ownershipError(cartId);
+        }
+    }
+
+    private BusinessException ownershipError(Long cartId) {
+        if (cartRepository.findById(cartId).isPresent()) {
+            return new BusinessException(ErrorCode.CART_FORBIDDEN);
+        }
+        return new BusinessException(ErrorCode.CART_NOT_FOUND);
     }
 
     private CartEntity saveCartUpdate(Long userId, Long cartId, CartUpdateRequest request) {

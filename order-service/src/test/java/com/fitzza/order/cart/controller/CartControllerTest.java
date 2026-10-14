@@ -72,16 +72,13 @@ class CartControllerTest {
     }
 
     @Test
-    void addCartDefaultsQuantityToOne() throws Exception {
-        when(cartService.addCart(eq(1L), any(CartCreateRequest.class))).thenReturn(ITEM);
-
+    void addCartRejectsMissingQuantity() throws Exception {
         mockMvc.perform(post("/api/carts")
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":10}"))
-                .andExpect(status().isCreated());
-
-        verify(cartService).addCart(1L, new CartCreateRequest(10L, 1));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("quantity")));
     }
 
     @Test
@@ -106,7 +103,7 @@ class CartControllerTest {
     }
 
     @Test
-    void addCartMapsUnavailableOptionToConflict() throws Exception {
+    void addCartMapsUnavailableOptionToBadRequest() throws Exception {
         when(cartService.addCart(eq(1L), any(CartCreateRequest.class)))
                 .thenThrow(new BusinessException(ErrorCode.OPTION_NOT_AVAILABLE));
 
@@ -114,7 +111,7 @@ class CartControllerTest {
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":10,\"quantity\":1}"))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OPTION_NOT_AVAILABLE"));
     }
 
