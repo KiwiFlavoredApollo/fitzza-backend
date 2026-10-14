@@ -7,7 +7,7 @@ import com.fitzza.community.domain.VoteOptionSource;
 public interface VoteItemGateway {
 
     VoteItemSnapshot resolve(
-            Long userId, VoteOptionSource source, VoteItemType itemType, String itemId, String imageUrl);
+            Long userId, VoteOptionSource source, VoteItemType itemType, Long itemId, String imageUrl);
 
     record VoteItemSnapshot(String imageUrl, String name, Integer price) {
     }

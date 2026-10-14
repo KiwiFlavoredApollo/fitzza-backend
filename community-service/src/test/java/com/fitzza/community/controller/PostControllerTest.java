@@ -18,6 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
 import com.fitzza.community.domain.SharedType;
+import com.fitzza.community.domain.VoteItemType;
+import com.fitzza.community.domain.VoteOptionSource;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
 import com.fitzza.community.dto.LikeStatusResponse;
@@ -44,6 +46,12 @@ class PostControllerTest {
 
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final String POSTS = "/api/community/posts";
+
+    private static final String TWO_OPTIONS = "["
+            + "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55,"
+            + "\"imageUrl\":\"https://cdn.example.com/a.png\"},"
+            + "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/b.png\"}"
+            + "]";
 
     private final PostService postService = mock(PostService.class);
     private MockMvc mockMvc;
@@ -203,6 +211,51 @@ class PostControllerTest {
                                 + "\"sharedType\":\"WORLDCUP\",\"sharedId\":9}"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("NOT_SHARED_OWNER"));
+    }
+
+    @Test
+    void createOfAVotePostPassesThePostTypeAndOptionsInOrder() throws Exception {
+        when(postService.create(eq(7L), any(PostCreateRequest.class))).thenReturn(new PostCreatedResponse(3L));
+
+        mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                        .content(votePostBody(TWO_OPTIONS)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.postId").value(3));
+
+        ArgumentCaptor<PostCreateRequest> captor = ArgumentCaptor.forClass(PostCreateRequest.class);
+        verify(postService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().postType()).isEqualTo(PostType.VOTE);
+        assertThat(captor.getValue().options()).hasSize(2);
+        assertThat(captor.getValue().options().get(0).source()).isEqualTo(VoteOptionSource.WISHLIST);
+        assertThat(captor.getValue().options().get(0).itemId()).isEqualTo(55L);
+        assertThat(captor.getValue().options().get(1).itemType()).isEqualTo(VoteItemType.IMAGE);
+        assertThat(captor.getValue().options().get(1).itemId()).isNull();
+    }
+
+    @Test
+    void createRejectsOptionsThatDoNotMatchThePostType() throws Exception {
+        String oneOption = "[{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\","
+                + "\"imageUrl\":\"https://cdn.example.com/b.png\"}]";
+        String missingImage = "[{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\"},"
+                + "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/b.png\"}]";
+        String normal = "\"title\":\"제목\",\"content\":\"내용\",\"category\":\"DAILY\"";
+
+        for (String body : List.of(
+                votePostBody(oneOption),
+                votePostBody(missingImage),
+                "{" + normal + ",\"postType\":\"VOTE\"}",
+                "{" + normal + ",\"options\":" + TWO_OPTIONS + "}",
+                "{" + normal + ",\"postType\":\"NORMAL\",\"options\":" + TWO_OPTIONS + "}",
+                "{" + normal + ",\"postType\":\"VOTE\",\"options\":" + TWO_OPTIONS
+                        + ",\"sharedType\":\"WORLDCUP\",\"sharedId\":9}",
+                votePostBody(TWO_OPTIONS.replace("\"itemId\":55", "\"itemId\":\"abc\"")),
+                votePostBody(TWO_OPTIONS.replace("\"itemId\":55", "\"itemId\":0")))) {
+            mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+        }
+        verifyNoInteractions(postService);
     }
 
     @Test
@@ -432,5 +485,10 @@ class PostControllerTest {
         mockMvc.perform(patch(POSTS).header(USER_ID_HEADER, "7"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
+    }
+
+    private static String votePostBody(String options) {
+        return "{\"title\":\"뭐가 나을까요\",\"content\":\"골라주세요\",\"category\":\"COORDI_QUESTION\","
+                + "\"postType\":\"VOTE\",\"options\":" + options + "}";
     }
 }

@@ -35,7 +35,7 @@ class VerifiedVoteItemGatewayTest {
         catalog.wishlist(USER_ID, 55L);
         catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
 
-        VoteItemSnapshot snapshot = resolveWishlist(USER_ID, "55");
+        VoteItemSnapshot snapshot = resolveWishlist(USER_ID, 55L);
 
         assertThat(snapshot).isEqualTo(new VoteItemSnapshot(PRODUCT_IMAGE, "오버핏 셔츠", 39000));
     }
@@ -45,7 +45,7 @@ class VerifiedVoteItemGatewayTest {
         catalog.wishlist(USER_ID, 55L);
         catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "SOLD_OUT"));
 
-        assertThat(resolveWishlist(USER_ID, "55").name()).isEqualTo("오버핏 셔츠");
+        assertThat(resolveWishlist(USER_ID, 55L).name()).isEqualTo("오버핏 셔츠");
     }
 
     @Test
@@ -53,7 +53,7 @@ class VerifiedVoteItemGatewayTest {
         catalog.wishlist(USER_ID, 55L);
         catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, null, "ON_SALE"));
 
-        assertThat(resolveWishlist(USER_ID, "55").imageUrl()).isEqualTo(REQUEST_IMAGE);
+        assertThat(resolveWishlist(USER_ID, 55L).imageUrl()).isEqualTo(REQUEST_IMAGE);
     }
 
     @Test
@@ -61,7 +61,7 @@ class VerifiedVoteItemGatewayTest {
         catalog.wishlist(USER_ID, 55L);
         catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
 
-        assertRejectedWith(() -> resolveWishlist(OTHER_USER_ID, "55"), ErrorCode.NOT_WISHLISTED_ITEM);
+        assertRejectedWith(() -> resolveWishlist(OTHER_USER_ID, 55L), ErrorCode.NOT_WISHLISTED_ITEM);
     }
 
     @Test
@@ -70,36 +70,24 @@ class VerifiedVoteItemGatewayTest {
         catalog.wishlist(USER_ID, 56L);
         catalog.product(new ProductSummary(55L, "숨긴 상품", 39000, PRODUCT_IMAGE, "HIDDEN"));
 
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "55"), ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "56"), ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(() -> resolveWishlist(USER_ID, 55L), ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(() -> resolveWishlist(USER_ID, 56L), ErrorCode.INVALID_VOTE_OPTIONS);
     }
 
     @Test
-    void wishlistOptionsMustBeProductsWithANumericId() {
+    void wishlistOptionsMustBeProductsWithAnId() {
         assertRejectedWith(
-                () -> gateway.resolve(USER_ID, VoteOptionSource.WISHLIST, VoteItemType.COMBO, "55", REQUEST_IMAGE),
+                () -> gateway.resolve(USER_ID, VoteOptionSource.WISHLIST, VoteItemType.COMBO, 55L, REQUEST_IMAGE),
                 ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "abc"), ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "0"), ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(() -> resolveWishlist(USER_ID, null), ErrorCode.INVALID_VOTE_OPTIONS);
         assertThat(catalog.calls).isZero();
-    }
-
-    // "55"와 "055"를 함께 보내 같은 상품을 두 선택지로 넣는 것을 막는다.
-    @Test
-    void productIdsWrittenDifferentlyFromTheirNumberAreRejected() {
-        catalog.wishlist(USER_ID, 55L);
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
-
-        assertThat(resolveWishlist(USER_ID, "55").name()).isEqualTo("오버핏 셔츠");
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "055"), ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "+55"), ErrorCode.INVALID_VOTE_OPTIONS);
     }
 
     @Test
     void voteIsRejectedInsteadOfTrustedWhenTheProductServiceIsDown() {
         catalog.down = true;
 
-        assertRejectedWith(() -> resolveWishlist(USER_ID, "55"), ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
+        assertRejectedWith(() -> resolveWishlist(USER_ID, 55L), ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
     }
 
     // 서비스 토큰이 틀린 401 같은 설정 문제는 503(잠시 후 재시도)으로 감추지 않는다.
@@ -108,7 +96,7 @@ class VerifiedVoteItemGatewayTest {
         catalog.failure = HttpClientErrorException.create(
                 HttpStatus.UNAUTHORIZED, "unauthorized", HttpHeaders.EMPTY, null, null);
 
-        assertThatThrownBy(() -> resolveWishlist(USER_ID, "55")).isInstanceOf(HttpClientErrorException.class);
+        assertThatThrownBy(() -> resolveWishlist(USER_ID, 55L)).isInstanceOf(HttpClientErrorException.class);
     }
 
     @Test
@@ -116,14 +104,14 @@ class VerifiedVoteItemGatewayTest {
         VoteItemSnapshot upload =
                 gateway.resolve(USER_ID, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, REQUEST_IMAGE);
         VoteItemSnapshot recommended =
-                gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, "combo-1", REQUEST_IMAGE);
+                gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, 7L, REQUEST_IMAGE);
 
         assertThat(upload).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
         assertThat(recommended).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
         assertThat(catalog.calls).isZero();
     }
 
-    private VoteItemSnapshot resolveWishlist(Long userId, String itemId) {
+    private VoteItemSnapshot resolveWishlist(Long userId, Long itemId) {
         return gateway.resolve(userId, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, itemId, REQUEST_IMAGE);
     }
 

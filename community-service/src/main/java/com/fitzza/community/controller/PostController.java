@@ -95,16 +95,21 @@ public class PostController {
     }
 
     @Operation(
-            summary = "일반 게시글 작성",
-            description = "제목 100자, 내용 5000자 이하. 투표글은 투표 게시글 작성 API를 쓴다. "
-                    + "월드컵 결과를 공유하려면 sharedType=WORLDCUP, sharedId=월드컵 이력 ID를 함께 보낸다. "
+            summary = "게시글 작성(일반·투표)",
+            description = "제목 100자, 내용 5000자 이하. postType을 보내지 않으면 일반 글이다. "
+                    + "투표 글은 postType=VOTE와 options(2~4개)를 함께 보낸다. 마감 시각은 서버가 작성 시각 + 6시간으로 정한다. "
+                    + "직접 올린 사진은 source=UPLOAD, itemType=IMAGE로 보내고 itemId는 비운다. 찜한 상품은 source=WISHLIST, "
+                    + "itemType=PRODUCT, itemId=상품 ID(숫자)로 보내며, 이미지·상품명·가격은 상품 서비스 값으로 저장한다. "
+                    + "월드컵 결과를 공유하려면 sharedType=WORLDCUP, sharedId=월드컵 이력 ID를 함께 보낸다(투표 글은 공유 불가). "
                     + "본인 결과인지 상품 서비스에서 확인한 뒤 우승 상품을 스냅샷으로 저장한다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST: 빈 값이나 길이 초과, 없는 sharedType, sharedType·sharedId 중 하나만 보냄",
+                description = "INVALID_REQUEST: 빈 값이나 길이 초과, 없는 sharedType, sharedType·sharedId 중 하나만 보냄, "
+                        + "투표 글에 options가 없거나 일반 글에 options를 보냄, 투표 글에 공유 대상을 보냄 / "
+                        + "INVALID_VOTE_OPTIONS: 선택지 구성 오류(중복 등)",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -112,7 +117,7 @@ public class PostController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "403",
-                description = "NOT_SHARED_OWNER: 남의 월드컵 결과",
+                description = "NOT_SHARED_OWNER: 남의 월드컵 결과 / NOT_WISHLISTED_ITEM: 찜하지 않은 상품을 골랐음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "404",
@@ -120,7 +125,8 @@ public class PostController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "503",
-                description = "SHARE_LOOKUP_UNAVAILABLE: 상품 서비스에서 월드컵 결과를 확인하지 못함",
+                description = "SHARE_LOOKUP_UNAVAILABLE: 상품 서비스에서 월드컵 결과를 확인하지 못함 / "
+                        + "PRODUCT_LOOKUP_UNAVAILABLE: 상품 서비스에서 찜 상품을 확인하지 못함",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping

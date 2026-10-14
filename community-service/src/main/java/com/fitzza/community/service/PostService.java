@@ -166,6 +166,9 @@ public class PostService {
 
     @Transactional
     public PostCreatedResponse create(Long userId, PostCreateRequest request) {
+        if (request.isVote()) {
+            return voteService.createVotePost(userId, request);
+        }
         // 남의 결과를 공유하려는 요청은 글을 만들기 전에 거른다.
         SharedSnapshot snapshot = request.sharedType() == null
                 ? null

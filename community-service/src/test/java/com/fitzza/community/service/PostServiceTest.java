@@ -87,7 +87,7 @@ class PostServiceTest {
         });
 
         PostCreatedResponse response = postService.create(
-                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, "  ", null, null));
+                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, "  ", null, null, null, null));
 
         assertThat(response.postId()).isEqualTo(POST_ID);
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
@@ -104,13 +104,26 @@ class PostServiceTest {
     }
 
     @Test
+    void createOfAVotePostIsHandedToTheVoteService() {
+        PostCreateRequest request = new PostCreateRequest(
+                "뭐가 나을까요", "골라주세요", PostCategory.FASHION, null, null, null, PostType.VOTE, List.of(
+                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
+                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL)));
+        when(voteService.createVotePost(AUTHOR_ID, request)).thenReturn(new PostCreatedResponse(POST_ID));
+
+        assertThat(postService.create(AUTHOR_ID, request).postId()).isEqualTo(POST_ID);
+        verify(postRepository, never()).save(any(Post.class));
+        verifyNoInteractions(sharedTargetGateway);
+    }
+
+    @Test
     void createSharingAWorldcupResultStoresTheTargetAndItsSnapshot() {
         SharedSnapshot snapshot = new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL);
         when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.WORLDCUP, 9L)).thenReturn(snapshot);
         when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
 
         postService.create(AUTHOR_ID, new PostCreateRequest(
-                "월드컵 결과", "우승 상품이에요", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L));
+                "월드컵 결과", "우승 상품이에요", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L, null, null));
 
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(captor.capture());
@@ -125,7 +138,7 @@ class PostServiceTest {
                 .thenThrow(new CommunityApiException(ErrorCode.NOT_SHARED_OWNER));
 
         assertThatThrownBy(() -> postService.create(AUTHOR_ID, new PostCreateRequest(
-                        "월드컵 결과", "남의 결과", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L)))
+                        "월드컵 결과", "남의 결과", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L, null, null)))
                 .isInstanceOf(CommunityApiException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.NOT_SHARED_OWNER);
