@@ -31,7 +31,8 @@ public final class ProductDetailMapper {
             ProductSizeGuideEntity sizeGuide,
             List<ProductOptionEntity> options,
             Map<Long, OptionMeasurementEntity> measurementsByOptionId,
-            Map<String, String> categoryNamesByCode) {
+            Map<String, String> categoryNamesByCode,
+            Boolean wished) {
         BrandEntity brand = product.getBrand();
         return new ProductDetailResponse(
                 product.getProductId(),
@@ -63,7 +64,8 @@ public final class ProductDetailMapper {
                 options.stream().map(ProductDetailOptionResponse::from).toList(),
                 product.getStatus(),
                 product.getCreatedAt(),
-                product.getUpdatedAt());
+                product.getUpdatedAt(),
+                wished);
     }
 
     /** 이미지 행이 없는 상품은 대표 이미지만 노출한다. */

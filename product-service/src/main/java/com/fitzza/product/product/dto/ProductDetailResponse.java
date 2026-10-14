@@ -1,5 +1,6 @@
 package com.fitzza.product.product.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fitzza.product.product.entity.FitType;
 import com.fitzza.product.product.entity.Gender;
 import com.fitzza.product.product.entity.ProductStatus;
@@ -41,5 +42,7 @@ public record ProductDetailResponse(
         @Schema(description = "옵션 목록") List<ProductDetailOptionResponse> options,
         @Schema(description = "판매 상태") ProductStatus status,
         @Schema(description = "등록 일시") LocalDateTime createdAt,
-        @Schema(description = "수정 일시") LocalDateTime updatedAt) {
+        @Schema(description = "수정 일시") LocalDateTime updatedAt,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Schema(description = "요청 사용자의 찜 여부. 로그인하지 않으면 응답에 포함하지 않는다.") Boolean wished) {
 }
