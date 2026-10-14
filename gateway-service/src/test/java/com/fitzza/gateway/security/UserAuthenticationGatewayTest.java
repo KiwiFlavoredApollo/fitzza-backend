@@ -57,6 +57,7 @@ class UserAuthenticationGatewayTest {
             registry.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri",
                     () -> "http://127.0.0.1:" + DOWNSTREAM.port());
         }
+        registry.add("RECOMMENDATION_URL", () -> "http://127.0.0.1:" + DOWNSTREAM.port());
     }
 
     @AfterAll
@@ -111,6 +112,22 @@ class UserAuthenticationGatewayTest {
                 .headers(headers -> headers.setBearerAuth(expired))
                 .exchange().expectStatus().isUnauthorized()
                 .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"TOKEN_EXPIRED\""));
+    }
+
+    @Test
+    void recommendationsRequireLoginAndReceiveTheVerifiedUser() {
+        String token = Jwts.builder().subject("42").issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
+                        .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
+
+        client().post().uri("/api/v1/recommendations").header("X-User-Id", "999")
+                .exchange().expectStatus().isUnauthorized()
+                .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"UNAUTHENTICATED\""));
+        client().post().uri("/api/v1/recommendations").header("X-User-Id", "999")
+                .headers(headers -> headers.setBearerAuth(token))
+                .exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("/api/v1/recommendations:42");
     }
 
     @Test
