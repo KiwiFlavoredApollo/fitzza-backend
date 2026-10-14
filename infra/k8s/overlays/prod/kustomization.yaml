@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: fitzza
+      environment: prod
+images:
+  - name: fitzza/config-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/config-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/discovery-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/discovery-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/gateway-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/gateway-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/user-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/user-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/product-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/product-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/order-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/order-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/community-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/community-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/review-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/review-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/notification-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/notification-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/recommendation-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/recommendation-service
+    newTag: CHANGE_ME_COMMIT_TAG
+  - name: fitzza/virtual-tryon-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/virtual-tryon-service
+    newTag: CHANGE_ME_COMMIT_TAG

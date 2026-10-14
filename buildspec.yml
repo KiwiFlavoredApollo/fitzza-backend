@@ -1,0 +1,62 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    ECR_REPOSITORY_PREFIX: fitzza
+
+phases:
+  install:
+    commands:
+      - docker buildx create --name fitzza-builder --use
+      - docker buildx inspect --bootstrap
+  pre_build:
+    commands:
+      - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+      - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      - export IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:?A resolved Git commit SHA is required}"
+      - '[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]'
+      - export IMAGE_TAG="${IMAGE_TAG:0:12}"
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      - ./gradlew test --no-daemon
+      - python -m pip install -r recommendation-service/requirements.txt -r virtual-tryon-service/requirements.txt
+      - (cd recommendation-service && python -m pytest tests)
+      - (cd virtual-tryon-service && python -m pytest tests)
+  build:
+    commands:
+      - |
+        set -eu
+        for service in config-service discovery-service gateway-service user-service product-service order-service community-service review-service notification-service; do
+          image="${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}/${service}:${IMAGE_TAG}"
+          docker buildx build --platform linux/arm64 --build-arg "MODULE=${service}" --file Dockerfile.java --tag "${image}" --push .
+        done
+      - |
+        set -eu
+        for service in recommendation-service virtual-tryon-service; do
+          image="${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}/${service}:${IMAGE_TAG}"
+          docker buildx build --platform linux/arm64 --build-arg "SERVICE_DIR=${service}" --file Dockerfile.python --tag "${image}" --push .
+        done
+  post_build:
+    commands:
+      - printf '{"imageTag":"%s","registry":"%s","repositoryPrefix":"%s"}\n' "${IMAGE_TAG}" "${ECR_REGISTRY}" "${ECR_REPOSITORY_PREFIX}" > image-definitions.json
+      - |
+        python - <<'PY'
+        import json
+        from pathlib import Path
+
+        images = json.loads(Path("image-definitions.json").read_text())
+        overlay = Path("infra/k8s/overlays/prod/kustomization.yaml")
+        content = overlay.read_text()
+        for placeholder, value in {
+            "CHANGE_ME_ECR_REGISTRY": images["registry"],
+            "CHANGE_ME_ECR_REPOSITORY_PREFIX": images["repositoryPrefix"],
+            "CHANGE_ME_COMMIT_TAG": images["imageTag"],
+        }.items():
+            content = content.replace(placeholder, value)
+        overlay.write_text(content)
+        PY
+
+artifacts:
+  files:
+    - image-definitions.json
+    - infra/k8s/**/*
