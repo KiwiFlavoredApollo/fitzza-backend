@@ -45,12 +45,12 @@ public class ReviewController {
 
     @Operation(
             summary = "상품 리뷰 목록",
-            description = "page는 0부터, size는 1~100(기본 20). sort는 LATEST(기본)·RATING_DESC·RATING_ASC.")
+            description = "page는 0~10000, size는 1~100(기본 20). sort는 LATEST(기본)·RATING_DESC·RATING_ASC.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST: productId가 없거나 page·size·sort가 잘못됨",
+                description = "INVALID_REQUEST: productId가 없거나 page(0~10000)·size(1~100)·sort가 잘못됨",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping

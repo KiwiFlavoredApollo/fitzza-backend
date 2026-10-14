@@ -177,6 +177,8 @@ class ReviewServiceTest {
     void listRejectsBadPaging() {
         assertThatThrownBy(() -> reviewService.findByProduct(PRODUCT_ID, -1, 10, ReviewSort.LATEST))
                 .isInstanceOf(ReviewApiException.class);
+        assertThatThrownBy(() -> reviewService.findByProduct(PRODUCT_ID, 10_001, 10, ReviewSort.LATEST))
+                .isInstanceOf(ReviewApiException.class);
         assertThatThrownBy(() -> reviewService.findByProduct(PRODUCT_ID, 0, 101, ReviewSort.LATEST))
                 .isInstanceOf(ReviewApiException.class);
         assertThatThrownBy(() -> reviewService.findByProduct(0L, 0, 10, ReviewSort.LATEST))

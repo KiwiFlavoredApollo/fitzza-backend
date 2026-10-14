@@ -21,6 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReviewService {
 
     static final int MAX_PAGE_SIZE = 100;
+    // offset(page×size)이 int 범위를 넘으면 Spring Data가 쿼리 전에 예외를 던져 500이 된다. 그 전에 400으로 막는다.
+    static final int MAX_PAGE = 10_000;
 
     private final ReviewRepository reviewRepository;
     private final OrderItemVerifier orderItemVerifier;
@@ -72,7 +74,7 @@ public class ReviewService {
     // 상품 상세의 리뷰 목록. 로그인 없이 볼 수 있다.
     @Transactional(readOnly = true)
     public ReviewPageResponse findByProduct(Long productId, int page, int size, ReviewSort sort) {
-        if (productId == null || productId <= 0 || page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+        if (productId == null || productId <= 0 || page < 0 || page > MAX_PAGE || size < 1 || size > MAX_PAGE_SIZE) {
             throw new ReviewApiException(ErrorCode.INVALID_REQUEST);
         }
         return ReviewPageResponse.from(reviewRepository
