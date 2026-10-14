@@ -13,7 +13,8 @@ public class ApiDocsRouteConfiguration {
     @Bean
     RouteLocator apiDocsRoutes(RouteLocatorBuilder builder) {
         RouteLocatorBuilder.Builder routes = builder.routes();
-        for (String service : new String[] {"user-service", "community-service", "notification-service"}) {
+        for (String service : new String[] {
+                "user-service", "community-service", "notification-service", "review-service"}) {
             routes.route(service + "-docs", route -> route.path("/api-docs/" + service)
                     .filters(filters -> filters.setPath("/v3/api-docs"))
                     .uri("lb://" + service));
