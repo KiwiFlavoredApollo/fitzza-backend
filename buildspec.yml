@@ -1,6 +1,7 @@
 version: 0.2
 
 env:
+  shell: bash
   variables:
     ECR_REPOSITORY_PREFIX: fitzza
 
@@ -13,7 +14,8 @@ phases:
     commands:
       - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
       - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-      - export IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:-local}"
+      - export IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:?A resolved Git commit SHA is required}"
+      - '[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]'
       - export IMAGE_TAG="${IMAGE_TAG:0:12}"
       - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
       - ./gradlew test --no-daemon
@@ -37,9 +39,24 @@ phases:
   post_build:
     commands:
       - printf '{"imageTag":"%s","registry":"%s","repositoryPrefix":"%s"}\n' "${IMAGE_TAG}" "${ECR_REGISTRY}" "${ECR_REPOSITORY_PREFIX}" > image-definitions.json
+      - |
+        python - <<'PY'
+        import json
+        from pathlib import Path
+
+        images = json.loads(Path("image-definitions.json").read_text())
+        overlay = Path("infra/k8s/overlays/prod/kustomization.yaml")
+        content = overlay.read_text()
+        for placeholder, value in {
+            "CHANGE_ME_ECR_REGISTRY": images["registry"],
+            "CHANGE_ME_ECR_REPOSITORY_PREFIX": images["repositoryPrefix"],
+            "CHANGE_ME_COMMIT_TAG": images["imageTag"],
+        }.items():
+            content = content.replace(placeholder, value)
+        overlay.write_text(content)
+        PY
 
 artifacts:
   files:
     - image-definitions.json
     - infra/k8s/**/*
-
