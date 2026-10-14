@@ -1,9 +1,9 @@
 package com.fitzza.product.product.service;
 
-import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.BusinessException;
 import com.fitzza.product.global.exception.ErrorCode;
 import com.fitzza.product.product.dto.ProductDetailResponse;
+import com.fitzza.product.product.dto.ProductListPageResponse;
 import com.fitzza.product.product.dto.ProductListResponse;
 import com.fitzza.product.product.dto.ProductMeasurementResponse;
 import com.fitzza.product.product.dto.ProductOptionInternalResponse;
@@ -22,6 +22,7 @@ import com.fitzza.product.product.repository.ProductOptionRepository;
 import com.fitzza.product.product.repository.ProductRepository;
 import com.fitzza.product.product.repository.ProductSizeGuideRepository;
 import com.fitzza.product.product.repository.ProductSpecifications;
+import com.fitzza.product.wishlist.service.WishlistService;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -48,14 +49,15 @@ public class ProductService {
     private final OptionMeasurementRepository optionMeasurementRepository;
     private final ProductImageRepository productImageRepository;
     private final ProductSizeGuideRepository productSizeGuideRepository;
+    private final WishlistService wishlistService;
 
-    public PageResponse<ProductListResponse> findProducts(
+    public ProductListPageResponse findProducts(
             String category, ProductSortType sortType, int page, int size) {
         validateCategoryLength(category);
         PageRequest pageRequest = PageRequest.of(page, size, sortType.toSort());
         Page<ProductEntity> products = productRepository.findAll(
                 ProductSpecifications.visibleInCategory(category), pageRequest);
-        return PageResponse.from(products.map(ProductListResponse::from));
+        return ProductListPageResponse.from(products.map(ProductListResponse::from), sortType);
     }
 
     private void validateCategoryLength(String category) {
@@ -68,7 +70,7 @@ public class ProductService {
         }
     }
 
-    public ProductDetailResponse findProduct(Long productId) {
+    public ProductDetailResponse findProduct(Long productId, Long userId) {
         ProductEntity product = productRepository.findWithBrandByProductId(productId)
                 .filter(found -> found.getStatus() != ProductStatus.HIDDEN)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
@@ -80,7 +82,8 @@ public class ProductService {
                 sizeGuide,
                 options,
                 loadMeasurements(options),
-                categoryService.findNamesByCode(categoryCodesOf(product)));
+                categoryService.findNamesByCode(categoryCodesOf(product)),
+                userId == null ? null : wishlistService.isWishlisted(userId, productId));
     }
 
     private Set<String> categoryCodesOf(ProductEntity product) {

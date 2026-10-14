@@ -61,17 +61,17 @@ class WishlistControllerTest {
         mockMvc.perform(post("/api/wishlists")
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\"1\"}"))
+                        .content("{\"itemId\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.wishlistId").value(5));
     }
 
     @Test
-    void addWishlistRejectsBlankItemId() throws Exception {
+    void addWishlistRejectsMissingItemId() throws Exception {
         mockMvc.perform(post("/api/wishlists")
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"itemId\":\" \"}"))
+                        .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("itemId")));
     }
@@ -83,12 +83,12 @@ class WishlistControllerTest {
                         .param("itemId", "7"))
                 .andExpect(status().isNoContent());
 
-        verify(wishlistService).removeWishlist(1L, "7");
+        verify(wishlistService).removeWishlist(1L, 7L);
     }
 
     @Test
     void checkWishlistReturnsOwnership() throws Exception {
-        when(wishlistService.checkWishlist(1L, "7")).thenReturn(new WishlistCheckResponse(true));
+        when(wishlistService.checkWishlist(1L, 7L)).thenReturn(new WishlistCheckResponse(true));
 
         mockMvc.perform(ServiceTokenFixture.community(get("/wishlists/check"))
                         .param("userId", "1")
