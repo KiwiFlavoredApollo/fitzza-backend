@@ -1,9 +1,9 @@
 package com.fitzza.product.product.service;
 
-import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.BusinessException;
 import com.fitzza.product.global.exception.ErrorCode;
 import com.fitzza.product.product.dto.ProductDetailResponse;
+import com.fitzza.product.product.dto.ProductListPageResponse;
 import com.fitzza.product.product.dto.ProductListResponse;
 import com.fitzza.product.product.dto.ProductMeasurementResponse;
 import com.fitzza.product.product.dto.ProductOptionInternalResponse;
@@ -51,13 +51,13 @@ public class ProductService {
     private final ProductSizeGuideRepository productSizeGuideRepository;
     private final WishlistService wishlistService;
 
-    public PageResponse<ProductListResponse> findProducts(
+    public ProductListPageResponse findProducts(
             String category, ProductSortType sortType, int page, int size) {
         validateCategoryLength(category);
         PageRequest pageRequest = PageRequest.of(page, size, sortType.toSort());
         Page<ProductEntity> products = productRepository.findAll(
                 ProductSpecifications.visibleInCategory(category), pageRequest);
-        return PageResponse.from(products.map(ProductListResponse::from));
+        return ProductListPageResponse.from(products.map(ProductListResponse::from), sortType);
     }
 
     private void validateCategoryLength(String category) {
