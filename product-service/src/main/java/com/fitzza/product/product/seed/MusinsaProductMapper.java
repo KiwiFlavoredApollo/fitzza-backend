@@ -233,7 +233,7 @@ public class MusinsaProductMapper {
             return null;
         }
         return document.colorImageMappings().stream()
-                .filter(mapping -> color.equals(mapping.colorRaw()))
+                .filter(mapping -> mapping != null && color.equals(mapping.colorRaw()))
                 .map(MusinsaProductDocument.ColorImageMapping::imageUrl)
                 .map(this::blankToNull)
                 .filter(Objects::nonNull)
