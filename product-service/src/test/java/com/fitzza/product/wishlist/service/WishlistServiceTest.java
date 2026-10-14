@@ -51,7 +51,7 @@ class WishlistServiceTest {
         });
 
         WishlistResponse response =
-                wishlistService.addWishlist(USER_ID, new WishlistCreateRequest(" 007 "));
+                wishlistService.addWishlist(USER_ID, new WishlistCreateRequest(7L));
 
         ArgumentCaptor<WishlistEntity> captor = ArgumentCaptor.forClass(WishlistEntity.class);
         verify(wishlistRepository).saveAndFlush(captor.capture());
@@ -67,7 +67,7 @@ class WishlistServiceTest {
         ReflectionTestUtils.setField(existing, "wishlistId", 5L);
         when(wishlistRepository.findByUserIdAndItemId(USER_ID, "7")).thenReturn(Optional.of(existing));
 
-        WishlistResponse response = wishlistService.addWishlist(USER_ID, new WishlistCreateRequest("7"));
+        WishlistResponse response = wishlistService.addWishlist(USER_ID, new WishlistCreateRequest(7L));
 
         assertThat(response.wishlistId()).isEqualTo(5L);
         verify(wishlistRepository, never()).saveAndFlush(any());
@@ -80,15 +80,8 @@ class WishlistServiceTest {
         when(productRepository.existsByProductIdAndStatusNot(7L, ProductStatus.HIDDEN)).thenReturn(false);
 
         assertErrorCode(
-                () -> wishlistService.addWishlist(USER_ID, new WishlistCreateRequest("7")),
+                () -> wishlistService.addWishlist(USER_ID, new WishlistCreateRequest(7L)),
                 ErrorCode.PRODUCT_NOT_FOUND);
-    }
-
-    @Test
-    void addWishlistRejectsNonNumericProductId() {
-        assertErrorCode(
-                () -> wishlistService.addWishlist(USER_ID, new WishlistCreateRequest("abc")),
-                ErrorCode.INVALID_REQUEST);
     }
 
     @Test
@@ -102,7 +95,7 @@ class WishlistServiceTest {
         when(wishlistRepository.saveAndFlush(any(WishlistEntity.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"));
 
-        WishlistResponse response = wishlistService.addWishlist(USER_ID, new WishlistCreateRequest("7"));
+        WishlistResponse response = wishlistService.addWishlist(USER_ID, new WishlistCreateRequest(7L));
 
         assertThat(response.wishlistId()).isEqualTo(9L);
     }
@@ -111,7 +104,7 @@ class WishlistServiceTest {
     void removeWishlistDeletesWithoutFailingWhenNothingWasDeleted() {
         when(wishlistRepository.deleteByUserIdAndItemId(USER_ID, "7")).thenReturn(0L);
 
-        wishlistService.removeWishlist(USER_ID, "7");
+        wishlistService.removeWishlist(USER_ID, 7L);
 
         verify(wishlistRepository).deleteByUserIdAndItemId(USER_ID, "7");
     }
@@ -120,7 +113,7 @@ class WishlistServiceTest {
     void checkWishlistReturnsOwnershipOfTheItem() {
         when(wishlistRepository.existsByUserIdAndItemId(USER_ID, "7")).thenReturn(true);
 
-        assertThat(wishlistService.checkWishlist(USER_ID, "7").wishlisted()).isTrue();
+        assertThat(wishlistService.checkWishlist(USER_ID, 7L).wishlisted()).isTrue();
     }
 
     private void assertErrorCode(ThrowingCallable callable, ErrorCode expected) {

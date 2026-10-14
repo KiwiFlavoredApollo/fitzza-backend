@@ -43,20 +43,21 @@ public class WishlistService {
     }
 
     public WishlistResponse addWishlist(Long userId, WishlistCreateRequest request) {
-        String itemId = normalizeItemId(request.itemId());
+        String itemId = String.valueOf(request.itemId());
         return wishlistRepository.findByUserIdAndItemId(userId, itemId)
                 .map(WishlistResponse::from)
                 .orElseGet(() -> createWishlist(userId, itemId));
     }
 
     @Transactional
-    public void removeWishlist(Long userId, String itemId) {
-        wishlistRepository.deleteByUserIdAndItemId(userId, normalizeItemId(itemId));
+    public void removeWishlist(Long userId, Long itemId) {
+        wishlistRepository.deleteByUserIdAndItemId(userId, String.valueOf(itemId));
     }
 
     @Transactional(readOnly = true)
-    public WishlistCheckResponse checkWishlist(Long userId, String itemId) {
-        return new WishlistCheckResponse(wishlistRepository.existsByUserIdAndItemId(userId, normalizeItemId(itemId)));
+    public WishlistCheckResponse checkWishlist(Long userId, Long itemId) {
+        return new WishlistCheckResponse(
+                wishlistRepository.existsByUserIdAndItemId(userId, String.valueOf(itemId)));
     }
 
     private WishlistResponse createWishlist(Long userId, String itemId) {
@@ -71,18 +72,6 @@ public class WishlistService {
             return wishlistRepository.findByUserIdAndItemId(userId, itemId)
                     .map(WishlistResponse::from)
                     .orElseThrow(() -> exception);
-        }
-    }
-
-    private String normalizeItemId(String itemId) {
-        return String.valueOf(parseProductId(itemId.trim()));
-    }
-
-    private Long parseProductId(String itemId) {
-        try {
-            return Long.valueOf(itemId);
-        } catch (NumberFormatException exception) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "상품 itemId는 숫자여야 합니다.");
         }
     }
 

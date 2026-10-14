@@ -10,7 +10,8 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,7 +35,7 @@ public class WishlistInternalController {
     @GetMapping("/check")
     public WishlistCheckResponse checkWishlist(
             @Parameter(description = "사용자 ID", required = true) @RequestParam Long userId,
-            @Parameter(description = "상품 ID", required = true) @RequestParam @NotBlank String itemId) {
+            @Parameter(description = "상품 ID", required = true) @RequestParam @NotNull @Min(1) Long itemId) {
         return wishlistService.checkWishlist(userId, itemId);
     }
 }
