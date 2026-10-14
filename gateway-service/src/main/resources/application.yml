@@ -56,7 +56,10 @@ spring:
           predicates: [Path=/api/community/**]
         - id: review-service
           uri: lb://review-service
-          predicates: [Path=/api/reviews/**]
+          predicates: ["Path=/api/reviews,/api/reviews/**"]
+        - id: review-service-surveys
+          uri: lb://review-service
+          predicates: ["Path=/api/surveys,/api/surveys/**"]
         - id: notification-service
           uri: lb://notification-service
           predicates: [Path=/api/notifications/**]
@@ -77,6 +80,8 @@ springdoc:
         url: /api-docs/community-service
       - name: notification-service
         url: /api-docs/notification-service
+      - name: review-service
+        url: /api-docs/review-service
 jwt:
   secret: ${JWT_SECRET}
 eureka:
