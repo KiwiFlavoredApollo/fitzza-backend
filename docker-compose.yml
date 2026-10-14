@@ -160,7 +160,9 @@ services:
 
   review-service:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: review-service } }
-    environment: *java-environment
+    environment:
+      <<: *java-environment
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
