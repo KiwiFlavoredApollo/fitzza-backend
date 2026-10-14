@@ -1,6 +1,7 @@
 package com.fitzza.community.domain;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -51,6 +52,17 @@ public class Post {
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;
+
+    // 공유 글에만 값이 있다. 공유 대상과 공유 당시 모습(스냅샷)을 함께 저장한다.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "shared_type", length = 20, updatable = false)
+    private SharedType sharedType;
+
+    @Column(name = "shared_id", updatable = false)
+    private Long sharedId;
+
+    @Embedded
+    private SharedSnapshot sharedSnapshot;
 
     // 투표글에만 값이 있다. 일반 글은 NULL이다.
     @Column(name = "vote_end_at")
@@ -110,6 +122,29 @@ public class Post {
         post.postType = PostType.VOTE;
         post.voteEndAt = now.plus(VOTE_DURATION);
         return post;
+    }
+
+    // 공유 대상은 글을 쓸 때만 정할 수 있다(수정으로 바꿀 수 없음).
+    public void attachShared(SharedType type, Long id, SharedSnapshot snapshot) {
+        this.sharedType = type;
+        this.sharedId = id;
+        this.sharedSnapshot = snapshot;
+    }
+
+    public boolean isShared() {
+        return sharedType != null;
+    }
+
+    public SharedType getSharedType() {
+        return sharedType;
+    }
+
+    public Long getSharedId() {
+        return sharedId;
+    }
+
+    public SharedSnapshot getSharedSnapshot() {
+        return sharedSnapshot;
     }
 
     @PrePersist

@@ -7,7 +7,8 @@ import com.fitzza.community.exception.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 // 찜 출처는 상품 서비스에서 본인이 찜한 상품인지 확인하고, 이미지·상품명·가격을 상품 서비스 값으로 채운다.
 // AI 추천 출처는 추천 서비스의 확인 API가 아직 없어서 요청에 온 이미지 주소를 그대로 쓴다.
@@ -41,7 +42,7 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
                 throw new CommunityApiException(ErrorCode.NOT_WISHLISTED_ITEM);
             }
             product = productCatalog.findProduct(productId).orElse(null);
-        } catch (RestClientException exception) {
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
             log.warn("상품 서비스에서 찜 상품을 확인하지 못해 투표 글 작성을 거부합니다: {}", exception.getMessage());
             throw new CommunityApiException(ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
         }

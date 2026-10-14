@@ -6,11 +6,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 // 상품 서비스가 응답하지 않으면 RestClientException을 그대로 던진다. 확인 없이 넘어가지 않도록 호출한 쪽이 요청을 거부한다.
 @Component
-public class ProductServiceClient implements ProductCatalog {
+public class ProductServiceClient implements ProductCatalog, WorldcupResults {
 
     private static final ParameterizedTypeReference<List<ProductSummary>> PRODUCT_LIST =
             new ParameterizedTypeReference<>() {};
@@ -64,6 +65,23 @@ public class ProductServiceClient implements ProductCatalog {
         return found.stream()
                 .filter(product -> product.productId() != null && product.productId() == productId)
                 .findFirst();
+    }
+
+    // 상품 서비스는 없는 월드컵 결과에 404를 돌려준다. 남의 결과는 owned=false로 온다.
+    @Override
+    public Optional<WorldcupResult> findWorldcup(long worldcupHistoryId, Long userId) {
+        try {
+            return Optional.ofNullable(restClient
+                    .get()
+                    .uri(uriBuilder -> uriBuilder
+                            .path("/worldcups/{worldcupHistoryId}")
+                            .queryParam("userId", userId)
+                            .build(worldcupHistoryId))
+                    .retrieve()
+                    .body(WorldcupResult.class));
+        } catch (HttpClientErrorException.NotFound exception) {
+            return Optional.empty();
+        }
     }
 
     public record WishlistCheck(boolean wishlisted) {

@@ -53,10 +53,11 @@ class UserAuthenticationGatewayTest {
 
     @DynamicPropertySource
     static void downstream(DynamicPropertyRegistry registry) {
-        for (String service : new String[] {"user-service", "community-service", "notification-service"}) {
+        for (String service : new String[] {"user-service", "community-service", "notification-service", "review-service"}) {
             registry.add("spring.cloud.discovery.client.simple.instances." + service + "[0].uri",
                     () -> "http://127.0.0.1:" + DOWNSTREAM.port());
         }
+        registry.add("RECOMMENDATION_URL", () -> "http://127.0.0.1:" + DOWNSTREAM.port());
     }
 
     @AfterAll
@@ -114,6 +115,32 @@ class UserAuthenticationGatewayTest {
     }
 
     @Test
+    void recommendationsRequireLoginAndReceiveTheVerifiedUser() {
+        String token = Jwts.builder().subject("42").issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
+                        .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
+
+        client().post().uri("/api/v1/recommendations").header("X-User-Id", "999")
+                .exchange().expectStatus().isUnauthorized()
+                .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"UNAUTHENTICATED\""));
+        client().post().uri("/api/v1/recommendations").header("X-User-Id", "999")
+                .headers(headers -> headers.setBearerAuth(token))
+                .exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("/api/v1/recommendations:42");
+    }
+
+    @Test
+    void routesReviewsAndSurveysToTheReviewService() {
+        client().get().uri("/api/reviews?productId=1").exchange()
+                .expectStatus().isOk().expectBody(String.class).isEqualTo("/api/reviews?productId=1:anonymous");
+        client().get().uri("/api/surveys/me?orderItemIds=1").exchange()
+                .expectStatus().isOk().expectBody(String.class).isEqualTo("/api/surveys/me?orderItemIds=1:anonymous");
+        client().post().uri("/api/surveys").exchange()
+                .expectStatus().isOk().expectBody(String.class).isEqualTo("/api/surveys:anonymous");
+    }
+
+    @Test
     void userRouteWithoutATokenAnswersWithACode() {
         client().get().uri("/api/users/me")
                 .exchange().expectStatus().isUnauthorized()
@@ -141,6 +168,19 @@ class UserAuthenticationGatewayTest {
                 .header("Access-Control-Request-Headers", "authorization")
                 .exchange().expectStatus().isOk()
                 .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:3000");
+    }
+
+    @Test
+    void everyResponseCarriesARequestIdThatTheBrowserMayRead() {
+        client().get().uri("/api/users/me").exchange()
+                .expectStatus().isUnauthorized()
+                .expectHeader().exists("X-Request-Id");
+        client().post().uri("/api/auth/signin").header("X-Request-Id", "fe-request-0001")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("X-Request-Id", "fe-request-0001");
+        client().post().uri("/api/auth/signin").header("Origin", "http://localhost:5173")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Expose-Headers", "X-Request-Id");
     }
 
     @Test

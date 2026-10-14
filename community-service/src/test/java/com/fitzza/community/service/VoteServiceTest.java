@@ -2,10 +2,12 @@ package com.fitzza.community.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -37,6 +39,7 @@ import java.util.Optional;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class VoteServiceTest {
@@ -234,6 +237,72 @@ class VoteServiceTest {
 
         assertThat(voteService.close(AUTHOR_ID, POST_ID).closed()).isTrue();
         assertThat(post.isVoteClosedAt(Instant.now())).isTrue();
+    }
+
+    @Test
+    void authorCanReplaceTheOptionsOfAnOpenVoteNobodyAnswered() {
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
+        when(voteRepository.existsByPostId(POST_ID)).thenReturn(false);
+
+        voteService.replaceOptions(AUTHOR_ID, POST_ID, List.of(
+                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "56", IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "57", IMAGE_URL)));
+
+        InOrder order = inOrder(voteOptionRepository);
+        order.verify(voteOptionRepository).deleteByPostId(POST_ID);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<VoteOption>> options = ArgumentCaptor.forClass(List.class);
+        order.verify(voteOptionRepository).saveAll(options.capture());
+        assertThat(options.getValue())
+                .extracting(VoteOption::getPostId, VoteOption::getLabel, VoteOption::getItemId)
+                .containsExactly(
+                        tuple(POST_ID, "A", null),
+                        tuple(POST_ID, "B", "56"),
+                        tuple(POST_ID, "C", "57"));
+    }
+
+    @Test
+    void optionsCannotBeReplacedOnceSomeoneVoted() {
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
+        when(voteRepository.existsByPostId(POST_ID)).thenReturn(true);
+
+        assertRejected(
+                () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.VOTE_OPTIONS_LOCKED);
+        verify(voteOptionRepository, never()).deleteByPostId(anyLong());
+    }
+
+    @Test
+    void optionsCannotBeReplacedOnAClosedVoteANormalPostOrByAnotherUser() {
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(closedVotePost()));
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.VOTE_CLOSED);
+
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(normalPost()));
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.NOT_VOTE_POST);
+
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
+        assertRejected(() -> voteService.replaceOptions(VOTER_ID, POST_ID, twoUploads()), ErrorCode.NOT_AUTHOR);
+
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.empty());
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.POST_NOT_FOUND);
+        verify(voteOptionRepository, never()).deleteByPostId(anyLong());
+    }
+
+    @Test
+    void replacementOptionsFollowTheSameRulesAsCreation() {
+        when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
+        VoteOptionRequest product =
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "55", IMAGE_URL);
+
+        assertRejected(
+                () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, List.of(product, product)),
+                ErrorCode.INVALID_VOTE_OPTIONS);
+        verify(voteOptionRepository, never()).deleteByPostId(anyLong());
+    }
+
+    private static List<VoteOptionRequest> twoUploads() {
+        VoteOptionRequest upload = new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL);
+        return List.of(upload, upload);
     }
 
     private static VotePostCreateRequest request(VoteOptionRequest... options) {

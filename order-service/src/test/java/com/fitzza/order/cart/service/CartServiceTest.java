@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
-import com.fitzza.order.cart.dto.CartResponse;
 import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.entity.CartEntity;
 import com.fitzza.order.cart.repository.CartRepository;
@@ -51,7 +50,7 @@ class CartServiceTest {
     }
 
     @Test
-    void findCartTotalsOnlyAvailableItems() {
+    void findCartMarksMissingAndUnavailableOptions() {
         when(cartRepository.findAllByUserIdOrderByCartIdDesc(USER_ID)).thenReturn(List.of(
                 cart(3L, USER_ID, 12L, 1),
                 cart(2L, USER_ID, 11L, 1),
@@ -60,28 +59,12 @@ class CartServiceTest {
                 10L, option(10L, 30000, "ON_SALE"),
                 11L, option(11L, 45000, "SOLD_OUT")));
 
-        CartResponse response = cartService.findCart(USER_ID);
+        List<CartItemResponse> items = cartService.findCart(USER_ID);
 
-        assertThat(response.items()).extracting(CartItemResponse::available).containsExactly(false, false, true);
-        assertThat(response.items().get(0).productName()).isNull();
-        assertThat(response.items().get(1).linePrice()).isZero();
-        assertThat(response.items().get(2).linePrice()).isEqualTo(60000);
-        assertThat(response.totalQuantity()).isEqualTo(2);
-        assertThat(response.totalPrice()).isEqualTo(60000);
-    }
-
-    @Test
-    void findCartSumsQuantityBeyondIntegerRange() {
-        when(cartRepository.findAllByUserIdOrderByCartIdDesc(USER_ID)).thenReturn(List.of(
-                cart(2L, USER_ID, 11L, Integer.MAX_VALUE),
-                cart(1L, USER_ID, 10L, Integer.MAX_VALUE)));
-        when(productOptionClient.findOptions(List.of(11L, 10L))).thenReturn(Map.of(
-                10L, option(10L, 30000, "ON_SALE"),
-                11L, option(11L, 45000, "ON_SALE")));
-
-        CartResponse response = cartService.findCart(USER_ID);
-
-        assertThat(response.totalQuantity()).isEqualTo(2L * Integer.MAX_VALUE);
+        assertThat(items).extracting(CartItemResponse::available).containsExactly(false, false, true);
+        assertThat(items.get(0).productName()).isNull();
+        assertThat(items.get(1).linePrice()).isZero();
+        assertThat(items.get(2).linePrice()).isEqualTo(60000);
     }
 
     @Test
@@ -228,9 +211,10 @@ class CartServiceTest {
     @Test
     void updateCartRejectsCartOfAnotherUserBeforeCheckingTheOption() {
         when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.of(cart(5L, 99L, 10L, 1)));
 
         assertErrorCode(() -> cartService.updateCart(USER_ID, 5L, new CartUpdateRequest(99L, 1)),
-                ErrorCode.CART_NOT_FOUND);
+                ErrorCode.CART_FORBIDDEN);
         verify(productOptionClient, never()).findOptions(any());
     }
 
@@ -268,8 +252,17 @@ class CartServiceTest {
     @Test
     void removeCartRejectsMissingItem() {
         when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.empty());
 
         assertErrorCode(() -> cartService.removeCart(USER_ID, 5L), ErrorCode.CART_NOT_FOUND);
+    }
+
+    @Test
+    void removeCartRejectsAnotherUsersItem() {
+        when(cartRepository.findByCartIdAndUserId(5L, USER_ID)).thenReturn(Optional.empty());
+        when(cartRepository.findById(5L)).thenReturn(Optional.of(cart(5L, 99L, 10L, 1)));
+
+        assertErrorCode(() -> cartService.removeCart(USER_ID, 5L), ErrorCode.CART_FORBIDDEN);
     }
 
     private void stubSellableOption(Long optionId, int price) {

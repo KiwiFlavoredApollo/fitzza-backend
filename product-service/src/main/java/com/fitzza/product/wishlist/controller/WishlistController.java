@@ -18,7 +18,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -75,7 +76,7 @@ public class WishlistController {
     public void removeWishlist(
             @Parameter(description = USER_ID_DESCRIPTION, required = true)
             @RequestHeader(ApiHeaders.USER_ID) Long userId,
-            @Parameter(description = "상품 ID", required = true) @RequestParam @NotBlank String itemId) {
+            @Parameter(description = "상품 ID", required = true) @RequestParam @NotNull @Min(1) Long itemId) {
         wishlistService.removeWishlist(userId, itemId);
     }
 }

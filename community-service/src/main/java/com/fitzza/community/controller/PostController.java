@@ -96,17 +96,31 @@ public class PostController {
 
     @Operation(
             summary = "일반 게시글 작성",
-            description = "제목 100자, 내용 5000자 이하. 투표글은 투표 게시글 작성 API를 쓴다.",
+            description = "제목 100자, 내용 5000자 이하. 투표글은 투표 게시글 작성 API를 쓴다. "
+                    + "월드컵 결과를 공유하려면 sharedType=WORLDCUP, sharedId=월드컵 이력 ID를 함께 보낸다. "
+                    + "본인 결과인지 상품 서비스에서 확인한 뒤 우승 상품을 스냅샷으로 저장한다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST: 빈 값이나 길이 초과",
+                description = "INVALID_REQUEST: 빈 값이나 길이 초과, 없는 sharedType, sharedType·sharedId 중 하나만 보냄",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
                 description = "UNAUTHENTICATED: 로그인 필요",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "403",
+                description = "NOT_SHARED_OWNER: 남의 월드컵 결과",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "404",
+                description = "SHARED_TARGET_NOT_FOUND: 없는 월드컵 결과",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "503",
+                description = "SHARE_LOOKUP_UNAVAILABLE: 상품 서비스에서 월드컵 결과를 확인하지 못함",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PostMapping
@@ -119,13 +133,16 @@ public class PostController {
 
     @Operation(
             summary = "게시글 수정",
-            description = "작성자만 수정할 수 있다.",
+            description = "작성자만 수정할 수 있다. 보내지 않은 항목은 그대로 둔다. 투표글은 options(2~4개)를 보내면 "
+                    + "선택지를 통째로 바꾸며, 한 표라도 들어왔거나 마감된 투표는 선택지를 바꿀 수 없다(제목·본문 등은 수정 가능). "
+                    + "수정 화면은 게시글 상세 조회의 voteOptions로 기존 선택지를 채운다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "수정 성공(응답 본문 없음)", content = @Content),
         @ApiResponse(
                 responseCode = "400",
-                description = "INVALID_REQUEST",
+                description = "INVALID_REQUEST / NOT_VOTE_POST: 일반 글에 options를 보냄 / "
+                        + "INVALID_VOTE_OPTIONS: 선택지 구성 오류",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "401",
@@ -133,7 +150,7 @@ public class PostController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "403",
-                description = "NOT_AUTHOR: 작성자가 아님",
+                description = "NOT_AUTHOR: 작성자가 아님 / NOT_WISHLISTED_ITEM: 찜하지 않은 상품을 골랐음",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "404",
@@ -141,7 +158,12 @@ public class PostController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "409",
-                description = "CONCURRENT_UPDATE: 다른 수정·삭제 요청과 겹침. 새로고침 후 다시 시도",
+                description = "CONCURRENT_UPDATE: 다른 수정·삭제 요청과 겹침 / VOTE_OPTIONS_LOCKED: 투표가 시작돼 선택지 수정 불가 / "
+                        + "VOTE_CLOSED: 마감된 투표",
+                content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(
+                responseCode = "503",
+                description = "PRODUCT_LOOKUP_UNAVAILABLE: 상품 서비스에서 찜 상품을 확인하지 못함",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     @PatchMapping("/{postId}")

@@ -4,7 +4,6 @@ $endpoints = [ordered]@{
     'Config' = 'http://localhost:8888/health'
     'Discovery' = 'http://localhost:8761/health'
     'Gateway' = 'http://localhost:8080/health'
-    'Product' = 'http://localhost:8082/health'
     'Virtual Try-On' = 'http://localhost:8091/health'
     'Recommendation' = 'http://localhost:8092/health'
 }

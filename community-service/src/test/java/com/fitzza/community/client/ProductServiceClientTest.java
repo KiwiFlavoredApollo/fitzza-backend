@@ -6,12 +6,14 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.fitzza.community.client.ProductCatalog.ProductSummary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
@@ -67,6 +69,40 @@ class ProductServiceClientTest {
                 .andRespond(withSuccess("[]", MediaType.APPLICATION_JSON));
 
         assertThat(client.findProduct(404L)).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void readsTheWorldcupResultForTheUser() {
+        server.expect(requestTo(BASE_URL + "/worldcups/9?userId=7"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(ProductServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
+                .andRespond(withSuccess(
+                        "{\"worldcupHistoryId\":9,\"owned\":true,\"winnerProduct\":{\"productId\":55,"
+                                + "\"brandName\":\"Fitzza\",\"productName\":\"오버핏 셔츠\",\"price\":39000,"
+                                + "\"imageUrl\":\"https://cdn.example.com/55.png\",\"status\":\"ON_SALE\"},"
+                                + "\"completedAt\":\"2026-10-13T10:00:00\"}",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BASE_URL + "/worldcups/9?userId=8"))
+                .andRespond(withSuccess(
+                        "{\"worldcupHistoryId\":9,\"owned\":false,\"winnerProduct\":null,\"completedAt\":null}",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(client.findWorldcup(9L, 7L)).contains(new WorldcupResults.WorldcupResult(9L, true,
+                new WorldcupResults.WinnerProduct(55L, "Fitzza", "오버핏 셔츠", 39000, "https://cdn.example.com/55.png")));
+        assertThat(client.findWorldcup(9L, 8L)).contains(new WorldcupResults.WorldcupResult(9L, false, null));
+        server.verify();
+    }
+
+    @Test
+    void findsNoWorldcupResultWhenTheProductServiceSaysNotFound() {
+        server.expect(requestTo(BASE_URL + "/worldcups/404?userId=7"))
+                .andRespond(withStatus(HttpStatus.NOT_FOUND));
+        server.expect(requestTo(BASE_URL + "/worldcups/9?userId=7"))
+                .andRespond(withServerError());
+
+        assertThat(client.findWorldcup(404L, 7L)).isEmpty();
+        assertThatThrownBy(() -> client.findWorldcup(9L, 7L)).isInstanceOf(RestClientException.class);
         server.verify();
     }
 

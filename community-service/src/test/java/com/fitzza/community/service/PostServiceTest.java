@@ -4,17 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fitzza.community.client.SharedTargetGateway;
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostLikeId;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedSnapshot;
+import com.fitzza.community.domain.SharedType;
 import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOption;
 import com.fitzza.community.domain.VoteOptionSource;
@@ -26,6 +30,7 @@ import com.fitzza.community.dto.PostDetailResponse;
 import com.fitzza.community.dto.PostPageResponse;
 import com.fitzza.community.dto.PostSummaryResponse;
 import com.fitzza.community.dto.PostUpdateRequest;
+import com.fitzza.community.dto.VoteOptionRequest;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import com.fitzza.community.repository.CommentRepository;
@@ -62,8 +67,16 @@ class PostServiceTest {
     private final CommentRepository commentRepository = mock(CommentRepository.class);
     private final VoteOptionRepository voteOptionRepository = mock(VoteOptionRepository.class);
     private final UserDirectory userDirectory = mock(UserDirectory.class);
+    private final VoteService voteService = mock(VoteService.class);
+    private final SharedTargetGateway sharedTargetGateway = mock(SharedTargetGateway.class);
     private final PostService postService = new PostService(
-            postRepository, postLikeRepository, commentRepository, voteOptionRepository, userDirectory);
+            postRepository,
+            postLikeRepository,
+            commentRepository,
+            voteOptionRepository,
+            userDirectory,
+            voteService,
+            sharedTargetGateway);
 
     @Test
     void createStoresTrimmedNormalPostForTheHeaderUser() {
@@ -74,7 +87,7 @@ class PostServiceTest {
         });
 
         PostCreatedResponse response = postService.create(
-                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, "  "));
+                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, "  ", null, null));
 
         assertThat(response.postId()).isEqualTo(POST_ID);
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
@@ -86,6 +99,51 @@ class PostServiceTest {
         assertThat(saved.getContent()).isEqualTo("내용입니다");
         assertThat(saved.getCategory()).isEqualTo(PostCategory.DAILY);
         assertThat(saved.getImageUrl()).isNull();
+        assertThat(saved.isShared()).isFalse();
+        verifyNoInteractions(sharedTargetGateway);
+    }
+
+    @Test
+    void createSharingAWorldcupResultStoresTheTargetAndItsSnapshot() {
+        SharedSnapshot snapshot = new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL);
+        when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.WORLDCUP, 9L)).thenReturn(snapshot);
+        when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
+
+        postService.create(AUTHOR_ID, new PostCreateRequest(
+                "월드컵 결과", "우승 상품이에요", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L));
+
+        ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        assertThat(captor.getValue().getSharedType()).isEqualTo(SharedType.WORLDCUP);
+        assertThat(captor.getValue().getSharedId()).isEqualTo(9L);
+        assertThat(captor.getValue().getSharedSnapshot()).isSameAs(snapshot);
+    }
+
+    @Test
+    void createSharingSomeoneElsesResultSavesNothing() {
+        when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.WORLDCUP, 9L))
+                .thenThrow(new CommunityApiException(ErrorCode.NOT_SHARED_OWNER));
+
+        assertThatThrownBy(() -> postService.create(AUTHOR_ID, new PostCreateRequest(
+                        "월드컵 결과", "남의 결과", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L)))
+                .isInstanceOf(CommunityApiException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.NOT_SHARED_OWNER);
+        verify(postRepository, never()).save(any(Post.class));
+    }
+
+    @Test
+    void feedUsesTheSharedSnapshotImageWhenThereIsNoOtherImage() {
+        Post shared = post(3L, AUTHOR_ID, null);
+        shared.attachShared(SharedType.WORLDCUP, 9L,
+                new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL));
+        when(postRepository.findAll(ArgumentMatchers.<Specification<Post>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(shared), PageRequest.of(0, 20), 1));
+
+        PostPageResponse feed = postService.getFeed(null, null, null, 0, 20);
+
+        assertThat(feed.content().get(0).thumbnailUrl()).isEqualTo(OPTION_IMAGE_URL);
+        verifyNoInteractions(voteOptionRepository);
     }
 
     @Test
@@ -154,6 +212,21 @@ class PostServiceTest {
     }
 
     @Test
+    void detailShowsTheSharedTargetAndItsSnapshot() {
+        Post post = post(POST_ID, AUTHOR_ID, null);
+        post.attachShared(SharedType.WORLDCUP, 9L, new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL));
+        when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
+        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
+
+        PostDetailResponse detail = postService.getDetail(POST_ID, null);
+
+        assertThat(detail.shared().type()).isEqualTo(SharedType.WORLDCUP);
+        assertThat(detail.shared().id()).isEqualTo(9L);
+        assertThat(detail.shared().snapshot().productName()).isEqualTo("오버핏 셔츠");
+        assertThat(detail.shared().snapshot().imageUrl()).isEqualTo(OPTION_IMAGE_URL);
+    }
+
+    @Test
     void detailCountsTheViewAndTellsWhetherTheViewerLikedIt() {
         Post post = post(POST_ID, AUTHOR_ID, IMAGE_URL);
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
@@ -176,6 +249,7 @@ class PostServiceTest {
         assertThat(detail.voteEndAt()).isNull();
         assertThat(detail.voteClosed()).isFalse();
         assertThat(detail.voteOptions()).isEmpty();
+        assertThat(detail.shared()).isNull();
         verifyNoInteractions(voteOptionRepository);
     }
 
@@ -238,6 +312,39 @@ class PostServiceTest {
         assertThat(post.getContent()).isEqualTo("내용");
         assertThat(post.getCategory()).isEqualTo(PostCategory.FASHION);
         assertThat(post.getImageUrl()).isEqualTo(IMAGE_URL);
+        verifyNoInteractions(voteService);
+    }
+
+    @Test
+    void updateHandsSentOptionsToTheVoteServiceBeforeChangingTheText() {
+        Post post = votePost(POST_ID);
+        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
+        List<VoteOptionRequest> options = List.of(
+                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL));
+        PostUpdateRequest request = new PostUpdateRequest();
+        request.setTitle("바뀐 투표");
+        request.setOptions(options);
+
+        postService.update(AUTHOR_ID, POST_ID, request);
+
+        verify(voteService).replaceOptions(AUTHOR_ID, POST_ID, options);
+        assertThat(post.getTitle()).isEqualTo("바뀐 투표");
+    }
+
+    @Test
+    void rejectedOptionsStopTheWholeUpdate() {
+        PostUpdateRequest request = new PostUpdateRequest();
+        request.setTitle("바뀐 투표");
+        request.setOptions(List.of());
+        doThrow(new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED))
+                .when(voteService).replaceOptions(AUTHOR_ID, POST_ID, List.of());
+
+        assertThatThrownBy(() -> postService.update(AUTHOR_ID, POST_ID, request))
+                .isInstanceOf(CommunityApiException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.VOTE_OPTIONS_LOCKED);
+        verify(postRepository, never()).findByIdAndDeletedAtIsNull(anyLong());
     }
 
     @Test

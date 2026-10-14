@@ -15,7 +15,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
-import com.fitzza.order.cart.dto.CartResponse;
 import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.service.CartService;
 import com.fitzza.order.global.constant.ApiHeaders;
@@ -49,14 +48,13 @@ class CartControllerTest {
     }
 
     @Test
-    void getCartReturnsItemsWithTotals() throws Exception {
-        when(cartService.findCart(1L)).thenReturn(CartResponse.from(List.of(ITEM)));
+    void getCartReturnsItems() throws Exception {
+        when(cartService.findCart(1L)).thenReturn(List.of(ITEM));
 
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].productName").value("셔츠"))
-                .andExpect(jsonPath("$.totalQuantity").value(2))
-                .andExpect(jsonPath("$.totalPrice").value(60000));
+                .andExpect(jsonPath("$[0].productName").value("셔츠"))
+                .andExpect(jsonPath("$[0].linePrice").value(60000));
     }
 
     @Test
@@ -72,16 +70,13 @@ class CartControllerTest {
     }
 
     @Test
-    void addCartDefaultsQuantityToOne() throws Exception {
-        when(cartService.addCart(eq(1L), any(CartCreateRequest.class))).thenReturn(ITEM);
-
+    void addCartRejectsMissingQuantity() throws Exception {
         mockMvc.perform(post("/api/carts")
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":10}"))
-                .andExpect(status().isCreated());
-
-        verify(cartService).addCart(1L, new CartCreateRequest(10L, 1));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("quantity")));
     }
 
     @Test
@@ -106,7 +101,7 @@ class CartControllerTest {
     }
 
     @Test
-    void addCartMapsUnavailableOptionToConflict() throws Exception {
+    void addCartMapsUnavailableOptionToBadRequest() throws Exception {
         when(cartService.addCart(eq(1L), any(CartCreateRequest.class)))
                 .thenThrow(new BusinessException(ErrorCode.OPTION_NOT_AVAILABLE));
 
@@ -114,7 +109,7 @@ class CartControllerTest {
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"optionId\":10,\"quantity\":1}"))
-                .andExpect(status().isConflict())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("OPTION_NOT_AVAILABLE"));
     }
 

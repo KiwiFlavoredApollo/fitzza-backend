@@ -39,6 +39,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 | `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`, product `GET /products/measurements` |
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
 | `PRODUCT_SERVICE_TOKEN` | product-service | product-service가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다. |
+| `REVIEW_SERVICE_TOKEN` | review-service | order `GET /order-items/{orderItemId}`(리뷰·설문 작성 전 본인 주문 확인). order-service가 이 토큰을 허용하기 전에는 비워 두며, 그동안 리뷰·설문 작성은 503이다. |
 
 `COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
 
@@ -52,13 +53,15 @@ user-service의 8081 포트와 notification-service의 8086 포트는 호스트�
 
 알림 API(`GET /api/notifications`, `PATCH /api/notifications/{notificationId}`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다. 투표는 community-service가 1분마다(`fitzza.vote.close-check-delay-ms`, 기본 60000) 마감 시각이 지난 글을 찾아 마감 처리하고, 작성자에게 `VOTE_CLOSED` 알림을 보냅니다. 알림 서비스가 꺼져 있어 보내지 못한 알림은 다음 실행에서 성공할 때까지 다시 보냅니다. 실패한 글은 재시도 순서가 뒤로 밀려 새로 마감된 투표의 알림을 막지 않습니다. 작성자가 직접 조기 종료한 투표에는 알림을 보내지 않습니다.
 
-order-service(8083), community-service(8084), review-service(8085)도 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
+product-service(8082), order-service(8083), community-service(8084), review-service(8085)는 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 찜 여부를 보거나 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 상품은 `http://localhost:8080/api/products`, 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
 
 notification-service의 8086 포트는 호스트에 공개하지 않습니다. 서비스 간 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
-`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 인증 실패 시 Gateway는 401을 반환합니다.
+Gateway는 요청마다 `X-Request-Id`를 정해 뒤쪽 서비스로 넘기고 응답 헤더에도 담습니다(브라우저에서도 읽을 수 있음). 클라이언트가 영문·숫자·`._-` 8~64자로 보내면 그 값을 이어 쓰고, 아니면 새로 만듭니다. user·community·notification-service는 이 값을 로그 줄마다 `[요청 ID]`로 찍고, community-service는 다른 서비스를 호출할 때도 같은 값을 넘깁니다. 오류 문의를 받으면 응답의 `X-Request-Id`로 `docker compose logs | grep <ID>` 해서 같은 요청의 로그를 모아 볼 수 있습니다.
+
+`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 추천 API(`/api/v1/recommendations/**`)도 회원만 쓸 수 있어 토큰이 없으면 Gateway가 401 `UNAUTHENTICATED`로 막습니다. 인증 실패 시 Gateway는 401을 반환합니다.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/users/me
@@ -71,7 +74,7 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 ```
 
 - 애플리케이션 상태는 서비스 컨테이너에 직접 `GET /health`로 확인합니다. 정상일 때는 `200`과 `{"status":"UP","liveness":"UP","readiness":"UP"}`을, 준비되지 않았을 때는 `503`과 `{"status":"NOT_READY","liveness":"UP","readiness":"DOWN"}`을 반환합니다. Gateway는 다른 서비스의 `/health`를 프록시하지 않습니다.
-- 로컬에서 직접 확인 가능한 상태 주소: Config <http://localhost:8888/health>, Discovery <http://localhost:8761/health>, Gateway <http://localhost:8080/health>, Product <http://localhost:8082/health>, Virtual Try-On <http://localhost:8091/health>, Recommendation <http://localhost:8092/health>
+- 로컬에서 직접 확인 가능한 상태 주소: Config <http://localhost:8888/health>, Discovery <http://localhost:8761/health>, Gateway <http://localhost:8080/health>, Virtual Try-On <http://localhost:8091/health>, Recommendation <http://localhost:8092/health>
 - Eureka 대시보드: <http://localhost:8761>
 - LocalStack 상태: <http://localhost:4566/_localstack/health>
 

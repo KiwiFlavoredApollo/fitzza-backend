@@ -1,5 +1,6 @@
 package com.fitzza.community.client;
 
+import com.fitzza.community.logging.RequestIdPropagation;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,6 @@ public class UserClientConfig {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         requestFactory.setReadTimeout(READ_TIMEOUT_MILLIS);
-        return RestClient.builder().requestFactory(requestFactory);
+        return RestClient.builder().requestFactory(requestFactory).requestInterceptor(new RequestIdPropagation());
     }
 }

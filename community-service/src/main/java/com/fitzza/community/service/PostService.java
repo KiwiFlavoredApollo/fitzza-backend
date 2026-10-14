@@ -1,10 +1,12 @@
 package com.fitzza.community.service;
 
+import com.fitzza.community.client.SharedTargetGateway;
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostLikeId;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedSnapshot;
 import com.fitzza.community.dto.AuthorResponse;
 import com.fitzza.community.dto.LikeCountResponse;
 import com.fitzza.community.dto.LikeStatusResponse;
@@ -14,6 +16,7 @@ import com.fitzza.community.dto.PostDetailResponse;
 import com.fitzza.community.dto.PostPageResponse;
 import com.fitzza.community.dto.PostSummaryResponse;
 import com.fitzza.community.dto.PostUpdateRequest;
+import com.fitzza.community.dto.SharedResponse;
 import com.fitzza.community.dto.VoteOptionResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
@@ -47,18 +50,24 @@ public class PostService {
     private final CommentRepository commentRepository;
     private final VoteOptionRepository voteOptionRepository;
     private final UserDirectory userDirectory;
+    private final VoteService voteService;
+    private final SharedTargetGateway sharedTargetGateway;
 
     public PostService(
             PostRepository postRepository,
             PostLikeRepository postLikeRepository,
             CommentRepository commentRepository,
             VoteOptionRepository voteOptionRepository,
-            UserDirectory userDirectory) {
+            UserDirectory userDirectory,
+            VoteService voteService,
+            SharedTargetGateway sharedTargetGateway) {
         this.postRepository = postRepository;
         this.postLikeRepository = postLikeRepository;
         this.commentRepository = commentRepository;
         this.voteOptionRepository = voteOptionRepository;
         this.userDirectory = userDirectory;
+        this.voteService = voteService;
+        this.sharedTargetGateway = sharedTargetGateway;
     }
 
     @Transactional(readOnly = true)
@@ -92,12 +101,17 @@ public class PostService {
         return PostPageResponse.of(content, posts);
     }
 
-    // 썸네일은 첨부 이미지, 없으면 투표글의 첫 번째 선택지 이미지 순으로 고른다.
+    // 썸네일은 첨부 이미지, 투표글의 첫 번째 선택지 이미지, 공유 대상 스냅샷 이미지 순으로 고른다.
     private static String thumbnailOf(Post post, Map<Long, String> firstOptionImages) {
         if (hasText(post.getImageUrl())) {
             return post.getImageUrl();
         }
-        return firstOptionImages.get(post.getId());
+        String optionImage = firstOptionImages.get(post.getId());
+        if (hasText(optionImage)) {
+            return optionImage;
+        }
+        SharedSnapshot snapshot = post.getSharedSnapshot();
+        return snapshot != null && hasText(snapshot.getImageUrl()) ? snapshot.getImageUrl() : null;
     }
 
     // 첨부 이미지가 없는 투표글만 선택지 이미지를 찾는다. 해당하는 글이 없으면 조회하지 않는다.
@@ -138,6 +152,7 @@ public class PostService {
                 post.getPostType(),
                 new AuthorResponse(post.getUserId(), nickname),
                 post.getImageUrl(),
+                SharedResponse.of(post),
                 postLikeRepository.countByPostId(postId),
                 liked,
                 commentRepository.countByPostIdAndDeletedFalse(postId),
@@ -151,13 +166,24 @@ public class PostService {
 
     @Transactional
     public PostCreatedResponse create(Long userId, PostCreateRequest request) {
-        Post post = postRepository.save(Post.createNormal(
-                userId, request.title(), request.content(), request.category(), request.imageUrl()));
-        return new PostCreatedResponse(post.getId());
+        // 남의 결과를 공유하려는 요청은 글을 만들기 전에 거른다.
+        SharedSnapshot snapshot = request.sharedType() == null
+                ? null
+                : sharedTargetGateway.resolve(userId, request.sharedType(), request.sharedId());
+        Post post = Post.createNormal(
+                userId, request.title(), request.content(), request.category(), request.imageUrl());
+        if (snapshot != null) {
+            post.attachShared(request.sharedType(), request.sharedId(), snapshot);
+        }
+        return new PostCreatedResponse(postRepository.save(post).getId());
     }
 
     @Transactional
     public void update(Long userId, Long postId, PostUpdateRequest request) {
+        // 선택지를 먼저 바꾼다. 거절되면 같은 트랜잭션의 제목·본문 변경도 함께 취소된다.
+        if (request.getOptions() != null) {
+            voteService.replaceOptions(userId, postId, request.getOptions());
+        }
         Post post = findOwnPost(userId, postId);
         if (request.getTitle() != null) {
             post.changeTitle(request.getTitle());
