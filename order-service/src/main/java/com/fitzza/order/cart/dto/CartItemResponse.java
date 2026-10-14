@@ -9,7 +9,7 @@ public record CartItemResponse(
         @Schema(description = "장바구니 ID", example = "1") Long cartId,
         @Schema(description = "상품 옵션 ID", example = "10") Long optionId,
         @Schema(description = "수량", example = "2") Integer quantity,
-        @Schema(description = "구매 가능 여부. 옵션이 없어졌거나 판매 중이 아니면 false이며 합계에서 제외된다.") boolean available,
+        @Schema(description = "구매 가능 여부. 옵션이 없어졌거나 판매 중이 아니면 false") boolean available,
         @Schema(description = "상품 ID") Long productId,
         @Schema(description = "브랜드명") String brandName,
         @Schema(description = "상품명") String productName,

@@ -2,7 +2,6 @@ package com.fitzza.order.cart.service;
 
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
-import com.fitzza.order.cart.dto.CartResponse;
 import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.entity.CartEntity;
 import com.fitzza.order.cart.repository.CartRepository;
@@ -27,14 +26,13 @@ public class CartService {
     private final ProductOptionClient productOptionClient;
     private final TransactionTemplate transactionTemplate;
 
-    public CartResponse findCart(Long userId) {
+    public List<CartItemResponse> findCart(Long userId) {
         List<CartEntity> carts = cartRepository.findAllByUserIdOrderByCartIdDesc(userId);
         Map<Long, ProductOptionResponse> options =
                 productOptionClient.findOptions(carts.stream().map(CartEntity::getOptionId).toList());
-        List<CartItemResponse> items = carts.stream()
+        return carts.stream()
                 .map(cart -> CartItemResponse.of(cart, options.get(cart.getOptionId())))
                 .toList();
-        return CartResponse.from(items);
     }
 
     public CartItemResponse addCart(Long userId, CartCreateRequest request) {
