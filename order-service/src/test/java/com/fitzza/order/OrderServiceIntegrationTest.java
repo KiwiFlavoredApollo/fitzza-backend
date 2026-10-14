@@ -78,7 +78,7 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    void cartFlowSumsQuantityMergesOptionsAndTotalsAvailableItems() throws Exception {
+    void cartFlowSumsQuantityAndMergesOptions() throws Exception {
         long firstCartId = addCart(10, 2);
         mockMvc.perform(post("/api/carts")
                         .header(ApiHeaders.USER_ID, USER_ID)
@@ -104,10 +104,11 @@ class OrderServiceIntegrationTest {
 
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items.length()").value(2))
-                .andExpect(jsonPath("$.items[0].cartId").value(secondCartId))
-                .andExpect(jsonPath("$.totalQuantity").value(6))
-                .andExpect(jsonPath("$.totalPrice").value(5 * 30000 + 45000));
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].cartId").value(secondCartId))
+                .andExpect(jsonPath("$[0].quantity").value(1))
+                .andExpect(jsonPath("$[1].quantity").value(5))
+                .andExpect(jsonPath("$[1].linePrice").value(5 * 30000));
 
         mockMvc.perform(patch("/api/carts/" + firstCartId)
                         .header(ApiHeaders.USER_ID, USER_ID)
@@ -117,8 +118,9 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.cartId").value(secondCartId))
                 .andExpect(jsonPath("$.quantity").value(3));
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
-                .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.totalPrice").value(3 * 45000));
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].quantity").value(3))
+                .andExpect(jsonPath("$[0].linePrice").value(3 * 45000));
 
         mockMvc.perform(delete("/api/carts/" + secondCartId).header(ApiHeaders.USER_ID, OTHER_USER_ID))
                 .andExpect(status().isForbidden());
@@ -127,8 +129,7 @@ class OrderServiceIntegrationTest {
         mockMvc.perform(delete("/api/carts/" + secondCartId).header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
-                .andExpect(jsonPath("$.items.length()").value(0))
-                .andExpect(jsonPath("$.totalPrice").value(0));
+                .andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test
@@ -138,9 +139,8 @@ class OrderServiceIntegrationTest {
 
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].available").value(false))
-                .andExpect(jsonPath("$.totalQuantity").value(0))
-                .andExpect(jsonPath("$.totalPrice").value(0));
+                .andExpect(jsonPath("$[0].available").value(false))
+                .andExpect(jsonPath("$[0].linePrice").value(0));
     }
 
     private long addCart(long optionId, int quantity) throws Exception {

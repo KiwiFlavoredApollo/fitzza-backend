@@ -15,7 +15,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
-import com.fitzza.order.cart.dto.CartResponse;
 import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.service.CartService;
 import com.fitzza.order.global.constant.ApiHeaders;
@@ -49,14 +48,13 @@ class CartControllerTest {
     }
 
     @Test
-    void getCartReturnsItemsWithTotals() throws Exception {
-        when(cartService.findCart(1L)).thenReturn(CartResponse.from(List.of(ITEM)));
+    void getCartReturnsItems() throws Exception {
+        when(cartService.findCart(1L)).thenReturn(List.of(ITEM));
 
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].productName").value("셔츠"))
-                .andExpect(jsonPath("$.totalQuantity").value(2))
-                .andExpect(jsonPath("$.totalPrice").value(60000));
+                .andExpect(jsonPath("$[0].productName").value("셔츠"))
+                .andExpect(jsonPath("$[0].linePrice").value(60000));
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.fitzza.order.cart.controller;
 
 import com.fitzza.order.cart.dto.CartCreateRequest;
 import com.fitzza.order.cart.dto.CartItemResponse;
-import com.fitzza.order.cart.dto.CartResponse;
 import com.fitzza.order.cart.dto.CartUpdateRequest;
 import com.fitzza.order.cart.service.CartService;
 import com.fitzza.order.global.constant.ApiHeaders;
@@ -15,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -38,14 +38,14 @@ public class CartController {
 
     private final CartService cartService;
 
-    @Operation(summary = "장바구니 조회", description = "최근에 담은 순서로 항목과 구매 가능 항목의 합계를 반환한다.")
+    @Operation(summary = "장바구니 조회", description = "최근에 담은 순서로 장바구니 항목을 반환한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "503", description = "상품 서비스 사용 불가",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @GetMapping
-    public CartResponse getCart(
+    public List<CartItemResponse> getCart(
             @Parameter(description = USER_ID_DESCRIPTION, required = true)
             @RequestHeader(ApiHeaders.USER_ID) Long userId) {
         return cartService.findCart(userId);
