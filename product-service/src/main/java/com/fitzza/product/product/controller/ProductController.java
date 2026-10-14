@@ -1,10 +1,9 @@
 package com.fitzza.product.product.controller;
 
 import com.fitzza.product.global.constant.PagingConstants;
-import com.fitzza.product.global.dto.PageResponse;
 import com.fitzza.product.global.exception.ApiErrorResponse;
 import com.fitzza.product.product.dto.ProductDetailResponse;
-import com.fitzza.product.product.dto.ProductListResponse;
+import com.fitzza.product.product.dto.ProductListPageResponse;
 import com.fitzza.product.product.dto.ProductSortType;
 import com.fitzza.product.product.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,22 +31,26 @@ public class ProductController {
     private final ProductService productService;
 
     @Operation(summary = "상품 목록 조회",
-            description = "카테고리 코드 길이에 따라 대분류(3)·중분류(6)·소분류(9)로 조회한다. 코드가 없으면 전체 노출 상품을 반환한다.")
+            description = "카테고리 코드 길이에 따라 대분류(3)·중분류(6)·소분류(9)로 조회한다. "
+                    + "코드가 없으면 전체 노출 상품을 반환한다. "
+                    + "sort는 LATEST(상품 ID 내림차순) 또는 LOW_PRICE(낮은 가격, 같으면 상품 ID 내림차순)이며 "
+                    + "그 밖의 값은 LATEST로 처리한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @GetMapping
-    public PageResponse<ProductListResponse> getProducts(
+    public ProductListPageResponse getProducts(
             @Parameter(description = "카테고리 코드. 길이 3은 대분류, 6은 중분류, 9는 소분류", example = "001")
             @RequestParam(required = false) String category,
-            @Parameter(description = "정렬 기준") @RequestParam(defaultValue = "LATEST") ProductSortType sort,
+            @Parameter(description = "정렬 기준. LATEST 또는 LOW_PRICE. 잘못된 값은 LATEST", example = "LATEST")
+            @RequestParam(required = false) String sort,
             @Parameter(description = "페이지 번호(0부터 시작)")
             @RequestParam(defaultValue = PagingConstants.DEFAULT_PAGE) @Min(0) int page,
             @Parameter(description = "페이지 크기")
             @RequestParam(defaultValue = PagingConstants.DEFAULT_SIZE) @Min(1) @Max(PagingConstants.MAX_SIZE) int size) {
-        return productService.findProducts(category, sort, page, size);
+        return productService.findProducts(category, ProductSortType.from(sort), page, size);
     }
 
     @Operation(summary = "상품 상세 조회", description = "상품 기본 정보와 옵션별 실측 정보를 함께 조회한다.")
