@@ -41,7 +41,7 @@ public class SurveyController {
 
     @Operation(
             summary = "사이즈 설문 작성",
-            description = "내가 산, 배송이 끝난 주문 상품에만 쓸 수 있다. 주문 상품 하나에 한 번만 쓰고 수정할 수 없다.")
+            description = "내가 주문한(구매 완료된) 상품에만 쓸 수 있다. 주문 상품 하나에 한 번만 쓰고 수정할 수 없다.")
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
         @ApiResponse(
@@ -62,7 +62,7 @@ public class SurveyController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "409",
-                description = "DUPLICATE_SURVEY: 이미 작성 / ORDER_NOT_COMPLETED: 배송 완료 전",
+                description = "DUPLICATE_SURVEY: 이미 작성 / ORDER_NOT_COMPLETED: 구매 완료(COMPLETED)가 아닌 주문",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "503",
