@@ -2,7 +2,11 @@ package com.fitzza.community.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
+import com.fitzza.community.client.ComboResults.ComboResult;
 import com.fitzza.community.client.ProductCatalog.ProductSummary;
 import com.fitzza.community.client.VoteItemGateway.VoteItemSnapshot;
 import com.fitzza.community.domain.VoteItemType;
@@ -11,6 +15,7 @@ import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -28,7 +33,8 @@ class VerifiedVoteItemGatewayTest {
     private static final String PRODUCT_IMAGE = "https://cdn.example.com/55.png";
 
     private final FakeProductCatalog catalog = new FakeProductCatalog();
-    private final VerifiedVoteItemGateway gateway = new VerifiedVoteItemGateway(catalog);
+    private final ComboResults combos = mock(ComboResults.class);
+    private final VerifiedVoteItemGateway gateway = new VerifiedVoteItemGateway(catalog, combos);
 
     @Test
     void wishlistedProductIsStoredWithTheProductServiceImageNameAndPrice() {
@@ -100,15 +106,79 @@ class VerifiedVoteItemGatewayTest {
     }
 
     @Test
-    void uploadsAndAiRecommendationsAreNotCheckedYet() {
+    void uploadsKeepTheRequestImageWithoutAnyLookup() {
         VoteItemSnapshot upload =
                 gateway.resolve(USER_ID, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, REQUEST_IMAGE);
-        VoteItemSnapshot recommended =
-                gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, 7L, REQUEST_IMAGE);
 
         assertThat(upload).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
-        assertThat(recommended).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
         assertThat(catalog.calls).isZero();
+        verifyNoInteractions(combos);
+    }
+
+    @Test
+    void myRecommendedComboUsesItsFirstImageAndTotalPrice() {
+        when(combos.findCombo(31L, USER_ID)).thenReturn(Optional.of(new ComboResult(
+                true,
+                List.of(new ResultProduct(1L, "셔츠", 39000, PRODUCT_IMAGE),
+                        new ResultProduct(2L, "슬랙스", 50000, "https://cdn.example.com/2.png")),
+                89000,
+                "잘 어울려요")));
+
+        assertThat(resolveRecommendedCombo(USER_ID, 31L))
+                .isEqualTo(new VoteItemSnapshot(PRODUCT_IMAGE, null, 89000));
+    }
+
+    @Test
+    void aComboWhoseFirstItemHasNoImageKeepsTheRequestImage() {
+        when(combos.findCombo(31L, USER_ID)).thenReturn(Optional.of(new ComboResult(
+                true, List.of(new ResultProduct(1L, "셔츠", 39000, null)), 39000, null)));
+
+        assertThat(resolveRecommendedCombo(USER_ID, 31L).imageUrl()).isEqualTo(REQUEST_IMAGE);
+    }
+
+    @Test
+    void someoneElsesOrAMissingOrAnEmptyComboIsRejected() {
+        when(combos.findCombo(31L, OTHER_USER_ID)).thenReturn(Optional.of(new ComboResult(false, null, null, null)));
+        when(combos.findCombo(32L, USER_ID)).thenReturn(Optional.empty());
+        when(combos.findCombo(33L, USER_ID)).thenReturn(Optional.of(new ComboResult(true, List.of(), 0, null)));
+
+        assertRejectedWith(() -> resolveRecommendedCombo(OTHER_USER_ID, 31L), ErrorCode.NOT_RECOMMENDED_ITEM);
+        assertRejectedWith(() -> resolveRecommendedCombo(USER_ID, 32L), ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(() -> resolveRecommendedCombo(USER_ID, 33L), ErrorCode.INVALID_VOTE_OPTIONS);
+    }
+
+    @Test
+    void aRecommendedComboIsRejectedInsteadOfTrustedWhenTheRecommendationServiceIsDown() {
+        when(combos.findCombo(31L, USER_ID)).thenThrow(new ResourceAccessException("not configured"));
+
+        assertRejectedWith(() -> resolveRecommendedCombo(USER_ID, 31L), ErrorCode.RECOMMENDATION_LOOKUP_UNAVAILABLE);
+    }
+
+    // 받은 추천인지 확인할 API가 없어 단품은 상품이 있는지만 보고 상품 서비스 값으로 채운다.
+    @Test
+    void aRecommendedProductIsFilledFromTheProductServiceWithoutAWishlistCheck() {
+        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
+
+        VoteItemSnapshot snapshot =
+                gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.PRODUCT, 55L, REQUEST_IMAGE);
+
+        assertThat(snapshot).isEqualTo(new VoteItemSnapshot(PRODUCT_IMAGE, "오버핏 셔츠", 39000));
+        verifyNoInteractions(combos);
+    }
+
+    @Test
+    void aRecommendationNeedsAnIdAndCannotBeAnImage() {
+        assertRejectedWith(
+                () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, REQUEST_IMAGE),
+                ErrorCode.INVALID_VOTE_OPTIONS);
+        assertRejectedWith(
+                () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.IMAGE, 5L, REQUEST_IMAGE),
+                ErrorCode.INVALID_VOTE_OPTIONS);
+        verifyNoInteractions(combos);
+    }
+
+    private VoteItemSnapshot resolveRecommendedCombo(Long userId, Long comboId) {
+        return gateway.resolve(userId, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, comboId, REQUEST_IMAGE);
     }
 
     private VoteItemSnapshot resolveWishlist(Long userId, Long itemId) {
