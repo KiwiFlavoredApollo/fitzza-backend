@@ -42,7 +42,8 @@ public class OrderController {
     private final OrderService orderService;
 
     @Operation(summary = "주문 생성",
-            description = "선택한 장바구니 항목의 수량과 현재 상품 가격을 주문 항목에 기록(스냅샷)하고 장바구니에서 삭제한다. 주문은 PENDING 상태로 생성된다.")
+            description = "선택한 장바구니 항목의 수량과 현재 상품 가격을 주문 항목에 기록(스냅샷)하고 장바구니에서 삭제한다. "
+                    + "결제창 없이 주문 성공으로 처리하며 COMPLETED 상태로 생성된다.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "주문 생성 성공"),
             @ApiResponse(responseCode = "404", description = "장바구니 항목 없음 또는 다른 사용자의 항목",

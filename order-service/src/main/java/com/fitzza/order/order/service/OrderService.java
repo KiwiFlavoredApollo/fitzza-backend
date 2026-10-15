@@ -136,7 +136,7 @@ public class OrderService {
                 .orderNum(orderNumberGenerator.generateOrderNumber())
                 .userId(userId)
                 .totalPrice(calculateTotalPrice(lockedCarts, options))
-                .orderStatus(OrderStatus.PENDING)
+                .orderStatus(OrderStatus.COMPLETED)
                 .recipientName(request.recipientName())
                 .recipientPhone(request.recipientPhone())
                 .shippingAddress(request.shippingAddress())
