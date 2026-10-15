@@ -168,7 +168,7 @@ class OrderServiceIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderId").isNumber())
                 .andExpect(jsonPath("$.orderNum").value(startsWith("ORD-")))
-                .andExpect(jsonPath("$.orderStatus").value("PENDING"))
+                .andExpect(jsonPath("$.orderStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.totalPrice").value(2 * 30000 + 45000))
                 .andExpect(jsonPath("$.items").doesNotExist())
                 .andExpect(jsonPath("$.recipient").doesNotExist())

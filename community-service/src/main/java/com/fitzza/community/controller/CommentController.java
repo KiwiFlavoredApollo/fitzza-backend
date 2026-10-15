@@ -34,7 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "댓글", description = "댓글·답글 조회·작성·수정·삭제·좋아요")
 @RestController
-@RequestMapping("/api/community")
+@RequestMapping("/api")
 public class CommentController {
 
     private final CommentService commentService;
@@ -55,7 +55,7 @@ public class CommentController {
                 description = "POST_NOT_FOUND: 없거나 삭제된 글",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @GetMapping("/posts/{postId}/comments")
+    @GetMapping("/community/posts/{postId}/comments")
     public List<CommentResponse> getComments(
             @PathVariable("postId") Long postId,
             @Parameter(hidden = true) @RequestHeader(name = AuthHeaders.USER_ID, required = false) Long userId) {
@@ -81,7 +81,7 @@ public class CommentController {
                 description = "POST_NOT_FOUND",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    @PostMapping("/posts/{postId}/comments")
+    @PostMapping("/community/posts/{postId}/comments")
     @ResponseStatus(HttpStatus.CREATED)
     public CommentCreatedResponse create(
             @Parameter(hidden = true) @RequestHeader(AuthHeaders.USER_ID) Long userId,

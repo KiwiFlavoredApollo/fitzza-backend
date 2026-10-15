@@ -26,12 +26,14 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(controllers = InternalNotificationController.class, properties = {
     "fitzza.service-tokens.community=" + InternalNotificationControllerTest.COMMUNITY_TOKEN,
     "fitzza.service-tokens.vton=" + InternalNotificationControllerTest.VTON_TOKEN,
+    "fitzza.service-tokens.recommendation=" + InternalNotificationControllerTest.RECOMMENDATION_TOKEN,
     "spring.cloud.config.enabled=false"
 })
 class InternalNotificationControllerTest {
 
     static final String COMMUNITY_TOKEN = "test-only-community-service-token-32b";
     static final String VTON_TOKEN = "test-only-vton-service-token-32-bytes";
+    static final String RECOMMENDATION_TOKEN = "test-only-recommendation-token-32-bytes";
     private static final String SERVICE_TOKEN = "X-Service-Token";
     private static final String EVENTS = "/notifications/events";
     private static final String COMMENT_EVENT = "{\"eventId\":\"comment-55\",\"type\":\"COMMENT\",\"userId\":7,"
@@ -70,6 +72,22 @@ class InternalNotificationControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
         verifyNoInteractions(notificationService);
+    }
+
+    // 추천 서비스는 추천 결과가 나오면 자기 토큰으로 RECOMMENDATION_DONE 알림을 보낸다.
+    @Test
+    void acceptsARecommendationResultFromTheRecommendationService() throws Exception {
+        mockMvc.perform(post(EVENTS)
+                        .header(SERVICE_TOKEN, RECOMMENDATION_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"eventId\":\"recommendation-req-1-done\",\"type\":\"RECOMMENDATION_DONE\","
+                                + "\"userId\":7,\"targetId\":\"req-1\",\"content\":\"추천 결과가 나왔어요.\"}"))
+                .andExpect(status().isAccepted());
+
+        ArgumentCaptor<NotificationEventRequest> captor = ArgumentCaptor.forClass(NotificationEventRequest.class);
+        verify(notificationService).receive(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo(NotificationType.RECOMMENDATION_DONE);
+        assertThat(captor.getValue().targetId()).isEqualTo("req-1");
     }
 
     @ParameterizedTest
