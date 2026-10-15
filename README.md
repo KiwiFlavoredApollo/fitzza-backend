@@ -59,7 +59,7 @@ user-service의 8081 포트와 notification-service의 8086 포트는 호스트�
 
 사이즈 설문(`POST /api/surveys`)이 저장되면 review-service가 저장이 확정된 뒤 별도 스레드에서 추천 서비스 `POST /recommendations/size-feedback`(Body: `userId`, `productId`, `optionId`, `sizeFeedback`)으로 결과를 보내 선호 실측을 갱신하게 합니다. 추천 서비스가 응답하지 않아도 설문 작성은 그대로 성공하고, 보내지 못한 설문은 5분마다(`fitzza.size-feedback.retry-delay-ms`, 기본 300000) 다시 보냅니다. `RECOMMENDATION_SERVICE_URL`이나 `REVIEW_SERVICE_TOKEN`이 비어 있으면 보내지 않으며, 그동안 쓴 설문은 두 값을 설정한 뒤 재시도에서 보내집니다.
 
-product-service(8082), order-service(8083), community-service(8084), review-service(8085)는 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 찜 여부를 보거나 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 상품은 `http://localhost:8080/api/products`, 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
+product-service(8082), order-service(8083), community-service(8084), review-service(8085)는 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 찜 여부를 보거나 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 상품은 `http://localhost:8080/api/products`, 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다. FE는 `/api/v1/**`로 호출하고, Swagger·기존 도구는 `/api/**`를 그대로 씁니다. Gateway는 Java 서비스로 넘기기 전에 `/api/v1`을 `/api`로 바꿉니다. 가상 피팅·추천은 서비스가 이미 `/api/v1`을 쓰므로 바꾸지 않습니다.
 
 notification-service의 8086 포트는 호스트에 공개하지 않습니다. 서비스 간 호출은 Compose 네트워크의 `http://notification-service:8086`을 사용하고, 공개 알림 API는 `http://localhost:8080/api/notifications`로 Gateway를 통해 호출합니다. `X-User-Id`는 Gateway에서 검증한 사용자 ID만 신뢰합니다.
 
@@ -67,10 +67,11 @@ Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거�
 
 Gateway는 요청마다 `X-Request-Id`를 정해 뒤쪽 서비스로 넘기고 응답 헤더에도 담습니다(브라우저에서도 읽을 수 있음). 클라이언트가 영문·숫자·`._-` 8~64자로 보내면 그 값을 이어 쓰고, 아니면 새로 만듭니다. user·community·notification-service는 이 값을 로그 줄마다 `[요청 ID]`로 찍고, community-service는 다른 서비스를 호출할 때도 같은 값을 넘깁니다. 오류 문의를 받으면 응답의 `X-Request-Id`로 `docker compose logs | grep <ID>` 해서 같은 요청의 로그를 모아 볼 수 있습니다.
 
-`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 추천 API(`/api/v1/recommendations/**`)도 회원만 쓸 수 있어 토큰이 없으면 Gateway가 401 `UNAUTHENTICATED`로 막습니다. 인증 실패 시 Gateway는 401을 반환합니다.
+`POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`(또는 같은 경로의 `/api/v1/auth/...`)은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 추천 API(`/api/v1/recommendations/**`)도 회원만 쓸 수 있어 토큰이 없으면 Gateway가 401 `UNAUTHENTICATED`로 막습니다. 인증 실패 시 Gateway는 401을 반환합니다.
 
 ```bash
 curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/users/me
+curl -H "Authorization: Bearer <access-token>" http://localhost:8080/api/v1/users/me
 ```
 
 API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:8080/swagger-ui.html>. 오른쪽 위 목록에서 user-service, product-service, order-service, community-service, notification-service, review-service를 고르고, 로그인이 필요한 API는 `Authorize`에 Access Token을 넣은 뒤 호출합니다. 문서에서 `/api`로 시작하지 않는 API는 서비스끼리만 호출하므로 이 화면에서는 호출되지 않습니다. 운영 Gateway는 `SPRING_PROFILES_ACTIVE=prod`로 실행합니다. 이 프로파일에서는 서비스 문서 프록시 라우트(`/api-docs/**`), Gateway API 문서와 Swagger UI가 비활성화됩니다. 각 서비스의 직접 접근 문서도 끄려면 해당 서비스에 `SPRINGDOC_API_DOCS_ENABLED=false`, `SPRINGDOC_SWAGGER_UI_ENABLED=false`를 설정합니다. Compose의 `.env`만으로 프로파일이 전달되지는 않으므로 배포 설정에서 Gateway 컨테이너의 환경 변수로 지정해야 합니다.
@@ -89,6 +90,7 @@ Gateway를 통한 예시 호출:
 ```bash
 curl http://localhost:8080/api-docs/user-service
 curl http://localhost:8080/api/products
+curl http://localhost:8080/api/v1/products
 curl -X POST http://localhost:8080/api/v1/recommendations \
   -H 'Authorization: Bearer <access-token>' \
   -H 'Content-Type: application/json' \

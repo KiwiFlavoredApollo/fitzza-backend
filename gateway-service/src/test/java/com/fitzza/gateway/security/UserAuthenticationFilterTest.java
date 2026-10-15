@@ -50,9 +50,29 @@ class UserAuthenticationFilterTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"POST /api/auth/signin", "POST /api/auth/refresh", "POST /api/auth/signout",
-            "POST /api/auth/signup"})
+            "POST /api/auth/signup", "POST /api/v1/auth/signin", "POST /api/v1/auth/refresh",
+            "POST /api/v1/auth/signout", "POST /api/v1/auth/signup"})
     void keepsPublicEndpointsAccessibleWithoutLogin(String endpoint) {
         assertThat(filter(exchange(endpoint, "user-service", null)).get()).isNotNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"GET /api/v1/users/me", "PATCH /api/v1/users/me"})
+    void rejectsVersionedUserRouteRequestsWithoutAnAuthenticatedUser(String endpoint) {
+        MockServerWebExchange exchange = exchange(endpoint, "user-service", null);
+
+        assertThat(filter(exchange).get()).isNull();
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"GET /api/v1/orders", "POST /api/v1/orders"})
+    void versionedOrdersAreForMembersOnly(String endpoint) {
+        MockServerWebExchange anonymous = exchange(endpoint, "order-service-orders", null);
+
+        assertThat(filter(anonymous).get()).isNull();
+        assertThat(anonymous.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(filter(exchange(endpoint, "order-service-orders", "42")).get()).isNotNull();
     }
 
     @ParameterizedTest
