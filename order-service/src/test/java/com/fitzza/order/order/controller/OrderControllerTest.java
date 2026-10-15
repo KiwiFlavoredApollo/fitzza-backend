@@ -48,7 +48,7 @@ class OrderControllerTest {
     @Test
     void createOrderReturnsCreated() throws Exception {
         when(orderService.createOrder(eq(1L), any(OrderCreateRequest.class))).thenReturn(
-                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.PENDING));
+                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.COMPLETED));
 
         mockMvc.perform(post("/api/orders")
                         .header(ApiHeaders.USER_ID, "1")
@@ -57,7 +57,7 @@ class OrderControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderId").value(1))
                 .andExpect(jsonPath("$.orderNum").value("ORD-20261007-ABCDEF1234"))
-                .andExpect(jsonPath("$.orderStatus").value("PENDING"))
+                .andExpect(jsonPath("$.orderStatus").value("COMPLETED"))
                 .andExpect(jsonPath("$.totalPrice").value(105000))
                 .andExpect(jsonPath("$.items").doesNotExist())
                 .andExpect(jsonPath("$.recipient").doesNotExist());
@@ -83,7 +83,7 @@ class OrderControllerTest {
     @Test
     void createOrderAcceptsManyCartIds() throws Exception {
         when(orderService.createOrder(eq(1L), any(OrderCreateRequest.class))).thenReturn(
-                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.PENDING));
+                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.COMPLETED));
         String cartIds = LongStream.rangeClosed(1, 51).mapToObj(String::valueOf).collect(Collectors.joining(","));
 
         mockMvc.perform(post("/api/orders")

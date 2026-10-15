@@ -109,7 +109,7 @@ class OrderServiceTest {
         OrderEntity saved = captor.getValue();
         assertThat(saved.getOrderNum()).isEqualTo(ORDER_NUM);
         assertThat(saved.getUserId()).isEqualTo(USER_ID);
-        assertThat(saved.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(saved.getOrderStatus()).isEqualTo(OrderStatus.COMPLETED);
         assertThat(saved.getTotalPrice()).isEqualTo(105000L);
         assertThat(saved.getRecipientName()).isEqualTo("홍길동");
         assertThat(saved.getOrderItems()).extracting(
@@ -118,7 +118,7 @@ class OrderServiceTest {
         assertThat(response.orderId()).isEqualTo(99L);
         assertThat(response.orderNum()).isEqualTo(ORDER_NUM);
         assertThat(response.totalPrice()).isEqualTo(105000L);
-        assertThat(response.orderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(response.orderStatus()).isEqualTo(OrderStatus.COMPLETED);
     }
 
     @Test
