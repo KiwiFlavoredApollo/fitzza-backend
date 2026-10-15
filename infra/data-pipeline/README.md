@@ -40,3 +40,36 @@ runs/<run-id>/fashion-clip/report.json
 ```
 
 FashionCLIP/Qdrant must not start until the Jev `_SUCCESS.json` exists. Jev credentials belong in AWS Secrets Manager and must never be written to S3, Kubernetes manifests, or logs.
+
+## Local Qdrant
+
+Qdrant runs in Docker; the crawler validation and Jev scripts run as Python batch jobs.
+
+```powershell
+docker compose -f infra/data-pipeline/docker-compose.yml up -d
+docker compose -f infra/data-pipeline/docker-compose.yml ps
+```
+
+Open `http://localhost:6333/dashboard` for the Qdrant dashboard. Stop it without deleting indexed data:
+
+```powershell
+docker compose -f infra/data-pipeline/docker-compose.yml down
+```
+
+### Postman checks
+
+- `GET http://localhost:6333/collections`: Qdrant connection and collection list
+- `GET http://localhost:6333/collections/musinsa_products`: collection status after indexing
+- `POST http://localhost:6333/collections/musinsa_products/points/scroll`: inspect indexed payloads
+
+Use this JSON body for the scroll request:
+
+```json
+{
+  "limit": 3,
+  "with_payload": true,
+  "with_vector": false
+}
+```
+
+Jev and FashionCLIP are batch scripts, not HTTP APIs, so they are verified through generated files and logs rather than Postman. The current FashionCLIP script recreates `musinsa_products`; use it only against this local Qdrant instance until that behavior is made configurable.
