@@ -26,6 +26,43 @@ python scripts/validate_jev_data.py `
 
 After validation, run `fashion-CLIP/scripts/generate_color_map.py` with the same directory as `--data`. The implementation reference is the `feat/color-map-jev` branch; pin its reviewed commit before deployment because it is not merged into `main`.
 
+## Jev API key on Windows
+
+Do not paste the key into source files, Compose YAML, shell history, screenshots, or chat. In PowerShell, enter it as a masked value for the current terminal session:
+
+```powershell
+$secureKey = Read-Host "TYPESAFE_API_KEY" -AsSecureString
+$keyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+try {
+  $env:TYPESAFE_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($keyPointer)
+} finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($keyPointer)
+}
+```
+
+Confirm only whether it is set; never print the value:
+
+```powershell
+if ($env:TYPESAFE_API_KEY) { "TYPESAFE_API_KEY is set" } else { "TYPESAFE_API_KEY is missing" }
+```
+
+Run Jev from the repository root in the same terminal:
+
+```powershell
+python .data/fashion-clip/scripts/generate_color_map.py `
+  --data .data/color-qualified-dataset-500/data `
+  --config .data/fashion-clip/config `
+  --workers 4
+```
+
+Remove the key when finished or close the terminal:
+
+```powershell
+Remove-Item Env:TYPESAFE_API_KEY
+```
+
+This session-only method is recommended for local execution. Store the deployment key in AWS Secrets Manager and inject it only into the Jev batch job at runtime.
+
 ## S3 run layout
 
 Each execution uses an immutable run ID:
