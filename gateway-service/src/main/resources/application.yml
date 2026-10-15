@@ -51,6 +51,10 @@ spring:
         - id: community-service
           uri: lb://community-service
           predicates: [Path=/api/community/**]
+        # 명세서의 댓글 수정·삭제·좋아요 경로는 /api/comments/** 다(작성·목록만 /api/community/posts/{postId}/comments).
+        - id: community-service-comments
+          uri: lb://community-service
+          predicates: ["Path=/api/comments/**"]
         - id: review-service
           uri: lb://review-service
           predicates: ["Path=/api/reviews,/api/reviews/**"]
