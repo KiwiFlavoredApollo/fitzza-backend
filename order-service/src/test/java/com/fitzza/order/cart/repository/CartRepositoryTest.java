@@ -64,6 +64,30 @@ class CartRepositoryTest {
         List<CartEntity> carts = cartRepository.findAllByUserIdOrderByCartIdDesc(USER_ID);
 
         assertThat(carts).extracting(CartEntity::getCartId).containsExactly(second.getCartId(), first.getCartId());
+        assertThat(cartRepository.countByUserId(USER_ID)).isEqualTo(2);
+    }
+
+    @Test
+    void findAllByCartIdInIgnoresCartsOfOtherUsers() {
+        CartEntity mine = persistCart(USER_ID, 10L);
+        CartEntity theirs = persistCart(OTHER_USER_ID, 11L);
+
+        List<CartEntity> carts = cartRepository.findAllByCartIdInAndUserIdOrderByCartId(
+                List.of(theirs.getCartId(), mine.getCartId()), USER_ID);
+
+        assertThat(carts).extracting(CartEntity::getCartId).containsExactly(mine.getCartId());
+    }
+
+    @Test
+    void deleteByUserIdAndCartIdsRemovesOnlyTheUsersCarts() {
+        CartEntity mine = persistCart(USER_ID, 10L);
+        CartEntity theirs = persistCart(OTHER_USER_ID, 11L);
+
+        int deleted = cartRepository.deleteByUserIdAndCartIds(USER_ID, List.of(mine.getCartId(), theirs.getCartId()));
+
+        assertThat(deleted).isEqualTo(1);
+        assertThat(cartRepository.findById(mine.getCartId())).isEmpty();
+        assertThat(cartRepository.findById(theirs.getCartId())).isPresent();
     }
 
     @Test

@@ -1,7 +1,10 @@
 package com.fitzza.order;
 
+import static com.fitzza.order.support.TestFixtures.feignException;
 import static com.fitzza.order.support.TestFixtures.option;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -40,6 +43,14 @@ class OrderServiceIntegrationTest {
 
     private static final String USER_ID = "1";
     private static final String OTHER_USER_ID = "2";
+    private static final String ORDER_BODY = """
+            {
+              "cartIds": [%d, %d],
+              "recipientName": "홍길동",
+              "recipientPhone": "010-1234-5678",
+              "shippingAddress": "서울특별시 강남구 테헤란로 1"
+            }
+            """;
 
     @Autowired
     private MockMvc mockMvc;
@@ -74,7 +85,9 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].delete.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
                 .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-Service-Token')]", hasSize(1)))
                 .andExpect(jsonPath("$.components.securitySchemes.serviceToken.name").value("X-Service-Token"))
-                .andExpect(jsonPath("$.paths['/api/orders']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/api/orders'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/orders'].post").exists())
+                .andExpect(jsonPath("$.paths['/api/orders/{orderId}']").exists());
     }
 
     @Test
@@ -143,6 +156,120 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$[0].linePrice").value(0));
     }
 
+    @Test
+    void orderFlowSnapshotsPricesClearsCartAndKeepsHistory() throws Exception {
+        long firstCartId = addCart(10, 2);
+        long secondCartId = addCart(11, 1);
+
+        String response = mockMvc.perform(post("/api/orders")
+                        .header(ApiHeaders.USER_ID, USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.orderNum").value(startsWith("ORD-")))
+                .andExpect(jsonPath("$.orderStatus").value("PENDING"))
+                .andExpect(jsonPath("$.totalPrice").value(2 * 30000 + 45000))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].unitPrice").value(30000))
+                .andExpect(jsonPath("$.items[0].productName").value("상품 10"))
+                .andReturn().getResponse().getContentAsString();
+        int orderId = JsonPath.read(response, "$.orderId");
+
+        mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        productOptions.put(10L, option(10L, 99999, "ON_SALE"));
+        mockMvc.perform(get("/api/orders/" + orderId).header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalPrice").value(2 * 30000 + 45000))
+                .andExpect(jsonPath("$.items[0].unitPrice").value(30000))
+                .andExpect(jsonPath("$.items[0].linePrice").value(60000));
+
+        mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].orderId").value(orderId))
+                .andExpect(jsonPath("$.content[0].itemCount").value(2));
+        mockMvc.perform(get("/api/orders/" + orderId).header(ApiHeaders.USER_ID, OTHER_USER_ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    void orderListIsSortedNewestFirst() throws Exception {
+        long firstOrderId = placeOrderFor(addCart(10, 1), addCart(11, 1));
+        long secondOrderId = placeOrderFor(addCart(10, 1), addCart(11, 1));
+
+        mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID).param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.content[0].orderId").value(secondOrderId));
+        mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID).param("size", "1").param("page", "1"))
+                .andExpect(jsonPath("$.content[0].orderId").value(firstOrderId));
+    }
+
+    @Test
+    void orderCreationRejectsCartsOfAnotherUser() throws Exception {
+        long firstCartId = addCart(10, 1);
+        long secondCartId = addCart(11, 1);
+
+        mockMvc.perform(post("/api/orders")
+                        .header(ApiHeaders.USER_ID, OTHER_USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CART_NOT_FOUND"));
+    }
+
+    @Test
+    void orderCreationFailsAndKeepsCartWhenOptionIsNoLongerOnSale() throws Exception {
+        long firstCartId = addCart(10, 1);
+        long secondCartId = addCart(11, 1);
+        productOptions.put(11L, option(11L, 45000, "SOLD_OUT"));
+
+        mockMvc.perform(post("/api/orders")
+                        .header(ApiHeaders.USER_ID, USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("OPTION_NOT_AVAILABLE"));
+
+        mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(jsonPath("$.length()").value(2));
+        mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    @Test
+    void orderCreationFailsWithServiceUnavailableWhenProductServiceIsDown() throws Exception {
+        long firstCartId = addCart(10, 1);
+        long secondCartId = addCart(11, 1);
+        when(productFeignClient.getOptions(anyList())).thenThrow(feignException(503));
+
+        mockMvc.perform(post("/api/orders")
+                        .header(ApiHeaders.USER_ID, USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("PRODUCT_SERVICE_UNAVAILABLE"));
+
+        mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
+    void orderDetailStillReturnsSnapshotWhenProductServiceIsDown() throws Exception {
+        long orderId = placeOrderFor(addCart(10, 2), addCart(11, 1));
+        when(productFeignClient.getOptions(anyList())).thenThrow(feignException(503));
+
+        mockMvc.perform(get("/api/orders/" + orderId).header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[0].unitPrice").value(30000))
+                .andExpect(jsonPath("$.items[0].productName").value(nullValue()));
+    }
+
     private long addCart(long optionId, int quantity) throws Exception {
         String response = mockMvc.perform(post("/api/carts")
                         .header(ApiHeaders.USER_ID, USER_ID)
@@ -151,5 +278,15 @@ class OrderServiceIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return ((Number) JsonPath.read(response, "$.cartId")).longValue();
+    }
+
+    private long placeOrderFor(long firstCartId, long secondCartId) throws Exception {
+        String response = mockMvc.perform(post("/api/orders")
+                        .header(ApiHeaders.USER_ID, USER_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(response, "$.orderId")).longValue();
     }
 }
