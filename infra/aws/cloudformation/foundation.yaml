@@ -1,0 +1,621 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Fitzza AWS foundation for EKS workloads and AI data jobs - uses two AZs with one
+  NAT Gateway and scale-to-zero ARM64 compute to stay within the project budget.
+Transform: AWS::LanguageExtensions
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: public ALB subnets -> private EKS nodes; S3 traffic bypasses NAT; one NAT for project-cost constraint
+    must:
+      - deploy only in ap-northeast-2 for the approved estimate
+      - keep worker desired=0 outside approved operating hours
+      - never store credentials or application secrets in this template
+    ref:
+      - at: infra/aws/cloudformation/README.md
+        has: deployment, validation, cost, and teardown procedure
+        scope: shared
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+  Owner:
+    Type: String
+    Default: team3
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  CostCenter:
+    Type: String
+    Default: lgcns5-retail
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  KubernetesVersion:
+    Type: String
+    Default: '1.36'
+    AllowedValues: ['1.34', '1.35', '1.36', '1.37']
+  ClusterPublicAccessCidrs:
+    Type: CommaDelimitedList
+    Description: Operator public IPv4 CIDR list. Use /32 whenever possible.
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    AllowedPattern: '^(10|172|192)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$'
+  PublicSubnetACidr:
+    Type: String
+    Default: 10.20.0.0/24
+  PublicSubnetCCidr:
+    Type: String
+    Default: 10.20.1.0/24
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.20.10.0/24
+  PrivateSubnetCCidr:
+    Type: String
+    Default: 10.20.11.0/24
+  EcrRepositoryPrefix:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z0-9]+(?:[._/-][a-z0-9]+)*$'
+
+Mappings:
+  EcrRepositoryNames:
+    ConfigService: { Name: config-service }
+    DiscoveryService: { Name: discovery-service }
+    GatewayService: { Name: gateway-service }
+    UserService: { Name: user-service }
+    ProductService: { Name: product-service }
+    OrderService: { Name: order-service }
+    CommunityService: { Name: community-service }
+    ReviewService: { Name: review-service }
+    NotificationService: { Name: notification-service }
+    RecommendationService: { Name: recommendation-service }
+    VirtualTryOnService: { Name: virtual-tryon-service }
+    Crawler: { Name: crawler }
+    FashionClip: { Name: fashion-clip }
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolated network for Fitzza public ingress and private workloads
+        must:
+          - DNS support + hostnames stay enabled for EKS and private service discovery
+        mutable: change-with-constraints
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-vpc' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-igw' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: public ALB and the single budget-constrained NAT Gateway in the first AZ
+        must:
+          - application nodes and data stores must not be placed here
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetACidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-a' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/elb, Value: '1' }
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: second-AZ subnet for public load balancer availability
+        must:
+          - application nodes and data stores must not be placed here
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCCidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-c' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/elb, Value: '1' }
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private EKS node and pod placement in the first AZ
+        must:
+          - no automatic public IPv4 assignment
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnetACidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-a' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/internal-elb, Value: '1' }
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private EKS node and pod placement in the second AZ
+        must:
+          - no automatic public IPv4 assignment
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnetCCidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-c' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/internal-elb, Value: '1' }
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-rt' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetC
+
+  NatElasticIp:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: fixed public address for the single outbound NAT path
+        must:
+          - delete with the project stack to stop public IPv4 charges
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-nat-eip' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: one-AZ outbound path selected for temporary project cost; multi-AZ NAT rejected for budget
+        must:
+          - private default route points here
+          - S3 traffic uses the gateway endpoint instead
+          - revisit HA before production use
+        mutable: review-required
+    Properties:
+      AllocationId: !GetAtt NatElasticIp.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-nat' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-rt' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetA
+
+  PrivateSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetC
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private raw, normalized, embedding, and generated-image artifacts for data + AI pipelines
+        must:
+          - block all public access
+          - require TLS
+          - retain data when the stack is deleted
+        mutable: review-required
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: RemoveOldNoncurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+      VersioningConfiguration:
+        Status: Enabled
+
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: deny every non-TLS request regardless of caller permissions
+        must:
+          - keep aws:SecureTransport deny on bucket and objects
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt DataBucket.Arn
+              - !Sub '${DataBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: route private S3 traffic without NAT processing charges
+        must:
+          - stay attached to the private route table
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource:
+              - !GetAtt DataBucket.Arn
+              - !Sub '${DataBucket.Arn}/*'
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      VpcId: !Ref Vpc
+
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: EKS control plane role with only the AWS-managed cluster policy
+        must:
+          - trust only eks.amazonaws.com
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: eks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: standard EKS control plane for app deployments and batch Jobs; provisioned mode rejected for cost
+        must:
+          - use private control-plane networking and restrict public endpoint to operator CIDRs
+          - use STANDARD version support to avoid extended-support hourly charges
+        mutable: review-required
+    Properties:
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        BootstrapClusterCreatorAdminPermissions: true
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+      Name: !Sub '${ProjectName}-${Environment}'
+      ResourcesVpcConfig:
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: true
+        PublicAccessCidrs: !Ref ClusterPublicAccessCidrs
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetC
+      RoleArn: !GetAtt EksClusterRole.Arn
+      UpgradePolicy:
+        SupportType: STANDARD
+      Version: !Ref KubernetesVersion
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  EksNodeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: baseline worker role for node registration, image pulls, and VPC CNI during bootstrap
+        must:
+          - application AWS access must use Pod Identity instead of this node role
+          - remove CNI policy after migrating aws-node to Pod Identity
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EksNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: one ARM64 on-demand worker during approved hours; starts at zero to avoid accidental spend
+        must:
+          - maxSize stays 1 for the approved estimate
+          - desiredSize returns to 0 outside 09:00-18:00 operating windows
+          - workloads must publish linux/arm64 images
+        mutable: change-with-constraints
+        mutability:
+          InstanceTypes: review-required
+          ScalingConfig: review-required
+    Properties:
+      AmiType: AL2023_ARM_64_STANDARD
+      CapacityType: ON_DEMAND
+      ClusterName: !Ref EksCluster
+      InstanceTypes: [t4g.medium]
+      Labels:
+        fitzza.io/capacity: general
+      NodegroupName: !Sub '${ProjectName}-${Environment}-arm64'
+      NodeRole: !GetAtt EksNodeRole.Arn
+      NodeRepairConfig:
+        Enabled: true
+      ScalingConfig:
+        DesiredSize: 0
+        MaxSize: 1
+        MinSize: 0
+      Subnets:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+        Owner: !Ref Owner
+        CostCenter: !Ref CostCenter
+      UpdateConfig:
+        MaxUnavailable: 1
+
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: vpc-cni
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: kube-proxy
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: coredns
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  PodIdentityAgentAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: eks-pod-identity-agent
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  EbsCsiRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolated Pod Identity role for Qdrant and Redis EBS volume operations
+        must:
+          - trust only the EKS Pod Identity service
+          - don't attach this storage policy to the node role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EbsCsiPodIdentityAssociation:
+    Type: AWS::EKS::PodIdentityAssociation
+    Properties:
+      ClusterName: !Ref EksCluster
+      Namespace: kube-system
+      RoleArn: !GetAtt EbsCsiRole.Arn
+      ServiceAccount: ebs-csi-controller-sa
+
+  EbsCsiAddon:
+    Type: AWS::EKS::Addon
+    DependsOn:
+      - PodIdentityAgentAddon
+      - EbsCsiPodIdentityAssociation
+    Properties:
+      AddonName: aws-ebs-csi-driver
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  'Fn::ForEach::EcrRepositories':
+    - RepositoryIdentifier
+    - - ConfigService
+      - DiscoveryService
+      - GatewayService
+      - UserService
+      - ProductService
+      - OrderService
+      - CommunityService
+      - ReviewService
+      - NotificationService
+      - RecommendationService
+      - VirtualTryOnService
+      - Crawler
+      - FashionClip
+    - '${RepositoryIdentifier}Repository':
+        Type: AWS::ECR::Repository
+        Properties:
+          EmptyOnDelete: true
+          EncryptionConfiguration: { EncryptionType: AES256 }
+          ImageTagMutability: IMMUTABLE
+          LifecyclePolicy:
+            LifecyclePolicyText: >-
+              {"rules":[{"rulePriority":1,"description":"expire untagged images","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":2},"action":{"type":"expire"}},{"rulePriority":2,"description":"keep latest ten images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}
+          RepositoryName:
+            Fn::Sub:
+              - '${EcrRepositoryPrefix}/${RepositoryPath}'
+              - RepositoryPath:
+                  Fn::FindInMap:
+                    - EcrRepositoryNames
+                    - Ref: RepositoryIdentifier
+                    - Name
+          Tags:
+            - { Key: Project, Value: !Ref ProjectName }
+            - { Key: Environment, Value: !Ref Environment }
+
+Outputs:
+  VpcId:
+    Description: Fitzza VPC ID
+    Value: !Ref Vpc
+  PublicSubnetIds:
+    Description: Public subnet IDs for internet-facing load balancers
+    Value: !Join [',', [!Ref PublicSubnetA, !Ref PublicSubnetC]]
+  PrivateSubnetIds:
+    Description: Private subnet IDs for EKS nodes and data services
+    Value: !Join [',', [!Ref PrivateSubnetA, !Ref PrivateSubnetC]]
+  NatGatewayId:
+    Description: Single project NAT Gateway ID
+    Value: !Ref NatGateway
+  EksClusterName:
+    Description: EKS cluster name
+    Value: !Ref EksCluster
+  EksNodeGroupName:
+    Description: Scale-to-zero ARM64 managed node group name
+    Value: !Ref EksNodeGroup
+  DataBucketName:
+    Description: Private pipeline data bucket name
+    Value: !Ref DataBucket
+  EcrRepositoryPrefixUri:
+    Description: Registry URI prefix used by buildspec.yml
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepositoryPrefix}'
