@@ -14,10 +14,9 @@ import com.fitzza.order.global.dto.PageResponse;
 import com.fitzza.order.global.exception.BusinessException;
 import com.fitzza.order.global.exception.ErrorCode;
 import com.fitzza.order.order.dto.OrderCreateRequest;
-import com.fitzza.order.order.dto.OrderDetailResponse;
+import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.entity.OrderStatus;
 import com.fitzza.order.order.service.OrderService;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -49,18 +48,19 @@ class OrderControllerTest {
     @Test
     void createOrderReturnsCreated() throws Exception {
         when(orderService.createOrder(eq(1L), any(OrderCreateRequest.class))).thenReturn(
-                new OrderDetailResponse(1L, "ORD-20261007-ABCDEF1234", OrderStatus.PENDING, 105000L, "홍길동",
-                        "010-1234-5678", "서울특별시 강남구 테헤란로 1", LocalDateTime.of(2026, 10, 7, 12, 0),
-                        LocalDateTime.of(2026, 10, 7, 12, 0), List.of()));
+                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.PENDING));
 
         mockMvc.perform(post("/api/orders")
                         .header(ApiHeaders.USER_ID, "1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.orderId").value(1))
                 .andExpect(jsonPath("$.orderNum").value("ORD-20261007-ABCDEF1234"))
                 .andExpect(jsonPath("$.orderStatus").value("PENDING"))
-                .andExpect(jsonPath("$.totalPrice").value(105000));
+                .andExpect(jsonPath("$.totalPrice").value(105000))
+                .andExpect(jsonPath("$.items").doesNotExist())
+                .andExpect(jsonPath("$.recipient").doesNotExist());
     }
 
     @Test
@@ -83,9 +83,7 @@ class OrderControllerTest {
     @Test
     void createOrderAcceptsManyCartIds() throws Exception {
         when(orderService.createOrder(eq(1L), any(OrderCreateRequest.class))).thenReturn(
-                new OrderDetailResponse(1L, "ORD-20261007-ABCDEF1234", OrderStatus.PENDING, 105000L, "홍길동",
-                        "010-1234-5678", "서울특별시 강남구 테헤란로 1", LocalDateTime.of(2026, 10, 7, 12, 0),
-                        LocalDateTime.of(2026, 10, 7, 12, 0), List.of()));
+                new OrderCreateResponse(1L, "ORD-20261007-ABCDEF1234", 105000L, OrderStatus.PENDING));
         String cartIds = LongStream.rangeClosed(1, 51).mapToObj(String::valueOf).collect(Collectors.joining(","));
 
         mockMvc.perform(post("/api/orders")
@@ -131,11 +129,15 @@ class OrderControllerTest {
 
     @Test
     void getOrdersAppliesDefaultPaging() throws Exception {
-        when(orderService.findOrders(1L, 0, 20)).thenReturn(new PageResponse<>(List.of(), 0, 20, 0, 0, false));
+        when(orderService.findOrders(1L, 0, 20)).thenReturn(new PageResponse<>(List.of(), 0, 0));
 
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.size").value(20));
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0))
+                .andExpect(jsonPath("$.size").doesNotExist())
+                .andExpect(jsonPath("$.totalElements").doesNotExist())
+                .andExpect(jsonPath("$.hasNext").doesNotExist());
     }
 
     @Test
@@ -143,6 +145,15 @@ class OrderControllerTest {
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, "1").param("size", "101"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(containsString("size")));
+    }
+
+    @Test
+    void getOrderReturnsForbiddenForAnotherUsersOrder() throws Exception {
+        when(orderService.findOrder(1L, 9L)).thenThrow(new BusinessException(ErrorCode.ORDER_FORBIDDEN));
+
+        mockMvc.perform(get("/api/orders/9").header(ApiHeaders.USER_ID, "1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ORDER_FORBIDDEN"));
     }
 
     @Test

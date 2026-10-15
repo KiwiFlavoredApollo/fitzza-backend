@@ -49,17 +49,33 @@ class OrderRepositoryTest {
     }
 
     @Test
-    void findWithItemsLoadsItemsOnlyForTheOwner() {
+    void findWithItemsLoadsOrderItemsByOrderId() {
         OrderEntity saved = persistOrder(USER_ID, "ORD-1", 2);
         entityManager.clear();
 
-        var found = orderRepository.findWithItemsByOrderIdAndUserId(saved.getOrderId(), USER_ID);
-        var notOwned = orderRepository.findWithItemsByOrderIdAndUserId(saved.getOrderId(), OTHER_USER_ID);
+        var found = orderRepository.findWithItemsByOrderId(saved.getOrderId());
 
         assertThat(found).isPresent();
+        assertThat(found.get().getUserId()).isEqualTo(USER_ID);
         assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
                 .isLoaded(found.get(), "orderItems")).isTrue();
-        assertThat(notOwned).isEmpty();
+        assertThat(found.get().getOrderItems()).hasSize(2);
+    }
+
+    @Test
+    void findFirstOptionIdsByOrderIdsReturnsEarliestItemOption() {
+        OrderEntity twoItems = persistOrder(USER_ID, "ORD-1", 2);
+        OrderEntity oneItem = persistOrder(USER_ID, "ORD-2", 1);
+        entityManager.clear();
+
+        List<OrderFirstOptionProjection> firstOptions = orderItemRepository.findFirstOptionIdsByOrderIds(
+                List.of(twoItems.getOrderId(), oneItem.getOrderId()));
+
+        assertThat(firstOptions)
+                .extracting(OrderFirstOptionProjection::getOrderId, OrderFirstOptionProjection::getOptionId)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.api.Assertions.tuple(twoItems.getOrderId(), 10L),
+                        org.assertj.core.api.Assertions.tuple(oneItem.getOrderId(), 10L));
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.fitzza.order.global.constant.PagingConstants;
 import com.fitzza.order.global.dto.PageResponse;
 import com.fitzza.order.global.exception.ApiErrorResponse;
 import com.fitzza.order.order.dto.OrderCreateRequest;
+import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.dto.OrderDetailResponse;
 import com.fitzza.order.order.dto.OrderListResponse;
 import com.fitzza.order.order.service.OrderService;
@@ -53,7 +54,7 @@ public class OrderController {
     })
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderDetailResponse createOrder(
+    public OrderCreateResponse createOrder(
             @Parameter(description = USER_ID_DESCRIPTION, required = true)
             @RequestHeader(ApiHeaders.USER_ID) Long userId,
             @Valid @RequestBody OrderCreateRequest request) {
@@ -74,10 +75,12 @@ public class OrderController {
     }
 
     @Operation(summary = "주문 상세 조회",
-            description = "주문 정보와 항목을 조회한다. 항목의 수량·단가는 주문 시점 스냅샷이며, 상품 서비스를 조회하지 못하면 상품 정보는 null이다.")
+            description = "본인 주문만 조회한다. 항목의 수량·단가는 주문 시점 스냅샷이며, 상품 서비스를 조회하지 못하면 상품 정보는 null이다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
-            @ApiResponse(responseCode = "404", description = "주문 없음 또는 다른 사용자의 주문",
+            @ApiResponse(responseCode = "403", description = "다른 사용자의 주문",
+                    content = @Content(schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "주문 없음",
                     content = @Content(schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @GetMapping("/{orderId}")

@@ -15,15 +15,18 @@ import static org.mockito.Mockito.when;
 import com.fitzza.order.cart.entity.CartEntity;
 import com.fitzza.order.cart.repository.CartRepository;
 import com.fitzza.order.global.client.ProductOptionClient;
+import com.fitzza.order.global.client.ProductOptionResponse;
 import com.fitzza.order.global.dto.PageResponse;
 import com.fitzza.order.global.exception.BusinessException;
 import com.fitzza.order.global.exception.ErrorCode;
 import com.fitzza.order.order.dto.OrderCreateRequest;
+import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.dto.OrderDetailResponse;
 import com.fitzza.order.order.dto.OrderListResponse;
 import com.fitzza.order.order.entity.OrderEntity;
 import com.fitzza.order.order.entity.OrderItemEntity;
 import com.fitzza.order.order.entity.OrderStatus;
+import com.fitzza.order.order.repository.OrderFirstOptionProjection;
 import com.fitzza.order.order.repository.OrderItemCountProjection;
 import com.fitzza.order.order.repository.OrderItemRepository;
 import com.fitzza.order.order.repository.OrderRepository;
@@ -89,9 +92,13 @@ class OrderServiceTest {
                 11L, option(11L, 45000, "ON_SALE")));
         when(cartRepository.deleteByUserIdAndCartIds(USER_ID, List.of(1L, 2L))).thenReturn(2);
         when(orderNumberGenerator.generateOrderNumber()).thenReturn(ORDER_NUM);
-        when(orderRepository.saveAndFlush(any(OrderEntity.class))).thenAnswer(call -> call.getArgument(0));
+        when(orderRepository.saveAndFlush(any(OrderEntity.class))).thenAnswer(call -> {
+            OrderEntity order = call.getArgument(0);
+            ReflectionTestUtils.setField(order, "orderId", 99L);
+            return order;
+        });
 
-        OrderDetailResponse response = orderService.createOrder(USER_ID, orderRequest(List.of(2L, 1L, 1L)));
+        OrderCreateResponse response = orderService.createOrder(USER_ID, orderRequest(List.of(2L, 1L, 1L)));
 
         ArgumentCaptor<OrderEntity> captor = ArgumentCaptor.forClass(OrderEntity.class);
         verify(orderRepository).saveAndFlush(captor.capture());
@@ -104,10 +111,10 @@ class OrderServiceTest {
         assertThat(saved.getOrderItems()).extracting(
                         OrderItemEntity::getOptionId, OrderItemEntity::getOrderQty, OrderItemEntity::getUnitPrice)
                 .containsExactly(tuple(10L, 2, 30000), tuple(11L, 1, 45000));
+        assertThat(response.orderId()).isEqualTo(99L);
         assertThat(response.orderNum()).isEqualTo(ORDER_NUM);
         assertThat(response.totalPrice()).isEqualTo(105000L);
-        assertThat(response.items()).extracting(item -> item.linePrice()).containsExactly(60000L, 45000L);
-        assertThat(response.items().get(0).productName()).isEqualTo("상품 10");
+        assertThat(response.orderStatus()).isEqualTo(OrderStatus.PENDING);
     }
 
     @Test
@@ -162,12 +169,17 @@ class OrderServiceTest {
     }
 
     @Test
-    void findOrdersReturnsNewestFirstWithItemCounts() {
+    void findOrdersReturnsNewestFirstWithItemCountsAndThumbnails() {
         OrderEntity newer = order(2L, "ORD-2", 1);
         OrderEntity older = order(1L, "ORD-1", 2);
         when(orderRepository.findAllByUserId(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(newer, older), PageRequest.of(0, 20), 2));
         when(orderItemRepository.countByOrderIds(List.of(2L, 1L))).thenReturn(List.of(count(2L, 1L), count(1L, 2L)));
+        when(orderItemRepository.findFirstOptionIdsByOrderIds(List.of(2L, 1L)))
+                .thenReturn(List.of(firstOption(2L, 10L), firstOption(1L, 10L)));
+        when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of(
+                10L, new ProductOptionResponse(
+                        10L, 1010L, "Fitzza", "상품 10", "BLACK", "M", 30000, "https://cdn.example/10.jpg", "ON_SALE")));
 
         PageResponse<OrderListResponse> response = orderService.findOrders(USER_ID, 0, 20);
 
@@ -177,7 +189,10 @@ class OrderServiceTest {
                 .isEqualTo(Sort.Direction.DESC);
         assertThat(response.content()).extracting(OrderListResponse::orderNum).containsExactly("ORD-2", "ORD-1");
         assertThat(response.content()).extracting(OrderListResponse::itemCount).containsExactly(1L, 2L);
-        assertThat(response.totalElements()).isEqualTo(2);
+        assertThat(response.content()).extracting(OrderListResponse::thumbnailUrl)
+                .containsExactly("https://cdn.example/10.jpg", "https://cdn.example/10.jpg");
+        assertThat(response.page()).isEqualTo(0);
+        assertThat(response.totalPages()).isEqualTo(1);
     }
 
     @Test
@@ -189,23 +204,35 @@ class OrderServiceTest {
 
         assertThat(response.content()).isEmpty();
         verifyNoInteractions(orderItemRepository);
+        verifyNoInteractions(productOptionClient);
     }
 
     @Test
-    void findOrderRejectsOrderOfAnotherUser() {
-        when(orderRepository.findWithItemsByOrderIdAndUserId(1L, USER_ID)).thenReturn(Optional.empty());
+    void findOrderRejectsMissingOrder() {
+        when(orderRepository.findWithItemsByOrderId(1L)).thenReturn(Optional.empty());
 
         assertErrorCode(() -> orderService.findOrder(USER_ID, 1L), ErrorCode.ORDER_NOT_FOUND);
     }
 
     @Test
+    void findOrderRejectsOrderOfAnotherUser() {
+        OrderEntity otherUsersOrder = order(1L, "ORD-1", 1);
+        ReflectionTestUtils.setField(otherUsersOrder, "userId", 99L);
+        when(orderRepository.findWithItemsByOrderId(1L)).thenReturn(Optional.of(otherUsersOrder));
+
+        assertErrorCode(() -> orderService.findOrder(USER_ID, 1L), ErrorCode.ORDER_FORBIDDEN);
+        verifyNoInteractions(productOptionClient);
+    }
+
+    @Test
     void findOrderKeepsSnapshotWhenProductServiceIsUnavailable() {
-        when(orderRepository.findWithItemsByOrderIdAndUserId(1L, USER_ID))
-                .thenReturn(Optional.of(order(1L, "ORD-1", 1)));
+        when(orderRepository.findWithItemsByOrderId(1L)).thenReturn(Optional.of(order(1L, "ORD-1", 1)));
         when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of());
 
         OrderDetailResponse response = orderService.findOrder(USER_ID, 1L);
 
+        assertThat(response.recipient().name()).isEqualTo("홍길동");
+        assertThat(response.recipient().phone()).isEqualTo("010-1234-5678");
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).unitPrice()).isEqualTo(30000);
         assertThat(response.items().get(0).productName()).isNull();
@@ -246,6 +273,20 @@ class OrderServiceTest {
             @Override
             public Long getItemCount() {
                 return itemCount;
+            }
+        };
+    }
+
+    private OrderFirstOptionProjection firstOption(Long orderId, Long optionId) {
+        return new OrderFirstOptionProjection() {
+            @Override
+            public Long getOrderId() {
+                return orderId;
+            }
+
+            @Override
+            public Long getOptionId() {
+                return optionId;
             }
         };
     }

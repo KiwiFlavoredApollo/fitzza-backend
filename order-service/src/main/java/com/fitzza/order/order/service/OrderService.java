@@ -8,16 +8,20 @@ import com.fitzza.order.global.dto.PageResponse;
 import com.fitzza.order.global.exception.BusinessException;
 import com.fitzza.order.global.exception.ErrorCode;
 import com.fitzza.order.order.dto.OrderCreateRequest;
+import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.dto.OrderDetailResponse;
 import com.fitzza.order.order.dto.OrderListResponse;
 import com.fitzza.order.order.entity.OrderEntity;
 import com.fitzza.order.order.entity.OrderItemEntity;
 import com.fitzza.order.order.entity.OrderStatus;
+import com.fitzza.order.order.repository.OrderFirstOptionProjection;
 import com.fitzza.order.order.repository.OrderItemCountProjection;
 import com.fitzza.order.order.repository.OrderItemRepository;
 import com.fitzza.order.order.repository.OrderRepository;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -40,7 +44,7 @@ public class OrderService {
     private final OrderNumberGenerator orderNumberGenerator;
     private final TransactionTemplate transactionTemplate;
 
-    public OrderDetailResponse createOrder(Long userId, OrderCreateRequest request) {
+    public OrderCreateResponse createOrder(Long userId, OrderCreateRequest request) {
         List<Long> cartIds = request.cartIds().stream().distinct().toList();
         List<CartEntity> carts = findOwnedCarts(userId, cartIds);
         Map<Long, ProductOptionResponse> options =
@@ -52,13 +56,19 @@ public class OrderService {
     public PageResponse<OrderListResponse> findOrders(Long userId, int page, int size) {
         Page<OrderEntity> orders = orderRepository.findAllByUserId(userId, PageRequest.of(page, size, ORDER_SORT));
         Map<Long, Long> itemCounts = loadItemCounts(orders.getContent());
-        return PageResponse.from(orders.map(order ->
-                OrderListResponse.of(order, itemCounts.getOrDefault(order.getOrderId(), 0L))));
+        Map<Long, String> thumbnails = loadThumbnails(orders.getContent());
+        return PageResponse.from(orders.map(order -> OrderListResponse.of(
+                order,
+                itemCounts.getOrDefault(order.getOrderId(), 0L),
+                thumbnails.get(order.getOrderId()))));
     }
 
     public OrderDetailResponse findOrder(Long userId, Long orderId) {
-        OrderEntity order = orderRepository.findWithItemsByOrderIdAndUserId(orderId, userId)
+        OrderEntity order = orderRepository.findWithItemsByOrderId(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+        if (!Objects.equals(order.getUserId(), userId)) {
+            throw new BusinessException(ErrorCode.ORDER_FORBIDDEN);
+        }
         Map<Long, ProductOptionResponse> options = productOptionClient.findOptionsOrEmpty(
                 order.getOrderItems().stream().map(OrderItemEntity::getOptionId).toList());
         return OrderDetailResponse.of(order, options);
@@ -82,7 +92,7 @@ public class OrderService {
         }
     }
 
-    private OrderDetailResponse placeOrder(
+    private OrderCreateResponse placeOrder(
             Long userId,
             OrderCreateRequest request,
             List<CartEntity> carts,
@@ -105,7 +115,7 @@ public class OrderService {
                 .orderQty(cart.getQuantity())
                 .unitPrice(options.get(cart.getOptionId()).price())
                 .build()));
-        return OrderDetailResponse.of(orderRepository.saveAndFlush(order), options);
+        return OrderCreateResponse.of(orderRepository.saveAndFlush(order));
     }
 
     private long calculateTotalPrice(List<CartEntity> carts, Map<Long, ProductOptionResponse> options) {
@@ -121,5 +131,26 @@ public class OrderService {
         List<Long> orderIds = orders.stream().map(OrderEntity::getOrderId).toList();
         return orderItemRepository.countByOrderIds(orderIds).stream()
                 .collect(Collectors.toMap(OrderItemCountProjection::getOrderId, OrderItemCountProjection::getItemCount));
+    }
+
+    private Map<Long, String> loadThumbnails(List<OrderEntity> orders) {
+        if (orders.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> orderIds = orders.stream().map(OrderEntity::getOrderId).toList();
+        Map<Long, Long> firstOptionIds = orderItemRepository.findFirstOptionIdsByOrderIds(orderIds).stream()
+                .collect(Collectors.toMap(
+                        OrderFirstOptionProjection::getOrderId, OrderFirstOptionProjection::getOptionId));
+        if (firstOptionIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ProductOptionResponse> options =
+                productOptionClient.findOptionsOrEmpty(firstOptionIds.values().stream().distinct().toList());
+        Map<Long, String> thumbnails = new HashMap<>();
+        firstOptionIds.forEach((orderId, optionId) -> {
+            ProductOptionResponse option = options.get(optionId);
+            thumbnails.put(orderId, option == null ? null : option.imageUrl());
+        });
+        return thumbnails;
     }
 }

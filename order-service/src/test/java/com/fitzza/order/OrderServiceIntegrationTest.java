@@ -166,12 +166,12 @@ class OrderServiceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ORDER_BODY.formatted(firstCartId, secondCartId)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.orderId").isNumber())
                 .andExpect(jsonPath("$.orderNum").value(startsWith("ORD-")))
                 .andExpect(jsonPath("$.orderStatus").value("PENDING"))
                 .andExpect(jsonPath("$.totalPrice").value(2 * 30000 + 45000))
-                .andExpect(jsonPath("$.items.length()").value(2))
-                .andExpect(jsonPath("$.items[0].unitPrice").value(30000))
-                .andExpect(jsonPath("$.items[0].productName").value("상품 10"))
+                .andExpect(jsonPath("$.items").doesNotExist())
+                .andExpect(jsonPath("$.recipient").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         int orderId = JsonPath.read(response, "$.orderId");
 
@@ -182,17 +182,24 @@ class OrderServiceIntegrationTest {
         mockMvc.perform(get("/api/orders/" + orderId).header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalPrice").value(2 * 30000 + 45000))
+                .andExpect(jsonPath("$.recipient.name").value("홍길동"))
+                .andExpect(jsonPath("$.recipient.phone").value("010-1234-5678"))
                 .andExpect(jsonPath("$.items[0].unitPrice").value(30000))
-                .andExpect(jsonPath("$.items[0].linePrice").value(60000));
+                .andExpect(jsonPath("$.items[0].productName").value("상품 10"))
+                .andExpect(jsonPath("$.items[0].linePrice").doesNotExist())
+                .andExpect(jsonPath("$.items[0].optionId").doesNotExist());
 
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.totalElements").doesNotExist())
                 .andExpect(jsonPath("$.content[0].orderId").value(orderId))
-                .andExpect(jsonPath("$.content[0].itemCount").value(2));
+                .andExpect(jsonPath("$.content[0].itemCount").value(2))
+                .andExpect(jsonPath("$.content[0].thumbnailUrl").value("https://cdn.example/10.jpg"));
         mockMvc.perform(get("/api/orders/" + orderId).header(ApiHeaders.USER_ID, OTHER_USER_ID))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ORDER_FORBIDDEN"));
     }
 
     @Test
@@ -202,10 +209,11 @@ class OrderServiceIntegrationTest {
 
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID).param("size", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(2))
-                .andExpect(jsonPath("$.hasNext").value(true))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.content[0].orderId").value(secondOrderId));
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID).param("size", "1").param("page", "1"))
+                .andExpect(jsonPath("$.page").value(1))
                 .andExpect(jsonPath("$.content[0].orderId").value(firstOrderId));
     }
 
@@ -238,7 +246,8 @@ class OrderServiceIntegrationTest {
         mockMvc.perform(get("/api/carts").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(jsonPath("$.length()").value(2));
         mockMvc.perform(get("/api/orders").header(ApiHeaders.USER_ID, USER_ID))
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0));
     }
 
     @Test

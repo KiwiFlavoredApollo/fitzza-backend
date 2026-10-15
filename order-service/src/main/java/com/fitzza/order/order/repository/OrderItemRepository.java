@@ -16,4 +16,16 @@ public interface OrderItemRepository extends JpaRepository<OrderItemEntity, Long
             group by i.order.orderId
             """)
     List<OrderItemCountProjection> countByOrderIds(@Param("orderIds") Collection<Long> orderIds);
+
+    @Query("""
+            select i.order.orderId as orderId, i.optionId as optionId
+            from OrderItemEntity i
+            where i.order.orderId in :orderIds
+              and i.orderItemId = (
+                  select min(first.orderItemId)
+                  from OrderItemEntity first
+                  where first.order.orderId = i.order.orderId
+              )
+            """)
+    List<OrderFirstOptionProjection> findFirstOptionIdsByOrderIds(@Param("orderIds") Collection<Long> orderIds);
 }
