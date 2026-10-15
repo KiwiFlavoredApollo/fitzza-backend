@@ -1,6 +1,10 @@
 server:
   port: 8761
 spring:
+  config:
+    import:
+      - "optional:file:${FITZZA_ENV_FILE:../.env}[.properties]"
+      - "optional:file:${FITZZA_ENV_FILE:./.env}[.properties]"
   application:
     name: discovery-service
 eureka:
