@@ -28,6 +28,11 @@ public class FcmConfig {
         }
         GoogleCredentials googleCredentials =
                 GoogleCredentials.fromStream(new ByteArrayInputStream(decodeCredentials(credentials)));
+        // 같은 JVM에서 컨텍스트가 다시 뜨면 이전에 만든 앱이 남아 있어 같은 이름으로 만들 수 없다.
+        // 이 이름의 앱은 여기서만 만들므로, 남아 있으면 지우고 지금 설정한 키로 새로 만든다.
+        FirebaseApp.getApps().stream()
+                .filter(existing -> FIREBASE_APP_NAME.equals(existing.getName()))
+                .forEach(FirebaseApp::delete);
         FirebaseApp app = FirebaseApp.initializeApp(
                 FirebaseOptions.builder().setCredentials(googleCredentials).build(), FIREBASE_APP_NAME);
         return new FirebaseFcmSender(FirebaseMessaging.getInstance(app));
