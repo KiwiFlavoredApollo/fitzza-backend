@@ -77,6 +77,10 @@ springdoc:
     urls:
       - name: user-service
         url: /api-docs/user-service
+      - name: product-service
+        url: /api-docs/product-service
+      - name: order-service
+        url: /api-docs/order-service
       - name: community-service
         url: /api-docs/community-service
       - name: notification-service
