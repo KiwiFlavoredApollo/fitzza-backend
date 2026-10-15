@@ -30,18 +30,20 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
-서비스끼리 호출하는 API는 `/api` 없이 시작하며(예: user-service `GET /users`, product-service `GET /products`, `GET /product-options`, notification-service `POST /notifications/events`) Gateway 라우트가 없습니다. Gateway에 `/api`로 시작하지 않는 라우트를 추가하지 않습니다. 호출하는 서비스는 자기 토큰을 `X-Service-Token` 헤더로 보내고, 받는 서비스는 API마다 허용한 서비스의 토큰인지 확인합니다. 현재 요청의 `X-User-Id`는 다른 서비스로 그대로 전달합니다. 토큰은 서비스마다 다른 32바이트 이상 값입니다.
+서비스끼리 호출하는 API는 `/api` 없이 시작하며(예: user-service `GET /users`, product-service `GET /products`, `GET /product-options`, order-service `GET /order-items/{orderItemId}`, notification-service `POST /notifications/events`) Gateway 라우트가 없습니다. Gateway에 `/api`로 시작하지 않는 라우트를 추가하지 않습니다. 호출하는 서비스는 자기 토큰을 `X-Service-Token` 헤더로 보내고, 받는 서비스는 API마다 허용한 서비스의 토큰인지 확인합니다. 현재 요청의 `X-User-Id`는 다른 서비스로 그대로 전달합니다. 토큰은 서비스마다 다른 32바이트 이상 값입니다.
 
 | 토큰 | 보내는 서비스 | 호출할 수 있는 API |
 | --- | --- | --- |
-| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}` |
+| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}`, 추천 `GET /recommendations/combos/{id}`, 가상 피팅 `GET /fittings/{id}` |
 | `ORDER_SERVICE_TOKEN` | order-service | product `GET /product-options` |
-| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`, product `GET /products/measurements` |
+| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`(추천 처리 완료 `RECOMMENDATION_DONE`, 성공·실패 모두 이 유형이고 targetId는 추천 요청 ID), product `GET /products/measurements` |
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
 | `PRODUCT_SERVICE_TOKEN` | product-service | product-service가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다. |
-| `REVIEW_SERVICE_TOKEN` | review-service | order `GET /order-items/{orderItemId}`(리뷰·설문 작성 전 본인 주문 확인). order-service가 이 토큰을 허용하기 전에는 비워 두며, 그동안 리뷰·설문 작성은 503이다. 추천 서비스 `POST /recommendations/size-feedback`(설문 결과 전달)에도 같은 토큰을 보낸다. |
+| `REVIEW_SERVICE_TOKEN` | review-service | order `GET /order-items/{orderItemId}`(리뷰·설문 작성 전 본인 주문 확인), 추천 `POST /recommendations/size-feedback`(사이즈 설문 결과 전달) |
 
-`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
+`COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. `REVIEW_SERVICE_TOKEN`이 없거나 짧으면 order-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
+
+커뮤니티 공유 글(`POST /api/community/posts`의 `sharedType`·`sharedId`)은 월드컵 결과(`WORLDCUP`), 추천 코디(`COMBO`), 가상 피팅 결과(`FITTING`)를 받습니다. community-service는 글을 저장하기 전에 각각 product-service `GET /worldcups/{id}`, 추천 서비스 `GET /recommendations/combos/{id}`, 가상 피팅 서비스 `GET /fittings/{id}`로 본인 결과인지 확인하고 공유 당시 모습을 스냅샷으로 저장합니다. 남의 결과는 403 `NOT_SHARED_OWNER`, 완료되지 않은 피팅은 409 `SHARED_TARGET_NOT_READY`입니다. 투표 선택지 중 AI 추천 코디도 추천 서비스로 본인이 받은 코디인지 확인합니다(남의 코디는 403 `NOT_RECOMMENDED_ITEM`). AI 추천 단품은 받은 추천인지 확인할 API가 없어 상품이 있는지만 확인합니다. 추천·피팅 서비스는 Eureka에 등록되지 않은 FastAPI라 `RECOMMENDATION_SERVICE_URL`, `VTON_SERVICE_URL` 주소로 부르며, 값이 비어 있거나 서비스가 응답하지 않으면 해당 공유·선택지만 503(`SHARE_LOOKUP_UNAVAILABLE`, `RECOMMENDATION_LOOKUP_UNAVAILABLE`)이고 나머지 기능은 그대로 동작합니다.
 
 user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
@@ -52,6 +54,8 @@ user-service의 8081 포트와 notification-service의 8086 포트는 호스트�
 로그아웃(`POST /api/auth/signout`)은 Body의 Refresh Token을 Redis에서 지웁니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
 
 알림 API(`GET /api/notifications`, `PATCH /api/notifications/{notificationId}`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다. 투표는 community-service가 1분마다(`fitzza.vote.close-check-delay-ms`, 기본 60000) 마감 시각이 지난 글을 찾아 마감 처리하고, 작성자에게 `VOTE_CLOSED` 알림을 보냅니다. 알림 서비스가 꺼져 있어 보내지 못한 알림은 다음 실행에서 성공할 때까지 다시 보냅니다. 실패한 글은 재시도 순서가 뒤로 밀려 새로 마감된 투표의 알림을 막지 않습니다. 작성자가 직접 조기 종료한 투표에는 알림을 보내지 않습니다.
+
+푸시 알림(FCM)은 FE가 Firebase에서 받은 기기 토큰을 `POST /api/notifications/tokens`(Body: `{ "token": "..." }`)로 등록하면 받을 수 있습니다. 한 사용자가 여러 기기를 등록할 수 있고, 같은 토큰을 다시 등록해도 결과는 같으며, 다른 계정에 있던 토큰이면 새 계정으로 옮깁니다. 로그아웃 전에는 `DELETE /api/notifications/tokens`(같은 Body)로 해제합니다. 알림이 새로 저장되면(댓글 `COMMENT`, 투표 마감 `VOTE_CLOSED`, 가상 피팅 `FITTING_DONE`·`FITTING_FAILED`, 추천 결과 `RECOMMENDATION_DONE`) 저장이 확정된 뒤 별도 스레드에서 그 사용자의 모든 기기로 푸시를 보냅니다(제목 `FITZZA`, 본문은 알림 내용, data에 `notificationId`·`type`·`targetId`). 같은 `eventId`로 다시 온 이벤트에는 푸시를 다시 보내지 않습니다. 추천 결과 알림은 성공·실패와 관계없이 `RECOMMENDATION_DONE` 하나만 쓰며, 결과 자체는 푸시에 담지 않고 FE가 `GET /api/v1/recommendations/{requestId}`의 `status`·`message`로 확인합니다(푸시는 끝났다는 신호이고 상태 API가 최종 기준). FCM이 더는 쓸 수 없다고 알려준 토큰(`UNREGISTERED`·`SENDER_ID_MISMATCH`)은 지웁니다. 푸시 전송이 실패해도 알림은 저장된 그대로 남아 알림 목록에서 볼 수 있습니다. `FIREBASE_CREDENTIALS`(서비스 계정 키 JSON의 base64 값, 배포 비밀 저장소에는 JSON 그대로도 가능)가 비어 있으면 푸시를 보내지 않고 로그만 남깁니다.
 
 사이즈 설문(`POST /api/surveys`)이 저장되면 review-service가 저장이 확정된 뒤 별도 스레드에서 추천 서비스 `POST /recommendations/size-feedback`(Body: `userId`, `productId`, `optionId`, `sizeFeedback`)으로 결과를 보내 선호 실측을 갱신하게 합니다. 추천 서비스가 응답하지 않아도 설문 작성은 그대로 성공하고, 보내지 못한 설문은 5분마다(`fitzza.size-feedback.retry-delay-ms`, 기본 300000) 다시 보냅니다. `RECOMMENDATION_SERVICE_URL`이나 `REVIEW_SERVICE_TOKEN`이 비어 있으면 보내지 않으며, 그동안 쓴 설문은 두 값을 설정한 뒤 재시도에서 보내집니다.
 
@@ -131,6 +135,8 @@ recommendation-service/  FastAPI 추천 API
 infra/                   PostgreSQL 초기화
 scripts/                 운영 보조 스크립트
 ```
+
+AWS 배포 기반은 [infra/aws/cloudformation/README.md](infra/aws/cloudformation/README.md)를 따릅니다. CloudFormation은 전용 VPC, 단일 NAT Gateway, EKS, S3, ECR을 구성하며 Managed Node Group은 비용 보호를 위해 `desired=0`으로 시작합니다.
 
 ## 구현 원칙
 

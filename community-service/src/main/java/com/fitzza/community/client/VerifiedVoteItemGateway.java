@@ -1,9 +1,11 @@
 package com.fitzza.community.client;
 
+import com.fitzza.community.client.ComboResults.ComboResult;
 import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOptionSource;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -11,7 +13,9 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 // 찜 출처는 상품 서비스에서 본인이 찜한 상품인지 확인하고, 이미지·상품명·가격을 상품 서비스 값으로 채운다.
-// AI 추천 출처는 추천 서비스의 확인 API가 아직 없어서 요청에 온 이미지 주소를 그대로 쓴다.
+// AI 추천 코디는 추천 서비스에서 본인이 받은 코디인지 확인하고, 첫 상품 이미지와 총 가격을 채운다.
+// AI 추천 단품은 받은 추천인지 확인할 API가 없어 상품이 있는지만 확인하고 상품 서비스 값으로 채운다.
+// 직접 올린 사진은 요청에 온 이미지 주소를 그대로 쓴다.
 @Component
 public class VerifiedVoteItemGateway implements VoteItemGateway {
 
@@ -19,23 +23,29 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
     private static final String HIDDEN_STATUS = "HIDDEN";
 
     private final ProductCatalog productCatalog;
+    private final ComboResults comboResults;
 
-    public VerifiedVoteItemGateway(ProductCatalog productCatalog) {
+    public VerifiedVoteItemGateway(ProductCatalog productCatalog, ComboResults comboResults) {
         this.productCatalog = productCatalog;
+        this.comboResults = comboResults;
     }
 
     @Override
     public VoteItemSnapshot resolve(
             Long userId, VoteOptionSource source, VoteItemType itemType, Long itemId, String imageUrl) {
-        if (source != VoteOptionSource.WISHLIST) {
-            return new VoteItemSnapshot(imageUrl, null, null);
-        }
+        return switch (source) {
+            case UPLOAD -> new VoteItemSnapshot(imageUrl, null, null);
+            case WISHLIST -> resolveWishlisted(userId, itemType, itemId, imageUrl);
+            case AI_RECOMMEND -> resolveRecommended(userId, itemType, itemId, imageUrl);
+        };
+    }
+
+    private VoteItemSnapshot resolveWishlisted(Long userId, VoteItemType itemType, Long itemId, String imageUrl) {
         // 찜 목록에는 상품만 담긴다.
         if (itemType != VoteItemType.PRODUCT || itemId == null) {
             throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
         }
         long productId = itemId;
-
         ProductCatalog.ProductSummary product;
         try {
             if (!productCatalog.isWishlisted(userId, productId)) {
@@ -46,6 +56,54 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
             log.warn("상품 서비스에서 찜 상품을 확인하지 못해 투표 글 작성을 거부합니다: {}", exception.getMessage());
             throw new CommunityApiException(ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
         }
+        return productSnapshot(product, imageUrl);
+    }
+
+    private VoteItemSnapshot resolveRecommended(Long userId, VoteItemType itemType, Long itemId, String imageUrl) {
+        if (itemId == null) {
+            throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
+        }
+        return switch (itemType) {
+            case COMBO -> resolveRecommendedCombo(userId, itemId, imageUrl);
+            case PRODUCT -> resolveRecommendedProduct(itemId, imageUrl);
+            case IMAGE -> throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
+        };
+    }
+
+    private VoteItemSnapshot resolveRecommendedCombo(Long userId, long comboId, String imageUrl) {
+        ComboResult combo;
+        try {
+            combo = comboResults.findCombo(comboId, userId)
+                    .orElseThrow(() -> new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS));
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("추천 서비스에서 코디를 확인하지 못해 투표 글 작성을 거부합니다: {}", exception.getMessage());
+            throw new CommunityApiException(ErrorCode.RECOMMENDATION_LOOKUP_UNAVAILABLE);
+        }
+        if (!combo.owned()) {
+            throw new CommunityApiException(ErrorCode.NOT_RECOMMENDED_ITEM);
+        }
+        List<ResultProduct> items = combo.items() == null ? List.of() : combo.items();
+        if (items.isEmpty()) {
+            throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
+        }
+        // 첫 상품 이미지가 없을 때만 요청에 온 이미지를 쓴다.
+        String firstImage = items.get(0).imageUrl();
+        String snapshotImage = firstImage == null || firstImage.isBlank() ? imageUrl : firstImage;
+        return new VoteItemSnapshot(snapshotImage, null, combo.totalPrice());
+    }
+
+    private VoteItemSnapshot resolveRecommendedProduct(long productId, String imageUrl) {
+        ProductCatalog.ProductSummary product;
+        try {
+            product = productCatalog.findProduct(productId).orElse(null);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("상품 서비스에서 추천 상품을 확인하지 못해 투표 글 작성을 거부합니다: {}", exception.getMessage());
+            throw new CommunityApiException(ErrorCode.PRODUCT_LOOKUP_UNAVAILABLE);
+        }
+        return productSnapshot(product, imageUrl);
+    }
+
+    private static VoteItemSnapshot productSnapshot(ProductCatalog.ProductSummary product, String imageUrl) {
         if (product == null || HIDDEN_STATUS.equals(product.status())) {
             throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
         }

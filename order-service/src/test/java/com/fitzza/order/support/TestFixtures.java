@@ -20,7 +20,15 @@ public final class TestFixtures {
 
     public static ProductOptionResponse option(Long optionId, int price, String status) {
         return new ProductOptionResponse(
-                optionId, optionId + 1000, "Fitzza", "상품 " + optionId, "BLACK", "M", price, null, status);
+                optionId,
+                optionId + 1000,
+                "Fitzza",
+                "상품 " + optionId,
+                "BLACK",
+                "M",
+                price,
+                "https://cdn.example/" + optionId + ".jpg",
+                status);
     }
 
     public static CartEntity cart(Long cartId, Long userId, Long optionId, int quantity) {

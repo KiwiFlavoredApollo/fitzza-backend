@@ -23,7 +23,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("Fitzza Order Service API")
-                        .description("장바구니 API. 사용자 식별은 X-User-Id 헤더로 전달한다. "
+                        .description("장바구니와 주문 API. 사용자 식별은 X-User-Id 헤더로 전달한다. "
                                 + "/api로 시작하지 않는 API는 서비스끼리만 호출하며 Gateway로는 호출할 수 없다.")
                         .version("v1"))
                 .components(new Components()
@@ -51,6 +51,14 @@ public class OpenApiConfig {
         return GroupedOpenApi.builder()
                 .group("public")
                 .pathsToMatch("/api/**")
+                .build();
+    }
+
+    @Bean
+    public GroupedOpenApi serviceApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("service")
+                .pathsToMatch("/order-items", "/order-items/**")
                 .build();
     }
 

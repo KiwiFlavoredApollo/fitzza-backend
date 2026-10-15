@@ -42,9 +42,6 @@ spring:
         - id: product-service-worldcups
           uri: lb://product-service
           predicates: ["Path=/api/worldcups,/api/worldcups/**"]
-        - id: order-service
-          uri: lb://order-service
-          predicates: [Path=/api/v1/orders/**]
         - id: order-service-orders
           uri: lb://order-service
           predicates: ["Path=/api/orders,/api/orders/**"]
