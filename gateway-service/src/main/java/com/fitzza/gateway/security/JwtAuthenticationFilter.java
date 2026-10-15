@@ -33,6 +33,7 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTH_PATH_PREFIX = "/api/auth/";
+    private static final String AUTH_V1_PATH_PREFIX = "/api/v1/auth/";
 
     private enum TokenStatus {
         ACTIVE,
@@ -52,7 +53,9 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         // 회원가입·로그인·재발급·로그아웃은 만료된 토큰이 같이 실려 와도 통과해야 한다. 막으면 재발급을 못 한다.
-        if (request.getPath().value().startsWith(AUTH_PATH_PREFIX)) {
+        // FE는 /api/v1/auth/**, 스웨거는 /api/auth/** 를 쓴다.
+        String path = request.getPath().value();
+        if (path.startsWith(AUTH_PATH_PREFIX) || path.startsWith(AUTH_V1_PATH_PREFIX)) {
             return chain.filter(withUserId(exchange, null));
         }
         // 토큰이 여러 개면 어느 것을 믿을지 정할 수 없으므로 거부한다.

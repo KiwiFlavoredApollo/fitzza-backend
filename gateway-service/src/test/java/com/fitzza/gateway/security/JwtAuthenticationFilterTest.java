@@ -174,6 +174,16 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void expiredTokenDoesNotBlockTheVersionedReissueEndpoint() {
+        send(MockServerHttpRequest.post("/api/v1/auth/refresh")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + TestTokens.expired("7"))
+                .header(USER_ID_HEADER, "999"));
+
+        assertThat(forwarded.get()).isNotNull();
+        assertThat(forwarded.get().getHeaders().containsKey(USER_ID_HEADER)).isFalse();
+    }
+
+    @Test
     void moreThanOneAuthorizationHeaderIsRejected() {
         String authorization = "Bearer " + TestTokens.valid("7");
         MockServerWebExchange exchange = send(MockServerHttpRequest.get("/api/community/posts")

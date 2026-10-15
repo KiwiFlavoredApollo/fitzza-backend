@@ -41,7 +41,8 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
         ServerHttpRequest request = exchange.getRequest();
-        String endpoint = request.getMethod() + " " + request.getPath().value();
+        // FE의 /api/v1/** 와 스웨거의 /api/** 를 같은 공개 API 목록으로 본다.
+        String endpoint = request.getMethod() + " " + withoutApiVersion(request.getPath().value());
         boolean protectedUserEndpoint =
                 route != null && LOGIN_REQUIRED_ROUTE_IDS.contains(route.getId()) && !PUBLIC_ENDPOINTS.contains(endpoint);
         if (!protectedUserEndpoint || request.getHeaders().containsKey(JwtAuthenticationFilter.USER_ID_HEADER)) {
@@ -61,5 +62,12 @@ public class UserAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return 0;
+    }
+
+    private static String withoutApiVersion(String path) {
+        if (path.startsWith("/api/v1/")) {
+            return "/api/" + path.substring("/api/v1/".length());
+        }
+        return path;
     }
 }

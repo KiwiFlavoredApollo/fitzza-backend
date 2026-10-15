@@ -110,9 +110,17 @@ class GatewayRouteTest {
         client.get().uri("/api/orders").headers(headers -> headers.setBearerAuth(orderToken))
                 .exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/orders");
-        client.get().uri("/api/v1/products/status").exchange().expectStatus().isNotFound();
-        client.get().uri("/api/v1/orders/status").exchange().expectStatus().isNotFound();
+        // FE /api/v1 요청은 서비스의 /api 경로로 바꿔 넘긴다. /api 요청은 그대로 둔다.
+        client.get().uri("/api/v1/products").exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("product-service:/api/products");
+        client.get().uri("/api/v1/products/1").exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("product-service:/api/products/1");
+        client.get().uri("/api/v1/orders").headers(headers -> headers.setBearerAuth(orderToken))
+                .exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("order-service:/api/orders");
         client.post().uri("/api/auth/signin").exchange().expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("user-service:/api/auth/signin");
+        client.post().uri("/api/v1/auth/signin").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("user-service:/api/auth/signin");
         client.get().uri("/internal/wishlists/check").exchange().expectStatus().isNotFound();
         client.get().uri("/internal/worldcups/1").exchange().expectStatus().isNotFound();
