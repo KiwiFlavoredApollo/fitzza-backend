@@ -7,9 +7,10 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - A dedicated VPC across two Availability Zones in `ap-northeast-2`
 - Two public and two private subnets
 - One public NAT Gateway and one Elastic IP
-- An S3 Gateway VPC Endpoint so pipeline traffic does not traverse NAT
+- An S3 Gateway VPC Endpoint for pipeline traffic and ECR image-layer downloads without NAT processing
 - One EKS 1.36 Standard cluster
 - One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
+- EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`)
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
 - A private, encrypted, versioned S3 bucket for crawler and AI pipeline data
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
@@ -88,6 +89,29 @@ aws eks update-nodegroup-config `
 ```
 
 Return `desiredSize` to zero after the approved work window.
+
+## Verify scheduled scaling
+
+The schedules invoke a least-privilege Lambda that accepts only `desiredSize` 0 or 1. Test scale-up during the approved work window:
+
+```powershell
+aws lambda invoke `
+  --function-name fitzza-prod-node-scaler `
+  --payload '{"desiredSize":1}' `
+  --cli-binary-format raw-in-base64-out `
+  --profile fitzza `
+  --region ap-northeast-2 `
+  node-scaler-result.json
+
+aws eks describe-nodegroup `
+  --cluster-name fitzza-prod `
+  --nodegroup-name fitzza-prod-arm64 `
+  --query 'nodegroup.scalingConfig' `
+  --profile fitzza `
+  --region ap-northeast-2
+```
+
+After verifying that one node becomes `Ready`, invoke the function with `{"desiredSize":0}` or wait for the weekday 18:00 schedule. Never leave the node running outside the approved window.
 
 ## Teardown
 

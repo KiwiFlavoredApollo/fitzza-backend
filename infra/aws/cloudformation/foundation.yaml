@@ -8,7 +8,7 @@ Metadata:
   AWSToolsMetrics:
     AWSAgentToolkit: aws-cloudformation@3
   com.aws.cloudformation.Context:
-    arch: public ALB subnets -> private EKS nodes; S3 traffic bypasses NAT; one NAT for project-cost constraint
+    arch: public ALB subnets -> private EKS nodes; Scheduler -> Lambda -> node desired 1/0; S3 bypasses NAT; one NAT for cost
     must:
       - deploy only in ap-northeast-2 for the approved estimate
       - keep worker desired=0 outside approved operating hours
@@ -349,6 +349,7 @@ Resources:
         why: route private S3 traffic without NAT processing charges
         must:
           - stay attached to the private route table
+          - allow read access to the regional ECR layer bucket for EKS system images
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -364,6 +365,11 @@ Resources:
             Resource:
               - !GetAtt DataBucket.Arn
               - !Sub '${DataBucket.Arn}/*'
+          - Sid: AllowEcrLayerDownloads
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*'
       RouteTableIds:
         - !Ref PrivateRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
@@ -488,6 +494,181 @@ Resources:
         CostCenter: !Ref CostCenter
       UpdateConfig:
         MaxUnavailable: 1
+
+  NodeScalerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: least-privilege runtime role for scheduled EKS node-group scaling
+        must:
+          - update only this stack's managed node group
+          - never grant EC2 or Auto Scaling mutation permissions
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: update-nodegroup-capacity
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: eks:UpdateNodegroupConfig
+                Resource: !GetAtt EksNodeGroup.Arn
+        - PolicyName: write-node-scaler-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${NodeScalerLogGroup.Arn}:*'
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NodeScalerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: retain scheduled scale-up/down results for operations and cost audits
+        must:
+          - logs must not include credentials or application secrets
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Environment}-node-scaler'
+      RetentionInDays: 14
+
+  NodeScalerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: NodeScalerLogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: validate desired capacity and call EKS API instead of mutating the backing ASG directly
+        must:
+          - accept only integer desiredSize 0 or 1
+          - preserve min=0 and max=1 budget limits
+        mutable: change-with-constraints
+    Properties:
+      Architectures: [arm64]
+      Code:
+        ZipFile: |
+          import os
+
+          import boto3
+
+          eks = boto3.client("eks")
+
+
+          def handler(event, context):
+              desired_size = event["desiredSize"]
+              if type(desired_size) is not int or desired_size not in (0, 1):
+                  raise ValueError("desiredSize must be integer 0 or 1")
+
+              response = eks.update_nodegroup_config(
+                  clusterName=os.environ["CLUSTER_NAME"],
+                  nodegroupName=os.environ["NODE_GROUP_NAME"],
+                  scalingConfig={"minSize": 0, "maxSize": 1, "desiredSize": desired_size},
+              )
+              return {
+                  "desiredSize": desired_size,
+                  "updateId": response["update"]["id"],
+                  "status": response["update"]["status"],
+              }
+      Environment:
+        Variables:
+          CLUSTER_NAME: !GetAtt EksNodeGroup.ClusterName
+          NODE_GROUP_NAME: !GetAtt EksNodeGroup.NodegroupName
+      FunctionName: !Sub '${ProjectName}-${Environment}-node-scaler'
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt NodeScalerRole.Arn
+      Runtime: python3.12
+      Timeout: 30
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  NodeSchedulerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: allow only this stack's schedules to invoke the node scaler
+        must:
+          - trust only EventBridge Scheduler from this account
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-node-scaler
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt NodeScalerFunction.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NodeScaleUpSchedule:
+    Type: AWS::Scheduler::Schedule
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: start one worker at 09:00 Korea time on project workdays
+        must:
+          - desiredSize stays 1
+          - timezone stays Asia/Seoul
+    Properties:
+      Description: Start one Fitzza EKS worker on weekdays
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Name: !Sub '${ProjectName}-${Environment}-nodes-up'
+      ScheduleExpression: cron(0 9 ? * MON-FRI *)
+      ScheduleExpressionTimezone: Asia/Seoul
+      State: ENABLED
+      Target:
+        Arn: !GetAtt NodeScalerFunction.Arn
+        Input: '{"desiredSize":1}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        RoleArn: !GetAtt NodeSchedulerRole.Arn
+
+  NodeScaleDownSchedule:
+    Type: AWS::Scheduler::Schedule
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: return worker capacity to zero at 18:00 Korea time on project workdays
+        must:
+          - desiredSize stays 0
+          - timezone stays Asia/Seoul
+    Properties:
+      Description: Stop Fitzza EKS workers on weekdays
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Name: !Sub '${ProjectName}-${Environment}-nodes-down'
+      ScheduleExpression: cron(0 18 ? * MON-FRI *)
+      ScheduleExpressionTimezone: Asia/Seoul
+      State: ENABLED
+      Target:
+        Arn: !GetAtt NodeScalerFunction.Arn
+        Input: '{"desiredSize":0}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        RoleArn: !GetAtt NodeSchedulerRole.Arn
 
   VpcCniAddon:
     Type: AWS::EKS::Addon
@@ -619,3 +800,9 @@ Outputs:
   EcrRepositoryPrefixUri:
     Description: Registry URI prefix used by buildspec.yml
     Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepositoryPrefix}'
+  NodeScaleUpScheduleName:
+    Description: Weekday 09:00 Asia/Seoul node scale-up schedule
+    Value: !Ref NodeScaleUpSchedule
+  NodeScaleDownScheduleName:
+    Description: Weekday 18:00 Asia/Seoul node scale-down schedule
+    Value: !Ref NodeScaleDownSchedule
