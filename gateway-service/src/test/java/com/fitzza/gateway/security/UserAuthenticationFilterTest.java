@@ -65,9 +65,20 @@ class UserAuthenticationFilterTest {
         assertThat(filter(exchange(endpoint, "recommendation-service", "42")).get()).isNotNull();
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"GET /api/orders", "POST /api/orders", "GET /api/orders/1"})
+    void ordersAreForMembersOnly(String endpoint) {
+        MockServerWebExchange anonymous = exchange(endpoint, "order-service-orders", null);
+
+        assertThat(filter(anonymous).get()).isNull();
+        assertThat(anonymous.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(filter(exchange(endpoint, "order-service-orders", "42")).get()).isNotNull();
+    }
+
     @Test
     void leavesOtherRoutesToTheirOwnServices() {
         assertThat(filter(exchange("GET /api/community/posts", "community-service", null)).get()).isNotNull();
+        assertThat(filter(exchange("GET /api/carts", "order-service-carts", null)).get()).isNotNull();
     }
 
     @Test

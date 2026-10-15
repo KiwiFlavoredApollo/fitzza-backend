@@ -32,6 +32,16 @@ public class ProductOptionClient {
         }
     }
 
+    // 조회 화면처럼 상품 정보가 없어도 응답할 수 있는 경우에 사용한다.
+    public Map<Long, ProductOptionResponse> findOptionsOrEmpty(Collection<Long> optionIds) {
+        try {
+            return fetchOptions(optionIds);
+        } catch (FeignException exception) {
+            log.warn("상품 옵션 조회에 실패해 상품 정보 없이 응답합니다. status={}", exception.status());
+            return Map.of();
+        }
+    }
+
     private Map<Long, ProductOptionResponse> fetchOptions(Collection<Long> optionIds) {
         List<Long> distinctIds = optionIds.stream().distinct().toList();
         if (distinctIds.isEmpty()) {

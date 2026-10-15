@@ -72,4 +72,11 @@ class ProductOptionClientTest {
         verify(productFeignClient, times(2)).getOptions(captor.capture());
         assertThat(captor.getAllValues()).extracting(List::size).containsExactly(100, 1);
     }
+
+    @Test
+    void findOptionsOrEmptyReturnsEmptyMapOnRemoteFailure() {
+        when(productFeignClient.getOptions(List.of(10L))).thenThrow(feignException(503));
+
+        assertThat(productOptionClient.findOptionsOrEmpty(List.of(10L))).isEmpty();
+    }
 }
