@@ -8,6 +8,7 @@ import com.fitzza.notification.exception.ErrorCode;
 import com.fitzza.notification.exception.NotificationApiException;
 import com.fitzza.notification.repository.NotificationRepository;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,21 +24,32 @@ public class NotificationService {
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final NotificationRepository notificationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public NotificationService(NotificationRepository notificationRepository) {
+    public NotificationService(
+            NotificationRepository notificationRepository, ApplicationEventPublisher eventPublisher) {
         this.notificationRepository = notificationRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // 이미 받은 eventId면 아무것도 저장하지 않는다. 보내는 쪽은 실패했을 때 같은 eventId로 다시 보내면 된다.
+    // 새로 저장된 알림만 푸시 대상으로 알려서, 같은 이벤트가 다시 와도 푸시가 두 번 가지 않는다.
     @Transactional
     public void receive(NotificationEventRequest event) {
-        notificationRepository.insertIfAbsent(
-                UUID.randomUUID().toString(),
+        String notificationId = UUID.randomUUID().toString();
+        String content = event.content().trim();
+        String targetId = trimOrEmpty(event.targetId());
+        int inserted = notificationRepository.insertIfAbsent(
+                notificationId,
                 event.userId(),
                 event.type().name(),
-                event.content().trim(),
-                trimOrEmpty(event.targetId()),
+                content,
+                targetId,
                 event.eventId().trim());
+        if (inserted > 0) {
+            eventPublisher.publishEvent(
+                    new NotificationSavedEvent(notificationId, event.userId(), event.type(), content, targetId));
+        }
     }
 
     @Transactional(readOnly = true)

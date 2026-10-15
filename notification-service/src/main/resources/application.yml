@@ -10,6 +10,9 @@ fitzza:
     community: ${COMMUNITY_SERVICE_TOKEN}
     recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
     vton: ${VTON_SERVICE_TOKEN:}
+  # Firebase 서비스 계정 키(JSON 또는 그 base64 값). 비워 두면 푸시를 보내지 않고 로그만 남긴다.
+  fcm:
+    credentials: ${FIREBASE_CREDENTIALS:}
 
 management:
   endpoints:
