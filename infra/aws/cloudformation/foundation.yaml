@@ -550,7 +550,7 @@ Resources:
       com.aws.cloudformation.Context:
         why: validate desired capacity and call EKS API instead of mutating the backing ASG directly
         must:
-          - accept only desiredSize 0 or 1
+          - accept only integer desiredSize 0 or 1
           - preserve min=0 and max=1 budget limits
         mutable: change-with-constraints
     Properties:
@@ -565,9 +565,9 @@ Resources:
 
 
           def handler(event, context):
-              desired_size = int(event["desiredSize"])
-              if desired_size not in (0, 1):
-                  raise ValueError("desiredSize must be 0 or 1")
+              desired_size = event["desiredSize"]
+              if type(desired_size) is not int or desired_size not in (0, 1):
+                  raise ValueError("desiredSize must be integer 0 or 1")
 
               response = eks.update_nodegroup_config(
                   clusterName=os.environ["CLUSTER_NAME"],
