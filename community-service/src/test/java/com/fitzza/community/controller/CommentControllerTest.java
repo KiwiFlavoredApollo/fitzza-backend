@@ -38,7 +38,7 @@ class CommentControllerTest {
 
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final String POST_COMMENTS = "/api/community/posts/3/comments";
-    private static final String COMMENTS = "/api/community/comments";
+    private static final String COMMENTS = "/api/comments";
 
     private final CommentService commentService = mock(CommentService.class);
     private MockMvc mockMvc;
