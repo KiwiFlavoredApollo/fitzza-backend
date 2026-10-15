@@ -15,7 +15,7 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 // postType을 보내지 않으면 일반 글이다. 투표 글은 postType=VOTE와 선택지(options) 2~4개를 함께 보낸다.
-// 공유 글이면 sharedType과 sharedId를 함께 보낸다(지금은 WORLDCUP + 월드컵 이력 ID만 받는다). 투표 글은 공유할 수 없다.
+// 공유 글이면 sharedType(WORLDCUP·COMBO·FITTING)과 sharedId(월드컵 이력·추천 코디·가상 피팅 ID)를 함께 보낸다. 투표 글은 공유할 수 없다.
 public record PostCreateRequest(
         @NotBlank(message = "제목을 입력해주세요.")
                 @Size(max = Post.TITLE_MAX_LENGTH, message = "제목은 100자 이하로 입력해주세요.")

@@ -1,6 +1,8 @@
 package com.fitzza.community.domain;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -8,12 +10,16 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.hibernate.annotations.ColumnDefault;
 
 @Entity
@@ -63,6 +69,12 @@ public class Post {
 
     @Embedded
     private SharedSnapshot sharedSnapshot;
+
+    // 공유한 코디·피팅 결과에 들어 있던 상품들(공유 당시 순서대로). 월드컵 공유와 일반 글은 비어 있다.
+    @ElementCollection
+    @CollectionTable(name = "post_shared_items", joinColumns = @JoinColumn(name = "post_id"))
+    @OrderColumn(name = "item_order")
+    private List<SharedItem> sharedItems = new ArrayList<>();
 
     // 투표글에만 값이 있다. 일반 글은 NULL이다.
     @Column(name = "vote_end_at")
@@ -131,9 +143,15 @@ public class Post {
 
     // 공유 대상은 글을 쓸 때만 정할 수 있다(수정으로 바꿀 수 없음).
     public void attachShared(SharedType type, Long id, SharedSnapshot snapshot) {
+        attachShared(type, id, snapshot, List.of());
+    }
+
+    public void attachShared(SharedType type, Long id, SharedSnapshot snapshot, List<SharedItem> items) {
         this.sharedType = type;
         this.sharedId = id;
         this.sharedSnapshot = snapshot;
+        this.sharedItems.clear();
+        this.sharedItems.addAll(items);
     }
 
     public boolean isShared() {
@@ -150,6 +168,10 @@ public class Post {
 
     public SharedSnapshot getSharedSnapshot() {
         return sharedSnapshot;
+    }
+
+    public List<SharedItem> getSharedItems() {
+        return List.copyOf(sharedItems);
     }
 
     @PrePersist

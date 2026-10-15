@@ -187,7 +187,7 @@ class PostControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         mockMvc.perform(post(POSTS).header(USER_ID_HEADER, "7").contentType(MediaType.APPLICATION_JSON)
-                        .content("{" + base + ",\"sharedType\":\"FITTING\",\"sharedId\":9}"))
+                        .content("{" + base + ",\"sharedType\":\"PLAYLIST\",\"sharedId\":9}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(postService);

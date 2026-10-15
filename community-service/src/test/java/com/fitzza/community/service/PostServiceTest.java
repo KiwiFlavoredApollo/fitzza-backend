@@ -12,11 +12,13 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fitzza.community.client.SharedTargetGateway;
+import com.fitzza.community.client.SharedTargetGateway.SharedTarget;
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostLikeId;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedItem;
 import com.fitzza.community.domain.SharedSnapshot;
 import com.fitzza.community.domain.SharedType;
 import com.fitzza.community.domain.VoteItemType;
@@ -119,7 +121,8 @@ class PostServiceTest {
     @Test
     void createSharingAWorldcupResultStoresTheTargetAndItsSnapshot() {
         SharedSnapshot snapshot = new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL);
-        when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.WORLDCUP, 9L)).thenReturn(snapshot);
+        when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.WORLDCUP, 9L))
+                .thenReturn(new SharedTarget(snapshot, List.of()));
         when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
 
         postService.create(AUTHOR_ID, new PostCreateRequest(
@@ -130,6 +133,24 @@ class PostServiceTest {
         assertThat(captor.getValue().getSharedType()).isEqualTo(SharedType.WORLDCUP);
         assertThat(captor.getValue().getSharedId()).isEqualTo(9L);
         assertThat(captor.getValue().getSharedSnapshot()).isSameAs(snapshot);
+    }
+
+    @Test
+    void createSharingAComboStoresItsItemsWithTheSnapshot() {
+        SharedSnapshot snapshot = new SharedSnapshot(null, null, null, 89000, OPTION_IMAGE_URL, "잘 어울려요");
+        SharedItem shirt = new SharedItem(1L, "셔츠", 39000, OPTION_IMAGE_URL);
+        when(sharedTargetGateway.resolve(AUTHOR_ID, SharedType.COMBO, 31L))
+                .thenReturn(new SharedTarget(snapshot, List.of(shirt)));
+        when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
+
+        postService.create(AUTHOR_ID, new PostCreateRequest(
+                "추천 코디", "어때요", PostCategory.FASHION, null, SharedType.COMBO, 31L, null, null));
+
+        ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
+        verify(postRepository).save(captor.capture());
+        assertThat(captor.getValue().getSharedType()).isEqualTo(SharedType.COMBO);
+        assertThat(captor.getValue().getSharedSnapshot()).isSameAs(snapshot);
+        assertThat(captor.getValue().getSharedItems()).containsExactly(shirt);
     }
 
     @Test

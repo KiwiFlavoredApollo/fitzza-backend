@@ -34,7 +34,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 | 토큰 | 보내는 서비스 | 호출할 수 있는 API |
 | --- | --- | --- |
-| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}` |
+| `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}`, 추천 `GET /recommendations/combos/{id}`, 가상 피팅 `GET /fittings/{id}` |
 | `ORDER_SERVICE_TOKEN` | order-service | product `GET /product-options` |
 | `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`, product `GET /products/measurements` |
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
@@ -42,6 +42,8 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 | `REVIEW_SERVICE_TOKEN` | review-service | order `GET /order-items/{orderItemId}`(리뷰·설문 작성 전 본인 주문 확인). order-service가 이 토큰을 허용하기 전에는 비워 두며, 그동안 리뷰·설문 작성은 503이다. |
 
 `COMMUNITY_SERVICE_TOKEN`이 없거나 32바이트보다 짧으면 user·notification·community·product-service가 시작되지 않습니다. `ORDER_SERVICE_TOKEN`이 없거나 짧으면 order-service와 product-service가 시작되지 않습니다. 나머지 토큰은 해당 서비스가 호출을 시작할 때 설정합니다. 토큰이 없거나 허용되지 않은 서비스의 토큰이면 HTTP 401 `UNAUTHENTICATED`를 반환합니다. Gateway는 클라이언트가 보낸 `X-Service-Token`과 `X-Internal-Token`을 전달하기 전에 제거합니다.
+
+커뮤니티 공유 글(`POST /api/community/posts`의 `sharedType`·`sharedId`)은 월드컵 결과(`WORLDCUP`), 추천 코디(`COMBO`), 가상 피팅 결과(`FITTING`)를 받습니다. community-service는 글을 저장하기 전에 각각 product-service `GET /worldcups/{id}`, 추천 서비스 `GET /recommendations/combos/{id}`, 가상 피팅 서비스 `GET /fittings/{id}`로 본인 결과인지 확인하고 공유 당시 모습을 스냅샷으로 저장합니다. 남의 결과는 403 `NOT_SHARED_OWNER`, 완료되지 않은 피팅은 409 `SHARED_TARGET_NOT_READY`입니다. 투표 선택지 중 AI 추천 코디도 추천 서비스로 본인이 받은 코디인지 확인합니다(남의 코디는 403 `NOT_RECOMMENDED_ITEM`). AI 추천 단품은 받은 추천인지 확인할 API가 없어 상품이 있는지만 확인합니다. 추천·피팅 서비스는 Eureka에 등록되지 않은 FastAPI라 `RECOMMENDATION_SERVICE_URL`, `VTON_SERVICE_URL` 주소로 부르며, 값이 비어 있거나 서비스가 응답하지 않으면 해당 공유·선택지만 503(`SHARE_LOOKUP_UNAVAILABLE`, `RECOMMENDATION_LOOKUP_UNAVAILABLE`)이고 나머지 기능은 그대로 동작합니다.
 
 user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
