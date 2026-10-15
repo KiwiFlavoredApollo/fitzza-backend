@@ -1,6 +1,7 @@
 package com.fitzza.community.service;
 
 import com.fitzza.community.client.SharedTargetGateway;
+import com.fitzza.community.client.SharedTargetGateway.SharedTarget;
 import com.fitzza.community.client.UserDirectory;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
@@ -170,13 +171,13 @@ public class PostService {
             return voteService.createVotePost(userId, request);
         }
         // 남의 결과를 공유하려는 요청은 글을 만들기 전에 거른다.
-        SharedSnapshot snapshot = request.sharedType() == null
+        SharedTarget shared = request.sharedType() == null
                 ? null
                 : sharedTargetGateway.resolve(userId, request.sharedType(), request.sharedId());
         Post post = Post.createNormal(
                 userId, request.title(), request.content(), request.category(), request.imageUrl());
-        if (snapshot != null) {
-            post.attachShared(request.sharedType(), request.sharedId(), snapshot);
+        if (shared != null) {
+            post.attachShared(request.sharedType(), request.sharedId(), shared.snapshot(), shared.items());
         }
         return new PostCreatedResponse(postRepository.save(post).getId());
     }

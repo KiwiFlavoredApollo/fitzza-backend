@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.PostCategory;
 import com.fitzza.community.domain.PostType;
+import com.fitzza.community.domain.SharedItem;
 import com.fitzza.community.domain.SharedSnapshot;
 import com.fitzza.community.domain.SharedType;
 import com.fitzza.community.support.PostgresModeJpaTest;
@@ -196,6 +197,26 @@ class PostRepositoryTest {
         Post normal = postRepository.findById(normalId).orElseThrow();
         assertThat(normal.isShared()).isFalse();
         assertThat(normal.getSharedSnapshot()).isNull();
+    }
+
+    @Test
+    void aSharedComboKeepsItsSummaryAndItemsInOrder() {
+        Post post = Post.createNormal(AUTHOR_ID, "추천 코디", "어때요", PostCategory.FASHION, null);
+        post.attachShared(SharedType.COMBO, 31L,
+                new SharedSnapshot(null, null, null, 89000, "https://cdn.example.com/1.png", "톤온톤으로 잘 어울려요"),
+                List.of(
+                        new SharedItem(1L, "셔츠", 39000, "https://cdn.example.com/1.png"),
+                        new SharedItem(2L, "슬랙스", 50000, "https://cdn.example.com/2.png")));
+        Long postId = save(post).getId();
+        entityManager.flush();
+        entityManager.clear();
+
+        Post loaded = postRepository.findById(postId).orElseThrow();
+        assertThat(loaded.getSharedType()).isEqualTo(SharedType.COMBO);
+        assertThat(loaded.getSharedSnapshot().getPrice()).isEqualTo(89000);
+        assertThat(loaded.getSharedSnapshot().getSummary()).isEqualTo("톤온톤으로 잘 어울려요");
+        assertThat(loaded.getSharedItems()).extracting(SharedItem::getProductName).containsExactly("셔츠", "슬랙스");
+        assertThat(loaded.getSharedItems().get(1).getPrice()).isEqualTo(50000);
     }
 
     private Post save(Post post) {
