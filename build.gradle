@@ -35,5 +35,7 @@ subprojects {
 
     tasks.named('test') {
         useJUnitPlatform()
+        // Keep local secrets out of automated tests.
+        systemProperty 'FITZZA_ENV_FILE', rootProject.file('build/test-environment-missing.env').absolutePath.replace('\\', '/')
     }
 }
