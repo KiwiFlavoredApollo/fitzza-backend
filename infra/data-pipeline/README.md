@@ -49,7 +49,7 @@ if ($env:TYPESAFE_API_KEY) { "TYPESAFE_API_KEY is set" } else { "TYPESAFE_API_KE
 Run Jev from the repository root in the same terminal:
 
 ```powershell
-python .data/fashion-clip/scripts/generate_color_map.py `
+python -X utf8 .data/fashion-clip/scripts/generate_color_map.py `
   --data .data/color-qualified-dataset-500/data `
   --config .data/fashion-clip/config `
   --workers 4
@@ -62,6 +62,19 @@ Remove-Item Env:TYPESAFE_API_KEY
 ```
 
 This session-only method is recommended for local execution. Store the deployment key in AWS Secrets Manager and inject it only into the Jev batch job at runtime.
+
+## Local FashionCLIP indexing
+
+Run the batch from the local FashionCLIP checkout after `color_map.json` is generated. UTF-8 mode prevents Windows PowerShell's legacy console encoding from failing on Korean output or emoji.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+Push-Location .data/fashion-clip
+.\.venv\Scripts\python.exe scripts\index_to_qdrant.py
+Pop-Location
+```
+
+The current script recreates the local `musinsa_products` collection. Verify completion in the dashboard or with `GET http://localhost:6333/collections/musinsa_products`; `points_count` must be greater than zero.
 
 ## S3 run layout
 
