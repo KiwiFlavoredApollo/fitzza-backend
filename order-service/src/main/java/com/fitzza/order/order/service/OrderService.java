@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -82,6 +83,14 @@ public class OrderService {
         return carts;
     }
 
+    private List<CartEntity> findOwnedCartsForUpdate(Long userId, List<Long> cartIds) {
+        List<CartEntity> carts = cartRepository.findAllByCartIdInAndUserIdForUpdate(cartIds, userId);
+        if (carts.size() != cartIds.size()) {
+            throw new BusinessException(ErrorCode.CART_NOT_FOUND);
+        }
+        return carts;
+    }
+
     private void validateSellable(List<CartEntity> carts, Map<Long, ProductOptionResponse> options) {
         for (CartEntity cart : carts) {
             ProductOptionResponse option = options.get(cart.getOptionId());
@@ -98,24 +107,42 @@ public class OrderService {
             List<CartEntity> carts,
             Map<Long, ProductOptionResponse> options) {
         List<Long> cartIds = carts.stream().map(CartEntity::getCartId).toList();
-        if (cartRepository.deleteByUserIdAndCartIds(userId, cartIds) != carts.size()) {
+        List<CartEntity> lockedCarts = findOwnedCartsForUpdate(userId, cartIds);
+        if (!sameCartSnapshot(carts, lockedCarts)) {
+            throw new BusinessException(ErrorCode.CART_NOT_FOUND);
+        }
+        if (cartRepository.deleteByUserIdAndCartIds(userId, cartIds) != lockedCarts.size()) {
             throw new BusinessException(ErrorCode.CART_NOT_FOUND);
         }
         OrderEntity order = OrderEntity.builder()
                 .orderNum(orderNumberGenerator.generateOrderNumber())
                 .userId(userId)
-                .totalPrice(calculateTotalPrice(carts, options))
+                .totalPrice(calculateTotalPrice(lockedCarts, options))
                 .orderStatus(OrderStatus.PENDING)
                 .recipientName(request.recipientName())
                 .recipientPhone(request.recipientPhone())
                 .shippingAddress(request.shippingAddress())
                 .build();
-        carts.forEach(cart -> order.addOrderItem(OrderItemEntity.builder()
+        lockedCarts.forEach(cart -> order.addOrderItem(OrderItemEntity.builder()
                 .optionId(cart.getOptionId())
                 .orderQty(cart.getQuantity())
                 .unitPrice(options.get(cart.getOptionId()).price())
                 .build()));
         return OrderCreateResponse.of(orderRepository.saveAndFlush(order));
+    }
+
+    private boolean sameCartSnapshot(List<CartEntity> expected, List<CartEntity> actual) {
+        Map<Long, CartEntity> lockedById = actual.stream()
+                .collect(Collectors.toMap(CartEntity::getCartId, Function.identity()));
+        for (CartEntity cart : expected) {
+            CartEntity locked = lockedById.get(cart.getCartId());
+            if (locked == null
+                    || !Objects.equals(locked.getOptionId(), cart.getOptionId())
+                    || !Objects.equals(locked.getQuantity(), cart.getQuantity())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private long calculateTotalPrice(List<CartEntity> carts, Map<Long, ProductOptionResponse> options) {

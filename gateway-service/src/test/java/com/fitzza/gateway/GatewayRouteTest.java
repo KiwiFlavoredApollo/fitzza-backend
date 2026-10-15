@@ -5,6 +5,11 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.fitzza.gateway.security.AccessTokenBlacklist;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Date;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,7 +102,13 @@ class GatewayRouteTest {
                 .expectBody(String.class).isEqualTo("product-service:/api/worldcups/latest");
         client.get().uri("/api/carts").exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/carts");
-        client.get().uri("/api/orders").exchange().expectStatus().isOk()
+        client.get().uri("/api/orders").exchange().expectStatus().isUnauthorized();
+        String orderToken = Jwts.builder().subject("42").issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
+                        .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
+        client.get().uri("/api/orders").headers(headers -> headers.setBearerAuth(orderToken))
+                .exchange().expectStatus().isOk()
                 .expectBody(String.class).isEqualTo("order-service:/api/orders");
         client.get().uri("/api/v1/products/status").exchange().expectStatus().isNotFound();
         client.get().uri("/api/v1/orders/status").exchange().expectStatus().isNotFound();

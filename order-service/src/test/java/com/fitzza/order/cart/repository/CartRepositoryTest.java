@@ -79,6 +79,18 @@ class CartRepositoryTest {
     }
 
     @Test
+    void findAllByCartIdInForUpdateLocksOwnedCartsInCartIdOrder() {
+        CartEntity first = persistCart(USER_ID, 10L);
+        CartEntity second = persistCart(USER_ID, 11L);
+        persistCart(OTHER_USER_ID, 12L);
+
+        List<CartEntity> carts = cartRepository.findAllByCartIdInAndUserIdForUpdate(
+                List.of(second.getCartId(), first.getCartId()), USER_ID);
+
+        assertThat(carts).extracting(CartEntity::getCartId).containsExactly(first.getCartId(), second.getCartId());
+    }
+
+    @Test
     void deleteByUserIdAndCartIdsRemovesOnlyTheUsersCarts() {
         CartEntity mine = persistCart(USER_ID, 10L);
         CartEntity theirs = persistCart(OTHER_USER_ID, 11L);

@@ -86,7 +86,10 @@ class OrderServiceTest {
 
     @Test
     void createOrderSnapshotsPricesAndRemovesOrderedCarts() {
-        stubOwnedCarts(List.of(2L, 1L), cart(1L, USER_ID, 10L, 2), cart(2L, USER_ID, 11L, 1));
+        CartEntity first = cart(1L, USER_ID, 10L, 2);
+        CartEntity second = cart(2L, USER_ID, 11L, 1);
+        stubOwnedCarts(List.of(2L, 1L), first, second);
+        stubLockedCarts(first, second);
         when(productOptionClient.findOptions(List.of(10L, 11L))).thenReturn(Map.of(
                 10L, option(10L, 30000, "ON_SALE"),
                 11L, option(11L, 45000, "ON_SALE")));
@@ -150,10 +153,27 @@ class OrderServiceTest {
     void createOrderFailsWithoutSavingWhenCartWasRemovedConcurrently() {
         stubOwnedCarts(List.of(1L), cart(1L, USER_ID, 10L, 1));
         when(productOptionClient.findOptions(List.of(10L))).thenReturn(Map.of(10L, option(10L, 30000, "ON_SALE")));
-        when(cartRepository.deleteByUserIdAndCartIds(USER_ID, List.of(1L))).thenReturn(0);
+        when(cartRepository.findAllByCartIdInAndUserIdForUpdate(List.of(1L), USER_ID)).thenReturn(List.of());
 
         assertErrorCode(() -> orderService.createOrder(USER_ID, orderRequest(List.of(1L))),
                 ErrorCode.CART_NOT_FOUND);
+        verify(cartRepository, never()).deleteByUserIdAndCartIds(any(), any());
+        verify(orderRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void createOrderRejectsWhenCartChangesDuringCheckout() {
+        CartEntity initial = cart(1L, USER_ID, 10L, 1);
+        CartEntity changed = cart(1L, USER_ID, 10L, 5);
+        when(cartRepository.findAllByCartIdInAndUserIdOrderByCartId(List.of(1L), USER_ID))
+                .thenReturn(List.of(initial));
+        when(productOptionClient.findOptions(List.of(10L))).thenReturn(Map.of(10L, option(10L, 30000, "ON_SALE")));
+        when(cartRepository.findAllByCartIdInAndUserIdForUpdate(List.of(1L), USER_ID))
+                .thenReturn(List.of(changed));
+
+        assertErrorCode(() -> orderService.createOrder(USER_ID, orderRequest(List.of(1L))),
+                ErrorCode.CART_NOT_FOUND);
+        verify(cartRepository, never()).deleteByUserIdAndCartIds(any(), any());
         verify(orderRepository, never()).saveAndFlush(any());
     }
 
@@ -240,6 +260,12 @@ class OrderServiceTest {
 
     private void stubOwnedCarts(List<Long> requestedIds, CartEntity... carts) {
         when(cartRepository.findAllByCartIdInAndUserIdOrderByCartId(requestedIds, USER_ID)).thenReturn(List.of(carts));
+    }
+
+    private void stubLockedCarts(CartEntity... carts) {
+        List<CartEntity> owned = List.of(carts);
+        List<Long> orderedIds = owned.stream().map(CartEntity::getCartId).toList();
+        when(cartRepository.findAllByCartIdInAndUserIdForUpdate(orderedIds, USER_ID)).thenReturn(owned);
     }
 
     private OrderCreateRequest orderRequest(List<Long> cartIds) {

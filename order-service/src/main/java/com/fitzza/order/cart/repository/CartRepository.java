@@ -17,6 +17,16 @@ public interface CartRepository extends JpaRepository<CartEntity, Long> {
 
     List<CartEntity> findAllByCartIdInAndUserIdOrderByCartId(Collection<Long> cartIds, Long userId);
 
+    // 주문 생성 중 수량·옵션이 바뀌지 않도록 장바구니 행을 잠근다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select c from CartEntity c
+            where c.userId = :userId and c.cartId in :cartIds
+            order by c.cartId
+            """)
+    List<CartEntity> findAllByCartIdInAndUserIdForUpdate(
+            @Param("cartIds") Collection<Long> cartIds, @Param("userId") Long userId);
+
     Optional<CartEntity> findByCartIdAndUserId(Long cartId, Long userId);
 
     // 같은 옵션을 동시에 담을 때 읽은 수량을 덮어쓰지 않도록 행을 잠근다.
