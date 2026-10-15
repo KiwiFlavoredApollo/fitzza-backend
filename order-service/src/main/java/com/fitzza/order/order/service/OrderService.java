@@ -30,7 +30,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 // 상품 서비스 호출 중 DB 커넥션을 점유하지 않도록 쓰기 구간만 TransactionTemplate으로 감싼다.
@@ -77,18 +76,21 @@ public class OrderService {
         return OrderDetailResponse.of(order, options);
     }
 
-    @Transactional(readOnly = true)
+    // order는 EntityGraph로 함께 로드되므로 트랜잭션 없이 필드를 읽는다. 상품 조회 HTTP 동안 DB 커넥션을 잡지 않는다.
     public OrderItemInternalResponse findOrderItem(Long orderItemId, Long userId) {
         OrderItemEntity item = orderItemRepository.findWithOrderByOrderItemId(orderItemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_ITEM_NOT_FOUND));
         OrderEntity order = item.getOrder();
-        ProductOptionResponse option = productOptionClient.findOptionsOrEmpty(List.of(item.getOptionId()))
+        boolean owned = Objects.equals(order.getUserId(), userId);
+        if (!owned) {
+            return new OrderItemInternalResponse(false, null, item.getOptionId(), order.getOrderStatus());
+        }
+        ProductOptionResponse option = productOptionClient.findOptions(List.of(item.getOptionId()))
                 .get(item.getOptionId());
-        return new OrderItemInternalResponse(
-                Objects.equals(order.getUserId(), userId),
-                option == null ? null : option.productId(),
-                item.getOptionId(),
-                order.getOrderStatus());
+        if (option == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_SERVICE_UNAVAILABLE);
+        }
+        return new OrderItemInternalResponse(true, option.productId(), item.getOptionId(), order.getOrderStatus());
     }
 
     private List<CartEntity> findOwnedCarts(Long userId, List<Long> cartIds) {

@@ -265,7 +265,7 @@ class OrderServiceTest {
         OrderItemEntity item = owned.getOrderItems().get(0);
         ReflectionTestUtils.setField(item, "orderItemId", 31L);
         when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
-        when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of(
+        when(productOptionClient.findOptions(List.of(10L))).thenReturn(Map.of(
                 10L, option(10L, 30000, "ON_SALE")));
 
         OrderItemInternalResponse response = orderService.findOrderItem(31L, USER_ID);
@@ -277,18 +277,41 @@ class OrderServiceTest {
     }
 
     @Test
-    void findOrderItemMarksOtherUsersItemAsNotOwned() {
+    void findOrderItemMarksOtherUsersItemAsNotOwnedWithoutProductLookup() {
         OrderEntity owned = order(1L, "ORD-1", 1);
         OrderItemEntity item = owned.getOrderItems().get(0);
         ReflectionTestUtils.setField(item, "orderItemId", 31L);
         when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
-        when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of());
 
         OrderItemInternalResponse response = orderService.findOrderItem(31L, 99L);
 
         assertThat(response.owned()).isFalse();
         assertThat(response.productId()).isNull();
         assertThat(response.optionId()).isEqualTo(10L);
+        verifyNoInteractions(productOptionClient);
+    }
+
+    @Test
+    void findOrderItemPropagatesProductServiceFailureForOwnedItem() {
+        OrderEntity owned = order(1L, "ORD-1", 1);
+        OrderItemEntity item = owned.getOrderItems().get(0);
+        ReflectionTestUtils.setField(item, "orderItemId", 31L);
+        when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
+        when(productOptionClient.findOptions(List.of(10L)))
+                .thenThrow(new BusinessException(ErrorCode.PRODUCT_SERVICE_UNAVAILABLE));
+
+        assertErrorCode(() -> orderService.findOrderItem(31L, USER_ID), ErrorCode.PRODUCT_SERVICE_UNAVAILABLE);
+    }
+
+    @Test
+    void findOrderItemRejectsOwnedItemWhenOptionIsMissing() {
+        OrderEntity owned = order(1L, "ORD-1", 1);
+        OrderItemEntity item = owned.getOrderItems().get(0);
+        ReflectionTestUtils.setField(item, "orderItemId", 31L);
+        when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
+        when(productOptionClient.findOptions(List.of(10L))).thenReturn(Map.of());
+
+        assertErrorCode(() -> orderService.findOrderItem(31L, USER_ID), ErrorCode.PRODUCT_SERVICE_UNAVAILABLE);
     }
 
     @Test
