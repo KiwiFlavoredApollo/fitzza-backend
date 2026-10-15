@@ -4,6 +4,7 @@ package com.fitzza.order.global.security;
 public final class ServiceCallers {
 
     public static final String COMMUNITY = "community";
+    public static final String REVIEW = "review";
 
     private ServiceCallers() {
     }

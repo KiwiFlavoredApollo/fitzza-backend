@@ -69,6 +69,21 @@ class OrderRepositoryTest {
     }
 
     @Test
+    void findWithOrderByOrderItemIdLoadsParentOrder() {
+        OrderEntity saved = persistOrder(USER_ID, "ORD-1", 2);
+        Long orderItemId = saved.getOrderItems().get(0).getOrderItemId();
+        entityManager.clear();
+
+        var found = orderItemRepository.findWithOrderByOrderItemId(orderItemId);
+
+        assertThat(found).isPresent();
+        assertThat(found.get().getOrder().getOrderId()).isEqualTo(saved.getOrderId());
+        assertThat(found.get().getOrder().getUserId()).isEqualTo(USER_ID);
+        assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
+                .isLoaded(found.get(), "order")).isTrue();
+    }
+
+    @Test
     void findFirstOptionIdsByOrderIdsReturnsEarliestItemOption() {
         OrderEntity twoItems = persistOrder(USER_ID, "ORD-1", 2);
         OrderEntity oneItem = persistOrder(USER_ID, "ORD-2", 1);

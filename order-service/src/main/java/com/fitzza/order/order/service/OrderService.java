@@ -10,6 +10,7 @@ import com.fitzza.order.global.exception.ErrorCode;
 import com.fitzza.order.order.dto.OrderCreateRequest;
 import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.dto.OrderDetailResponse;
+import com.fitzza.order.order.dto.OrderItemInternalResponse;
 import com.fitzza.order.order.dto.OrderListResponse;
 import com.fitzza.order.order.entity.OrderEntity;
 import com.fitzza.order.order.entity.OrderItemEntity;
@@ -73,6 +74,23 @@ public class OrderService {
         Map<Long, ProductOptionResponse> options = productOptionClient.findOptionsOrEmpty(
                 order.getOrderItems().stream().map(OrderItemEntity::getOptionId).toList());
         return OrderDetailResponse.of(order, options);
+    }
+
+    // order는 EntityGraph로 함께 로드되므로 트랜잭션 없이 필드를 읽는다. 상품 조회 HTTP 동안 DB 커넥션을 잡지 않는다.
+    public OrderItemInternalResponse findOrderItem(Long orderItemId, Long userId) {
+        OrderItemEntity item = orderItemRepository.findWithOrderByOrderItemId(orderItemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_ITEM_NOT_FOUND));
+        OrderEntity order = item.getOrder();
+        boolean owned = Objects.equals(order.getUserId(), userId);
+        if (!owned) {
+            return new OrderItemInternalResponse(false, null, item.getOptionId(), order.getOrderStatus());
+        }
+        ProductOptionResponse option = productOptionClient.findOptions(List.of(item.getOptionId()))
+                .get(item.getOptionId());
+        if (option == null) {
+            throw new BusinessException(ErrorCode.PRODUCT_SERVICE_UNAVAILABLE);
+        }
+        return new OrderItemInternalResponse(true, option.productId(), item.getOptionId(), order.getOrderStatus());
     }
 
     private List<CartEntity> findOwnedCarts(Long userId, List<Long> cartIds) {

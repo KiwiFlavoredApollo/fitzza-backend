@@ -54,6 +54,14 @@ public class OpenApiConfig {
                 .build();
     }
 
+    @Bean
+    public GroupedOpenApi serviceApiGroup() {
+        return GroupedOpenApi.builder()
+                .group("service")
+                .pathsToMatch("/order-items", "/order-items/**")
+                .build();
+    }
+
     private static void addHeaderIfAbsent(Operation operation, String name, String description) {
         if (operation.getParameters() != null && operation.getParameters().stream()
                 .anyMatch(parameter -> name.equals(parameter.getName()) && "header".equals(parameter.getIn()))) {
