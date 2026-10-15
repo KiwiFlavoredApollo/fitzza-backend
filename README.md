@@ -134,6 +134,8 @@ scripts/                 운영 보조 스크립트
 
 크롤러에서 Jev 색상 정규화로 전달하는 데이터 계약은 [infra/data-pipeline/README.md](infra/data-pipeline/README.md)를 따릅니다.
 
+AWS 배포 기반은 [infra/aws/cloudformation/README.md](infra/aws/cloudformation/README.md)를 따릅니다. CloudFormation은 전용 VPC, 단일 NAT Gateway, EKS, S3, ECR을 구성하며 Managed Node Group은 비용 보호를 위해 `desired=0`으로 시작합니다.
+
 ## 구현 원칙
 
 - 서비스별 데이터 소유권을 전제로 PostgreSQL 스키마를 분리했습니다.
