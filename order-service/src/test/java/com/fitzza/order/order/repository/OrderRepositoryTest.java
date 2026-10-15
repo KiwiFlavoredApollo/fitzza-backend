@@ -60,6 +60,12 @@ class OrderRepositoryTest {
         assertThat(entityManager.getEntityManager().getEntityManagerFactory().getPersistenceUnitUtil()
                 .isLoaded(found.get(), "orderItems")).isTrue();
         assertThat(found.get().getOrderItems()).hasSize(2);
+        assertThat(found.get().getOrderItems())
+                .extracting(OrderItemEntity::getOptionId)
+                .containsExactly(10L, 11L);
+        assertThat(found.get().getOrderItems())
+                .extracting(OrderItemEntity::getOrderItemId)
+                .isSorted();
     }
 
     @Test
