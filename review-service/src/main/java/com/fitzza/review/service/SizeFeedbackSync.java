@@ -25,6 +25,8 @@ public class SizeFeedbackSync {
     static final int BATCH_SIZE = 50;
     // 저장 직후 전송이 아직 진행 중일 수 있는 설문은 재시도에서 건너뛴다.
     static final Duration RETRY_AFTER = Duration.ofMinutes(1);
+    // 보내는 중 표시의 유효 시간. 요청 시간 제한(수 초)보다 넉넉히 길게 두고, 지나면 다른 쪽이 다시 보낼 수 있다.
+    static final Duration CLAIM_TIMEOUT = Duration.ofMinutes(5);
 
     private static final Logger log = LoggerFactory.getLogger(SizeFeedbackSync.class);
 
@@ -58,8 +60,9 @@ public class SizeFeedbackSync {
         if (!sizeFeedbacks.isEnabled()) {
             return;
         }
+        Instant now = Instant.now();
         List<SizeSurvey> unsent = sizeSurveyRepository.findUnsentFeedback(
-                Instant.now().minus(RETRY_AFTER), PageRequest.of(0, BATCH_SIZE));
+                now.minus(RETRY_AFTER), now.minus(CLAIM_TIMEOUT), PageRequest.of(0, BATCH_SIZE));
         for (SizeSurvey survey : unsent) {
             // 추천 서비스가 응답하지 않으면 나머지도 실패할 테니 다음 실행으로 미룬다.
             if (!sendOnce(survey)) {
@@ -68,24 +71,45 @@ public class SizeFeedbackSync {
         }
     }
 
-    // 다른 쪽이 이미 보냈거나 보내는 중이면 건너뛰고 true를 돌려준다. 보내지 못하면 표시를 되돌리고 false다.
+    // 다른 쪽이 이미 보냈거나 보내는 중이면 건너뛰고 true를 돌려준다. 보내지 못하면 false다.
     boolean sendOnce(SizeSurvey survey) {
         if (survey.getProductId() == null) {
             return true;
         }
-        if (sizeSurveyRepository.claimFeedback(survey.getId(), Instant.now()) == 0) {
+        Instant now = Instant.now();
+        if (sizeSurveyRepository.claimFeedback(survey.getId(), now, now.minus(CLAIM_TIMEOUT)) == 0) {
             return true;
         }
         try {
             sizeFeedbacks.send(new SizeFeedbackRequest(
                     survey.getUserId(), survey.getProductId(), survey.getOptionId(), survey.getSizeFeedback()));
-            return true;
         } catch (RuntimeException exception) {
-            // 보냄 표시를 해 둔 채로 남으면 다시는 보내지 않으므로, 어떤 실패든 표시를 되돌린다.
-            sizeSurveyRepository.releaseFeedback(survey.getId());
+            releaseClaim(survey.getId());
             log.warn("추천 서비스가 사이즈 평가를 받지 못했습니다. 다음 재시도에서 다시 보냅니다. surveyId={}: {}",
                     survey.getId(), exception.getMessage());
             return false;
+        }
+        markSent(survey.getId());
+        return true;
+    }
+
+    // 표시를 지우지 못해도 CLAIM_TIMEOUT이 지나면 재시도 대상으로 돌아온다.
+    private void releaseClaim(Long surveyId) {
+        try {
+            sizeSurveyRepository.releaseFeedback(surveyId);
+        } catch (RuntimeException exception) {
+            log.warn("보내는 중 표시를 지우지 못했습니다. 표시가 만료된 뒤 다시 보냅니다. surveyId={}: {}",
+                    surveyId, exception.getMessage());
+        }
+    }
+
+    // 추천 서비스는 이미 받았다. 기록에 실패하면 표시가 만료된 뒤 한 번 더 보내질 수 있다.
+    private void markSent(Long surveyId) {
+        try {
+            sizeSurveyRepository.markFeedbackSent(surveyId, Instant.now());
+        } catch (RuntimeException exception) {
+            log.warn("보낸 기록을 남기지 못했습니다. 표시가 만료된 뒤 다시 보내질 수 있습니다. surveyId={}: {}",
+                    surveyId, exception.getMessage());
         }
     }
 }

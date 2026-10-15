@@ -49,9 +49,14 @@ public class SizeSurvey {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    // 추천 서비스에 사이즈 평가를 보낸 시각. 비어 있으면 아직 보내지 못한 것이라 재시도 대상이다.
+    // 추천 서비스가 사이즈 평가를 받은 시각. 비어 있으면 아직 보내지 못한 것이라 재시도 대상이다.
     @Column(name = "feedback_sent_at")
     private Instant feedbackSentAt;
+
+    // 보내는 중임을 표시한 시각. 저장 직후 전송과 재시도가 겹치지 않게 하고,
+    // 보내다가 서버가 죽거나 표시를 되돌리지 못해도 일정 시간이 지나면 다시 보낼 수 있게 한다.
+    @Column(name = "feedback_claimed_at")
+    private Instant feedbackClaimedAt;
 
     protected SizeSurvey() {
     }
@@ -105,5 +110,9 @@ public class SizeSurvey {
 
     public Instant getFeedbackSentAt() {
         return feedbackSentAt;
+    }
+
+    public Instant getFeedbackClaimedAt() {
+        return feedbackClaimedAt;
     }
 }

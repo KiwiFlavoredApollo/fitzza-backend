@@ -43,32 +43,59 @@ class SizeSurveyRepositoryTest {
     }
 
     @Test
-    void unsentFeedbackSkipsSentSurveysSurveysWithoutAProductAndRecentOnes() {
-        SizeSurvey unsent = sizeSurveyRepository.saveAndFlush(SizeSurvey.of(7L, 30L, 3L, 500L, SizeFeedback.FIT));
-        SizeSurvey sent = sizeSurveyRepository.saveAndFlush(SizeSurvey.of(7L, 30L, 3L, 501L, SizeFeedback.BIG));
-        sizeSurveyRepository.saveAndFlush(SizeSurvey.of(7L, null, 3L, 502L, SizeFeedback.SMALL));
-        sizeSurveyRepository.claimFeedback(sent.getId(), Instant.now());
-        Instant later = Instant.now().plusSeconds(60);
-        Instant earlier = Instant.now().minusSeconds(60);
+    void unsentFeedbackSkipsSentClaimedProductlessAndRecentSurveys() {
+        Instant now = Instant.now();
+        SizeSurvey unsent = save(500L, 30L);
+        SizeSurvey sent = save(501L, 30L);
+        SizeSurvey claimed = save(502L, 30L);
+        SizeSurvey staleClaim = save(503L, 30L);
+        save(504L, null);
+        sizeSurveyRepository.markFeedbackSent(sent.getId(), now);
+        sizeSurveyRepository.claimFeedback(claimed.getId(), now, now.minusSeconds(300));
+        sizeSurveyRepository.claimFeedback(staleClaim.getId(), now.minusSeconds(600), now.minusSeconds(900));
 
-        assertThat(sizeSurveyRepository.findUnsentFeedback(later, PageRequest.of(0, 10)))
+        assertThat(sizeSurveyRepository.findUnsentFeedback(
+                        now.plusSeconds(60), now.minusSeconds(300), PageRequest.of(0, 10)))
                 .extracting(SizeSurvey::getId)
-                .containsExactly(unsent.getId());
-        assertThat(sizeSurveyRepository.findUnsentFeedback(earlier, PageRequest.of(0, 10))).isEmpty();
+                .containsExactly(unsent.getId(), staleClaim.getId());
+        assertThat(sizeSurveyRepository.findUnsentFeedback(
+                        now.minusSeconds(60), now.minusSeconds(300), PageRequest.of(0, 10)))
+                .isEmpty();
     }
 
     @Test
-    void onlyOneCallerCanClaimASurveyUntilItIsReleased() {
-        SizeSurvey survey = sizeSurveyRepository.saveAndFlush(SizeSurvey.of(7L, 30L, 3L, 500L, SizeFeedback.FIT));
+    void onlyOneCallerCanClaimASurveyUntilItIsReleasedOrExpires() {
+        Instant now = Instant.now();
+        Long id = save(500L, 30L).getId();
 
-        int first = sizeSurveyRepository.claimFeedback(survey.getId(), Instant.now());
-        int second = sizeSurveyRepository.claimFeedback(survey.getId(), Instant.now());
-        sizeSurveyRepository.releaseFeedback(survey.getId());
-        int afterRelease = sizeSurveyRepository.claimFeedback(survey.getId(), Instant.now());
+        int first = sizeSurveyRepository.claimFeedback(id, now, now.minusSeconds(300));
+        int whileClaimed = sizeSurveyRepository.claimFeedback(id, now, now.minusSeconds(300));
+        int afterExpiry = sizeSurveyRepository.claimFeedback(id, now.plusSeconds(400), now.plusSeconds(100));
+        sizeSurveyRepository.releaseFeedback(id);
+        int afterRelease = sizeSurveyRepository.claimFeedback(id, now, now.minusSeconds(300));
 
         assertThat(first).isEqualTo(1);
-        assertThat(second).isZero();
+        assertThat(whileClaimed).isZero();
+        assertThat(afterExpiry).isEqualTo(1);
         assertThat(afterRelease).isEqualTo(1);
-        assertThat(sizeSurveyRepository.findById(survey.getId()).orElseThrow().getFeedbackSentAt()).isNotNull();
+    }
+
+    @Test
+    void aSentSurveyIsNeverClaimedAgain() {
+        Instant now = Instant.now();
+        Long id = save(500L, 30L).getId();
+        sizeSurveyRepository.claimFeedback(id, now, now.minusSeconds(300));
+
+        sizeSurveyRepository.markFeedbackSent(id, now);
+        sizeSurveyRepository.releaseFeedback(id);
+
+        SizeSurvey loaded = sizeSurveyRepository.findById(id).orElseThrow();
+        assertThat(loaded.getFeedbackSentAt()).isNotNull();
+        assertThat(loaded.getFeedbackClaimedAt()).isNull();
+        assertThat(sizeSurveyRepository.claimFeedback(id, now.plusSeconds(900), now.plusSeconds(600))).isZero();
+    }
+
+    private SizeSurvey save(long orderItemId, Long productId) {
+        return sizeSurveyRepository.saveAndFlush(SizeSurvey.of(7L, productId, 3L, orderItemId, SizeFeedback.FIT));
     }
 }
