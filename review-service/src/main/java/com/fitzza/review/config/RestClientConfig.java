@@ -4,6 +4,8 @@ import com.fitzza.review.logging.RequestIdPropagation;
 import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
@@ -17,9 +19,18 @@ public class RestClientConfig {
     @Bean
     @LoadBalanced
     public RestClient.Builder loadBalancedRestClientBuilder() {
+        return RestClient.builder().requestFactory(timeoutRequestFactory()).requestInterceptor(requestIdPropagation());
+    }
+
+    // Eureka에 없는 서비스(추천 서비스 등)를 주소로 부를 때도 같은 시간 제한을 쓴다.
+    public static ClientHttpRequestFactory timeoutRequestFactory() {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(CONNECT_TIMEOUT_MILLIS);
         requestFactory.setReadTimeout(READ_TIMEOUT_MILLIS);
-        return RestClient.builder().requestFactory(requestFactory).requestInterceptor(new RequestIdPropagation());
+        return requestFactory;
+    }
+
+    public static ClientHttpRequestInterceptor requestIdPropagation() {
+        return new RequestIdPropagation();
     }
 }

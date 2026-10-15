@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -32,7 +33,9 @@ class SurveyServiceTest {
 
     private final SizeSurveyRepository sizeSurveyRepository = mock(SizeSurveyRepository.class);
     private final OrderItemVerifier orderItemVerifier = mock(OrderItemVerifier.class);
-    private final SurveyService surveyService = new SurveyService(sizeSurveyRepository, orderItemVerifier);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final SurveyService surveyService =
+            new SurveyService(sizeSurveyRepository, orderItemVerifier, eventPublisher);
 
     @Test
     void createStoresTheOrderedOptionWithTheFeedback() {
@@ -51,9 +54,11 @@ class SurveyServiceTest {
         ArgumentCaptor<SizeSurvey> saved = ArgumentCaptor.forClass(SizeSurvey.class);
         verify(sizeSurveyRepository).saveAndFlush(saved.capture());
         assertThat(surveyId).isEqualTo(21L);
+        assertThat(saved.getValue().getProductId()).isEqualTo(30L);
         assertThat(saved.getValue().getOptionId()).isEqualTo(3L);
         assertThat(saved.getValue().getOrderItemId()).isEqualTo(ORDER_ITEM_ID);
         assertThat(saved.getValue().getSizeFeedback()).isEqualTo(SizeFeedback.SMALL);
+        verify(eventPublisher).publishEvent(new SurveyCreatedEvent(21L));
     }
 
     @Test
@@ -87,11 +92,12 @@ class SurveyServiceTest {
         assertThatThrownBy(() -> surveyService.create(USER_ID, new SurveyCreateRequest(ORDER_ITEM_ID, SizeFeedback.FIT)))
                 .isInstanceOfSatisfying(ReviewApiException.class,
                         exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.DUPLICATE_SURVEY));
+        verifyNoInteractions(eventPublisher);
     }
 
     @Test
     void findMineReturnsOnlyTheSurveysTheRepositoryFound() {
-        SizeSurvey survey = SizeSurvey.of(USER_ID, 3L, ORDER_ITEM_ID, SizeFeedback.FIT);
+        SizeSurvey survey = SizeSurvey.of(USER_ID, 30L, 3L, ORDER_ITEM_ID, SizeFeedback.FIT);
         ReflectionTestUtils.setField(survey, "id", 21L);
         when(sizeSurveyRepository.findByUserIdAndOrderItemIdInOrderByOrderItemIdAsc(USER_ID, List.of(500L, 501L)))
                 .thenReturn(List.of(survey));

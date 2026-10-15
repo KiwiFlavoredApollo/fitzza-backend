@@ -156,6 +156,7 @@ services:
     environment:
       <<: *java-environment
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
+      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-}
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
