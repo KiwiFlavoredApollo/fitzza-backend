@@ -36,7 +36,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 | --- | --- | --- |
 | `COMMUNITY_SERVICE_TOKEN` | community-service | user `GET /users`(닉네임), notification `POST /notifications/events`, product `GET /products`, `GET /wishlists/check`, `GET /worldcups/{id}` |
 | `ORDER_SERVICE_TOKEN` | order-service | product `GET /product-options` |
-| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`, product `GET /products/measurements` |
+| `RECOMMENDATION_SERVICE_TOKEN` | recommendation-service | user `GET /users/{userId}/body`(신체 정보), notification `POST /notifications/events`(추천 결과 `RECOMMENDATION_DONE`, targetId는 추천 요청 ID), product `GET /products/measurements` |
 | `VTON_SERVICE_TOKEN` | 가상 피팅 서비스 | notification `POST /notifications/events` |
 | `PRODUCT_SERVICE_TOKEN` | product-service | product-service가 다른 서비스를 호출할 때 보내는 토큰. 호출을 붙이기 전에는 비워 둔다. |
 | `REVIEW_SERVICE_TOKEN` | review-service | order `GET /order-items/{orderItemId}`(리뷰·설문 작성 전 본인 주문 확인). order-service가 이 토큰을 허용하기 전에는 비워 두며, 그동안 리뷰·설문 작성은 503이다. |
@@ -53,7 +53,7 @@ user-service의 8081 포트와 notification-service의 8086 포트는 호스트�
 
 알림 API(`GET /api/notifications`, `PATCH /api/notifications/{notificationId}`)는 로그인한 사용자의 알림만 다룹니다. 알림은 다른 서비스가 `POST /notifications/events`로 보낸 이벤트로 만들어지며, 같은 `eventId`로 다시 보내도 한 번만 저장됩니다. 다른 사람이 내 게시글에 댓글이나 답글을 달면 community-service가 댓글 저장이 확정된 뒤 별도 스레드에서 알림을 보냅니다. 알림 서비스가 꺼져 있으면 경고 로그만 남기고 댓글 작성은 그대로 성공합니다. 투표는 community-service가 1분마다(`fitzza.vote.close-check-delay-ms`, 기본 60000) 마감 시각이 지난 글을 찾아 마감 처리하고, 작성자에게 `VOTE_CLOSED` 알림을 보냅니다. 알림 서비스가 꺼져 있어 보내지 못한 알림은 다음 실행에서 성공할 때까지 다시 보냅니다. 실패한 글은 재시도 순서가 뒤로 밀려 새로 마감된 투표의 알림을 막지 않습니다. 작성자가 직접 조기 종료한 투표에는 알림을 보내지 않습니다.
 
-푸시 알림(FCM)은 FE가 Firebase에서 받은 기기 토큰을 `POST /api/notifications/tokens`(Body: `{ "token": "..." }`)로 등록하면 받을 수 있습니다. 한 사용자가 여러 기기를 등록할 수 있고, 같은 토큰을 다시 등록해도 결과는 같으며, 다른 계정에 있던 토큰이면 새 계정으로 옮깁니다. 로그아웃 전에는 `DELETE /api/notifications/tokens`(같은 Body)로 해제합니다. 알림이 새로 저장되면 저장이 확정된 뒤 별도 스레드에서 그 사용자의 모든 기기로 푸시를 보냅니다(제목 `FITZZA`, 본문은 알림 내용, data에 `notificationId`·`type`·`targetId`). 같은 `eventId`로 다시 온 이벤트에는 푸시를 다시 보내지 않습니다. FCM이 더는 쓸 수 없다고 알려준 토큰(`UNREGISTERED`·`SENDER_ID_MISMATCH`)은 지웁니다. 푸시 전송이 실패해도 알림은 저장된 그대로 남아 알림 목록에서 볼 수 있습니다. `FIREBASE_CREDENTIALS`(서비스 계정 키 JSON의 base64 값, 배포 비밀 저장소에는 JSON 그대로도 가능)가 비어 있으면 푸시를 보내지 않고 로그만 남깁니다.
+푸시 알림(FCM)은 FE가 Firebase에서 받은 기기 토큰을 `POST /api/notifications/tokens`(Body: `{ "token": "..." }`)로 등록하면 받을 수 있습니다. 한 사용자가 여러 기기를 등록할 수 있고, 같은 토큰을 다시 등록해도 결과는 같으며, 다른 계정에 있던 토큰이면 새 계정으로 옮깁니다. 로그아웃 전에는 `DELETE /api/notifications/tokens`(같은 Body)로 해제합니다. 알림이 새로 저장되면(댓글 `COMMENT`, 투표 마감 `VOTE_CLOSED`, 가상 피팅 `FITTING_DONE`·`FITTING_FAILED`, 추천 결과 `RECOMMENDATION_DONE`) 저장이 확정된 뒤 별도 스레드에서 그 사용자의 모든 기기로 푸시를 보냅니다(제목 `FITZZA`, 본문은 알림 내용, data에 `notificationId`·`type`·`targetId`). 같은 `eventId`로 다시 온 이벤트에는 푸시를 다시 보내지 않습니다. FCM이 더는 쓸 수 없다고 알려준 토큰(`UNREGISTERED`·`SENDER_ID_MISMATCH`)은 지웁니다. 푸시 전송이 실패해도 알림은 저장된 그대로 남아 알림 목록에서 볼 수 있습니다. `FIREBASE_CREDENTIALS`(서비스 계정 키 JSON의 base64 값, 배포 비밀 저장소에는 JSON 그대로도 가능)가 비어 있으면 푸시를 보내지 않고 로그만 남깁니다.
 
 product-service(8082), order-service(8083), community-service(8084), review-service(8085)는 호스트에 공개하지 않습니다. 이 서비스들은 `X-User-Id` 헤더를 로그인 사용자로 믿기 때문에, 포트가 열려 있으면 Gateway를 거치지 않고 헤더만 넣어 다른 사용자의 찜 여부를 보거나 장바구니를 바꾸거나 글을 쓰거나 지울 수 있습니다. 상품은 `http://localhost:8080/api/products`, 장바구니는 `http://localhost:8080/api/carts`, 커뮤니티는 `http://localhost:8080/api/community/...`처럼 Gateway로 호출합니다.
 

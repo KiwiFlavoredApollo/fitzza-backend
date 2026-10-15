@@ -36,7 +36,7 @@ public class Notification {
     @Column(name = "content", nullable = false, updatable = false, columnDefinition = "text")
     private String content;
 
-    // 댓글·투표 알림은 게시글 ID, 피팅 알림은 피팅 작업 ID. 어느 화면으로 갈지는 type으로 구분한다.
+    // 댓글·투표 알림은 게시글 ID, 피팅 알림은 피팅 작업 ID, 추천 결과 알림은 추천 요청 ID. 어느 화면으로 갈지는 type으로 구분한다.
     @Column(name = "target_id", updatable = false, length = TARGET_ID_MAX_LENGTH)
     private String targetId;
 

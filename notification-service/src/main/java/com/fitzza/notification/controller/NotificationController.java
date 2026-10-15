@@ -37,7 +37,8 @@ public class NotificationController {
 
     @Operation(
             summary = "알림 목록",
-            description = "최신순. targetId는 댓글·투표 알림이면 게시글 ID, 피팅 알림이면 피팅 작업 ID다. "
+            description = "최신순. targetId는 댓글·투표 알림이면 게시글 ID, 피팅 알림이면 피팅 작업 ID, "
+                    + "추천 결과 알림이면 추천 요청 ID(requestId)다. "
                     + "page는 0 이상, size는 1~100이며 벗어나면 400이다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공(알림이 없으면 빈 목록)"),
