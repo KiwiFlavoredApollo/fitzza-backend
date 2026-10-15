@@ -6,5 +6,6 @@ public enum NotificationType {
     VOTE_CLOSED,
     FITTING_DONE,
     FITTING_FAILED,
+    // 추천 처리가 끝났다는 뜻이다(성공·실패 모두). 결과와 성공 여부는 추천 조회 API(GET /recommendations/{requestId})로 확인한다.
     RECOMMENDATION_DONE
 }
