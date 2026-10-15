@@ -132,6 +132,8 @@ infra/                   PostgreSQL 초기화
 scripts/                 운영 보조 스크립트
 ```
 
+크롤러에서 Jev 색상 정규화로 전달하는 데이터 계약은 [infra/data-pipeline/README.md](infra/data-pipeline/README.md)를 따릅니다.
+
 ## 구현 원칙
 
 - 서비스별 데이터 소유권을 전제로 PostgreSQL 스키마를 분리했습니다.
