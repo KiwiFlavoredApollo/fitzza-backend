@@ -134,6 +134,7 @@ services:
     environment:
       <<: *java-environment
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
     depends_on: *domain-dependencies
     expose: ["8083"]
     healthcheck:

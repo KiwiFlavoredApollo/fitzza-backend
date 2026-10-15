@@ -43,6 +43,10 @@ springdoc:
 fitzza:
   # product-service 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
   service-token: ${ORDER_SERVICE_TOKEN}
+  # 이 서비스의 서비스 전용 API를 호출하는 서비스별 토큰. 서비스마다 다른 32바이트 이상 값을 쓴다.
+  service-tokens:
+    community: ${COMMUNITY_SERVICE_TOKEN:}
+    review: ${REVIEW_SERVICE_TOKEN}
   clients:
     product:
       # 비어 있으면 Eureka의 product-service 인스턴스로 로드밸런싱한다. 로컬 단독 실행 시 http://localhost:8082를 지정한다.

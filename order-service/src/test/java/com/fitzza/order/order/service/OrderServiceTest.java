@@ -22,6 +22,7 @@ import com.fitzza.order.global.exception.ErrorCode;
 import com.fitzza.order.order.dto.OrderCreateRequest;
 import com.fitzza.order.order.dto.OrderCreateResponse;
 import com.fitzza.order.order.dto.OrderDetailResponse;
+import com.fitzza.order.order.dto.OrderItemInternalResponse;
 import com.fitzza.order.order.dto.OrderListResponse;
 import com.fitzza.order.order.entity.OrderEntity;
 import com.fitzza.order.order.entity.OrderItemEntity;
@@ -256,6 +257,46 @@ class OrderServiceTest {
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).unitPrice()).isEqualTo(30000);
         assertThat(response.items().get(0).productName()).isNull();
+    }
+
+    @Test
+    void findOrderItemReturnsOwnershipAndProductId() {
+        OrderEntity owned = order(1L, "ORD-1", 1);
+        OrderItemEntity item = owned.getOrderItems().get(0);
+        ReflectionTestUtils.setField(item, "orderItemId", 31L);
+        when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
+        when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of(
+                10L, option(10L, 30000, "ON_SALE")));
+
+        OrderItemInternalResponse response = orderService.findOrderItem(31L, USER_ID);
+
+        assertThat(response.owned()).isTrue();
+        assertThat(response.productId()).isEqualTo(1010L);
+        assertThat(response.optionId()).isEqualTo(10L);
+        assertThat(response.orderStatus()).isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    void findOrderItemMarksOtherUsersItemAsNotOwned() {
+        OrderEntity owned = order(1L, "ORD-1", 1);
+        OrderItemEntity item = owned.getOrderItems().get(0);
+        ReflectionTestUtils.setField(item, "orderItemId", 31L);
+        when(orderItemRepository.findWithOrderByOrderItemId(31L)).thenReturn(Optional.of(item));
+        when(productOptionClient.findOptionsOrEmpty(List.of(10L))).thenReturn(Map.of());
+
+        OrderItemInternalResponse response = orderService.findOrderItem(31L, 99L);
+
+        assertThat(response.owned()).isFalse();
+        assertThat(response.productId()).isNull();
+        assertThat(response.optionId()).isEqualTo(10L);
+    }
+
+    @Test
+    void findOrderItemRejectsMissingItem() {
+        when(orderItemRepository.findWithOrderByOrderItemId(404L)).thenReturn(Optional.empty());
+
+        assertErrorCode(() -> orderService.findOrderItem(404L, USER_ID), ErrorCode.ORDER_ITEM_NOT_FOUND);
+        verifyNoInteractions(productOptionClient);
     }
 
     private void stubOwnedCarts(List<Long> requestedIds, CartEntity... carts) {

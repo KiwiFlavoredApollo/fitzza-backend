@@ -21,7 +21,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 // 서비스마다 다른 토큰을 받아, 누가 불렀는지 확인한 뒤 @ServiceApi에 허용된 서비스만 통과시킨다.
 // 토큰 하나가 새도 그 서비스에 허용된 API만 부를 수 있다.
-// 지금은 order-service를 부르는 서비스 전용 API가 없어 호출자 토큰은 모두 선택이다.
 @Configuration
 public class ServiceTokenSecurityConfig implements WebMvcConfigurer {
 
@@ -30,9 +29,11 @@ public class ServiceTokenSecurityConfig implements WebMvcConfigurer {
     private final Map<String, byte[]> tokensByCaller;
 
     public ServiceTokenSecurityConfig(
-            @Value("${fitzza.service-tokens.community:}") String communityToken) {
+            @Value("${fitzza.service-tokens.community:}") String communityToken,
+            @Value("${fitzza.service-tokens.review}") String reviewToken) {
         Map<String, byte[]> tokens = new LinkedHashMap<>();
         register(tokens, ServiceCallers.COMMUNITY, communityToken, false);
+        register(tokens, ServiceCallers.REVIEW, reviewToken, true);
         this.tokensByCaller = Map.copyOf(tokens);
     }
 
