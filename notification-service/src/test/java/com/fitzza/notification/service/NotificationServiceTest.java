@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -35,7 +36,9 @@ class NotificationServiceTest {
     private static final String NOTIFICATION_ID = "0b0f6f0e-6f0c-4d51-9c35-6f5d2f1f7a11";
 
     private final NotificationRepository notificationRepository = mock(NotificationRepository.class);
-    private final NotificationService notificationService = new NotificationService(notificationRepository);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final NotificationService notificationService =
+            new NotificationService(notificationRepository, eventPublisher);
 
     @Test
     void receiveStoresTheEventUnderANewIdWithTrimmedValues() {
@@ -77,6 +80,33 @@ class NotificationServiceTest {
                         eq("피팅에 실패했습니다."),
                         eq(""),
                         eq("fitting-4-failed"));
+    }
+
+    @Test
+    void receiveAnnouncesANewlyStoredNotificationForPush() {
+        when(notificationRepository.insertIfAbsent(any(), any(), any(), any(), any(), any())).thenReturn(1);
+
+        notificationService.receive(new NotificationEventRequest(
+                "comment-55", NotificationType.COMMENT, USER_ID, " 10 ", " 새 댓글이 달렸습니다. "));
+
+        ArgumentCaptor<String> logId = ArgumentCaptor.forClass(String.class);
+        verify(notificationRepository)
+                .insertIfAbsent(logId.capture(), any(), any(), any(), any(), any());
+        ArgumentCaptor<NotificationSavedEvent> saved = ArgumentCaptor.forClass(NotificationSavedEvent.class);
+        verify(eventPublisher).publishEvent(saved.capture());
+        assertThat(saved.getValue())
+                .isEqualTo(new NotificationSavedEvent(
+                        logId.getValue(), USER_ID, NotificationType.COMMENT, "새 댓글이 달렸습니다.", "10"));
+    }
+
+    @Test
+    void receiveDoesNotPushAgainForAnEventAlreadyStored() {
+        when(notificationRepository.insertIfAbsent(any(), any(), any(), any(), any(), any())).thenReturn(0);
+
+        notificationService.receive(new NotificationEventRequest(
+                "comment-55", NotificationType.COMMENT, USER_ID, "10", "새 댓글이 달렸습니다."));
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
