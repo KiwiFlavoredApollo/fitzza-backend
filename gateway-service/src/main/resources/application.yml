@@ -4,7 +4,10 @@ spring:
   application:
     name: gateway-service
   config:
-    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+    import:
+      - "optional:file:${FITZZA_ENV_FILE:../.env}[.properties]"
+      - "optional:file:${FITZZA_ENV_FILE:./.env}[.properties]"
+      - "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
   data:
     redis:
       repositories:
