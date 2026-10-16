@@ -11,7 +11,8 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - Dedicated security groups for the public ALB and private RDS/managed Redis access
 - One EKS 1.36 Standard cluster
 - One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
-- EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`)
+- The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
+- EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
 - A private, encrypted, versioned S3 bucket for crawler and AI pipeline data
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
@@ -26,6 +27,7 @@ RDS must be deployed in the private subnets with the stack output `RdsSecurityGr
 
 - Deploy only in `ap-northeast-2`, which is the approved estimate region.
 - The node group starts at zero. Scale it to one only during the approved operating window.
+- Scale-up is blocked on weekends and on the `NodeScaleUpBlockedDates` dates. The default exclusions are `2026-10-19` and `2026-10-26` in `Asia/Seoul`.
 - The EKS control plane and NAT Gateway charge continuously while the stack exists.
 - The S3 Gateway Endpoint avoids NAT processing charges for S3 traffic.
 - Delete the stack after the project, then manually review retained S3 data.
@@ -60,6 +62,7 @@ aws cloudformation deploy `
     Owner=team3 `
     CostCenter=lgcns5-retail `
     KubernetesVersion=1.36 `
+    NodeScaleUpBlockedDates=2026-10-19,2026-10-26 `
     ClusterPublicAccessCidrs=$operatorCidr `
   --tags Project=fitzza Environment=prod Owner=team3 CostCenter=lgcns5-retail `
   --no-execute-changeset `
@@ -87,7 +90,7 @@ aws eks update-kubeconfig `
 
 aws eks update-nodegroup-config `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64 `
+  --nodegroup-name fitzza-prod-arm64-c `
   --scaling-config minSize=0,maxSize=1,desiredSize=1 `
   --profile fitzza `
   --region ap-northeast-2
@@ -97,7 +100,7 @@ Return `desiredSize` to zero after the approved work window.
 
 ## Verify scheduled scaling
 
-The schedules invoke a least-privilege Lambda that accepts only `desiredSize` 0 or 1. Test scale-up during the approved work window:
+The schedules invoke a least-privilege Lambda that accepts only `desiredSize` 0 or 1. Scale-up requests are skipped on `Asia/Seoul` weekends and on dates configured by `NodeScaleUpBlockedDates`; scale-down remains allowed every day. Test scale-up during the approved work window:
 
 ```powershell
 aws lambda invoke `
@@ -110,7 +113,7 @@ aws lambda invoke `
 
 aws eks describe-nodegroup `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64 `
+  --nodegroup-name fitzza-prod-arm64-c `
   --query 'nodegroup.scalingConfig' `
   --profile fitzza `
   --region ap-northeast-2
