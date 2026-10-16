@@ -32,8 +32,14 @@ import reactor.netty.http.server.HttpServer;
 class UserAuthenticationGatewayTest {
 
     private static final DisposableServer DOWNSTREAM = HttpServer.create().host("127.0.0.1").port(0)
-            .handle((request, response) -> response.sendString(Mono.just(
-                    request.uri() + ":" + request.requestHeaders().get("X-User-Id", "anonymous"))))
+            .handle((request, response) -> {
+                if (request.uri().equals("/api/auth/refresh") && request.requestHeaders().contains("Cookie")) {
+                    return response.header("Set-Cookie", "refreshToken=rotated; Path=/api; HttpOnly; SameSite=Lax")
+                            .sendString(Mono.just(request.requestHeaders().get("Cookie", "missing")));
+                }
+                return response.sendString(Mono.just(
+                    request.uri() + ":" + request.requestHeaders().get("X-User-Id", "anonymous")));
+            })
             .bindNow();
 
     @LocalServerPort
@@ -214,5 +220,27 @@ class UserAuthenticationGatewayTest {
 
     private WebTestClient client() {
         return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
+    }
+
+    @Test
+    void forwardsRefreshCookiesAndAllowsCredentialedFrontendRequests() {
+        client().post().uri("/api/auth/refresh")
+                .header("Origin", "http://localhost:3000")
+                .cookie("refreshToken", "original")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Credentials", "true")
+                .expectHeader().valueEquals("Access-Control-Allow-Origin", "http://localhost:3000")
+                .expectCookie().valueEquals("refreshToken", "rotated")
+                .expectCookie().httpOnly("refreshToken", true)
+                .expectBody(String.class).isEqualTo("refreshToken=original");
+        client().options().uri("/api/auth/refresh")
+                .header("Origin", "http://localhost:3000")
+                .header("Access-Control-Request-Method", "POST")
+                .exchange().expectStatus().isOk()
+                .expectHeader().valueEquals("Access-Control-Allow-Credentials", "true");
+        client().post().uri("/api/auth/refresh")
+                .header("Origin", "https://untrusted.example")
+                .cookie("refreshToken", "original")
+                .exchange().expectStatus().isForbidden();
     }
 }

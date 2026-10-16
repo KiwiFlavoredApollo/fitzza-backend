@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     public static final String BEARER_AUTH = "bearerAuth";
+    public static final String REFRESH_COOKIE = "refreshCookie";
     public static final String SERVICE_TOKEN = "serviceToken";
 
     @Bean
@@ -32,6 +33,12 @@ public class OpenApiConfig {
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
                                         .bearerFormat("JWT"))
+                        .addSecuritySchemes(
+                                REFRESH_COOKIE,
+                                new SecurityScheme()
+                                        .type(SecurityScheme.Type.APIKEY)
+                                        .in(SecurityScheme.In.COOKIE)
+                                        .name("refreshToken"))
                         .addSecuritySchemes(
                                 SERVICE_TOKEN,
                                 new SecurityScheme()
