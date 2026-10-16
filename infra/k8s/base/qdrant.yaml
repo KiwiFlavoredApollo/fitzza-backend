@@ -1,0 +1,116 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fitzza-gp3-retain
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+  fsType: ext4
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant-headless
+  labels: { app.kubernetes.io/name: qdrant }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/name: qdrant }
+  ports:
+    - { name: http, port: 6333, targetPort: http }
+    - { name: grpc, port: 6334, targetPort: grpc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  labels: { app.kubernetes.io/name: qdrant }
+spec:
+  type: ClusterIP
+  selector: { app.kubernetes.io/name: qdrant }
+  ports:
+    - { name: http, port: 6333, targetPort: http }
+    - { name: grpc, port: 6334, targetPort: grpc }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  labels: { app.kubernetes.io/name: qdrant }
+spec:
+  serviceName: qdrant-headless
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: qdrant }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: qdrant }
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 3000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.15.5
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: QDRANT__TELEMETRY_DISABLED, value: "true" }
+            - { name: QDRANT__STORAGE__SNAPSHOTS_PATH, value: /qdrant/storage/snapshots }
+          ports:
+            - { name: http, containerPort: 6333 }
+            - { name: grpc, containerPort: 6334 }
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1536Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 2000
+          volumeMounts:
+            - { name: qdrant-storage, mountPath: /qdrant/storage }
+  volumeClaimTemplates:
+    - metadata:
+        name: qdrant-storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: fitzza-gp3-retain
+        resources:
+          requests: { storage: 20Gi }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qdrant-ingress
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: qdrant }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { fitzza.io/qdrant-client: "true" }
+      ports:
+        - { protocol: TCP, port: 6333 }
+        - { protocol: TCP, port: 6334 }

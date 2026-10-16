@@ -753,9 +753,16 @@ Resources:
 
   VpcCniAddon:
     Type: AWS::EKS::Addon
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: enforce Kubernetes NetworkPolicy for internal-only services such as Qdrant
+        must:
+          - keep network policy enforcement enabled before applying restricted service policies
+        mutable: change-with-constraints
     Properties:
       AddonName: vpc-cni
       ClusterName: !Ref EksCluster
+      ConfigurationValues: '{"enableNetworkPolicy":"true"}'
       ResolveConflicts: OVERWRITE
 
   KubeProxyAddon:
