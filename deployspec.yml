@@ -1,0 +1,51 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  install:
+    on-failure: ABORT
+    runtime-versions:
+      python: 3.12
+    commands:
+      - export KUBECTL_VERSION=v1.36.0
+      - curl --fail --silent --show-error --location --output /tmp/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+      - curl --fail --silent --show-error --location --output /tmp/kubectl.sha256 "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+      - echo "$(cat /tmp/kubectl.sha256)  /tmp/kubectl" | sha256sum --check
+      - install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_DEFAULT_REGION}"
+      - kubectl get namespace fitzza
+      - kubectl -n fitzza get secret fitzza-app-secrets
+      - python scripts/render_production_manifests.py --rds-endpoint "${RDS_ENDPOINT}" --frontend-origin "${FRONTEND_ORIGIN}" --alb-security-group-id "${ALB_SECURITY_GROUP_ID}" --api-domain "${API_DOMAIN:-}" --acm-certificate-arn "${ACM_CERTIFICATE_ARN:-}"
+      - kubectl kustomize infra/k8s/overlays/prod >/tmp/fitzza-rendered.yaml
+  build:
+    on-failure: ABORT
+    commands:
+      - kubectl apply --server-side --field-manager=fitzza-codebuild -f /tmp/fitzza-rendered.yaml
+      - |
+        set -eu
+        for resource in $(kubectl -n fitzza get deployments -o name); do
+          kubectl -n fitzza rollout status "${resource}" --timeout=600s
+        done
+      - |
+        set -eu
+        for resource in $(kubectl -n fitzza get statefulsets -o name); do
+          kubectl -n fitzza rollout status "${resource}" --timeout=600s
+        done
+      - kubectl -n fitzza wait --for=condition=available deployment/gateway-service --timeout=600s
+      - kubectl -n fitzza get ingress gateway
+  post_build:
+    on-failure: ABORT
+    commands:
+      - '[[ "${CODEBUILD_BUILD_SUCCEEDING}" == "1" ]]'
+      - export INGRESS_HOSTNAME="$(kubectl -n fitzza get ingress gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+      - test -n "${INGRESS_HOSTNAME}"
+      - python -c 'import json, os, pathlib; source=json.loads(pathlib.Path("image-definitions.json").read_text()); source["ingressHostname"]=os.environ["INGRESS_HOSTNAME"]; pathlib.Path("deployment-result.json").write_text(json.dumps(source, separators=(",", ":")) + "\n")'
+
+artifacts:
+  files:
+    - deployment-result.json
