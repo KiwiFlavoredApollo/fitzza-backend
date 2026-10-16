@@ -8,6 +8,7 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - Two public and two private subnets
 - One public NAT Gateway and one Elastic IP
 - An S3 Gateway VPC Endpoint for pipeline traffic and ECR image-layer downloads without NAT processing
+- Dedicated security groups for the public ALB and private RDS/managed Redis access
 - One EKS 1.36 Standard cluster
 - One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`)
@@ -16,6 +17,10 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
 
 The single NAT Gateway is a temporary cost decision for this project. It is a single-AZ outbound dependency and must be reconsidered before production use.
+
+The ALB itself is created from `infra/k8s/base/ingress.yaml` by AWS Load Balancer Controller. Replace `CHANGE_ME_ALB_SECURITY_GROUP_ID` with the stack output `AlbSecurityGroupId`. The controller manages the matching backend rule for pod targets; do not attach the public ALB security group to EKS nodes or data stores.
+
+RDS must be deployed in the private subnets with the stack output `RdsSecurityGroupId` and public accessibility disabled. The current Redis deployment is exposed only as a Kubernetes `ClusterIP`; `ManagedRedisSecurityGroupId` is reserved for a future managed Redis migration.
 
 ## Cost controls
 

@@ -376,6 +376,87 @@ Resources:
       VpcEndpointType: Gateway
       VpcId: !Ref Vpc
 
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: dedicated edge boundary for the internet-facing ALB created by AWS Load Balancer Controller
+        must:
+          - attach only to the public ALB
+          - expose only HTTP redirect and HTTPS listener ports
+          - send application traffic only to gateway targets in the VPC
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Public ALB ingress for Fitzza API
+      SecurityGroupIngress:
+        - Description: HTTP listener redirects to HTTPS
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - Description: Public HTTPS API ingress
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - Description: Forward requests only to gateway targets in this VPC
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref VpcCidr
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-alb-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private PostgreSQL boundary; permits database sessions only from EKS workloads
+        must:
+          - never allow public CIDR ingress
+          - attach only to private-subnet RDS resources
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Private PostgreSQL access from Fitzza EKS workloads
+      SecurityGroupIngress:
+        - Description: PostgreSQL from EKS cluster security group
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt EksCluster.ClusterSecurityGroupId
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-rds-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
+  ManagedRedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: reserved private boundary if Kubernetes Redis moves to ElastiCache; current Redis remains ClusterIP-only
+        must:
+          - never allow public CIDR ingress
+          - attach only to private-subnet managed Redis resources
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Private managed Redis access from Fitzza EKS workloads
+      SecurityGroupIngress:
+        - Description: Redis from EKS cluster security group
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !GetAtt EksCluster.ClusterSecurityGroupId
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-redis-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
   EksClusterRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -788,6 +869,15 @@ Outputs:
   NatGatewayId:
     Description: Single project NAT Gateway ID
     Value: !Ref NatGateway
+  AlbSecurityGroupId:
+    Description: Security group for the AWS Load Balancer Controller internet-facing ALB
+    Value: !Ref AlbSecurityGroup
+  RdsSecurityGroupId:
+    Description: Private RDS security group allowing PostgreSQL only from EKS workloads
+    Value: !Ref RdsSecurityGroup
+  ManagedRedisSecurityGroupId:
+    Description: Private managed Redis security group allowing Redis only from EKS workloads
+    Value: !Ref ManagedRedisSecurityGroup
   EksClusterName:
     Description: EKS cluster name
     Value: !Ref EksCluster
