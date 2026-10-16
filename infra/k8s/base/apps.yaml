@@ -288,7 +288,9 @@ spec:
     matchLabels: { app.kubernetes.io/name: recommendation-service }
   template:
     metadata:
-      labels: { app.kubernetes.io/name: recommendation-service }
+      labels:
+        app.kubernetes.io/name: recommendation-service
+        fitzza.io/qdrant-client: "true"
     spec:
       serviceAccountName: fitzza-application
       containers:

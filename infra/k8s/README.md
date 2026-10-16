@@ -19,6 +19,7 @@ Before deployment, replace the following placeholders through an environment-spe
 - `CHANGE_ME_RDS_ENDPOINT`
 - `CHANGE_ME_FRONTEND_ORIGIN`
 - `CHANGE_ME_ACM_CERTIFICATE_ARN`
+- `CHANGE_ME_ALB_SECURITY_GROUP_ID` (CloudFormation output `AlbSecurityGroupId`)
 - `CHANGE_ME_API_DOMAIN`
 
 The production overlay contains image mappings for all 11 application services. CodeBuild's `post_build` step fills `CHANGE_ME_ECR_REGISTRY`, `CHANGE_ME_ECR_REPOSITORY_PREFIX`, and `CHANGE_ME_COMMIT_TAG` from `image-definitions.json`, using the same ECR paths and 12-character Git commit tag as the image build. CodeBuild requires a resolved Git commit SHA; there is no `local` tag fallback.
@@ -38,6 +39,10 @@ kubectl kustomize infra/k8s/overlays/prod
 3. Deploy domain services and Python services.
 4. Deploy Gateway and the ALB Ingress.
 5. Verify every `/health` endpoint before routing production traffic.
+
+The ALB uses the dedicated CloudFormation security group and lets AWS Load Balancer Controller manage only the backend rule required for pod targets. RDS must use the `RdsSecurityGroupId` output. The current Redis is a private `ClusterIP` service inside EKS; use `ManagedRedisSecurityGroupId` only if it is later replaced with ElastiCache or another VPC-managed Redis service.
+
+Qdrant deployment, collection, persistence, and snapshot recovery procedures are documented in [QDRANT.md](QDRANT.md).
 
 ## Redis updates
 
