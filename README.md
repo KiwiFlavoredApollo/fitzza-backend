@@ -47,7 +47,7 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
-브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173,http://localhost:5174`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
+브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
 
 토큰 유효기간은 `JWT_EXPIRATION_SECONDS`(Access Token, 1~900초, 기본 15분)와 `JWT_REFRESH_EXPIRATION_SECONDS`(Refresh Token, 기본 30일)로 바꿀 수 있습니다. Refresh Token은 Redis에 저장합니다.
 
