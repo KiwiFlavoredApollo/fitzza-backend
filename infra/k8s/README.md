@@ -44,6 +44,8 @@ The ALB uses the dedicated CloudFormation security group and lets AWS Load Balan
 
 Qdrant deployment, collection, persistence, and snapshot recovery procedures are documented in [QDRANT.md](QDRANT.md).
 
+The ALB uses the dedicated CloudFormation security group and lets AWS Load Balancer Controller manage only the backend rule required for pod targets. RDS must use the `RdsSecurityGroupId` output. The current Redis is a private `ClusterIP` service inside EKS; use `ManagedRedisSecurityGroupId` only if it is later replaced with ElastiCache or another VPC-managed Redis service.
+
 ## Redis updates
 
 Redis uses one replica with a `Recreate` update strategy and a shared `ReadWriteOnce` data volume. During an update, the existing Pod terminates before its replacement starts, so Redis is unavailable until the replacement is ready. Schedule Redis updates in a maintenance window and account for failures in Redis-dependent requests during this interruption.
