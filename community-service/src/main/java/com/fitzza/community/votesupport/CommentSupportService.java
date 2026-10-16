@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 // 투표글 댓글의 지지 선택지를 판정해 저장한다. Jev 호출은 트랜잭션 밖에서 하고, 저장만 짧게 한다.
 // 판정에 실패하거나 확신이 낮으면 아무것도 저장하지 않아 supportedOptionId는 NULL로 남는다.
+// 저장은 CommentSupportWriter가 글 행을 잠그고 선택지가 아직 그 글의 것인지 확인한 뒤 한다.
 @Service
 public class CommentSupportService {
 
@@ -19,16 +20,19 @@ public class CommentSupportService {
     private final PostRepository postRepository;
     private final VoteOptionRepository voteOptionRepository;
     private final VoteSupportJudge judge;
+    private final CommentSupportWriter writer;
 
     public CommentSupportService(
             CommentRepository commentRepository,
             PostRepository postRepository,
             VoteOptionRepository voteOptionRepository,
-            VoteSupportJudge judge) {
+            VoteSupportJudge judge,
+            CommentSupportWriter writer) {
         this.commentRepository = commentRepository;
         this.postRepository = postRepository;
         this.voteOptionRepository = voteOptionRepository;
         this.judge = judge;
+        this.writer = writer;
     }
 
     public void judgeComment(Long commentId) {
@@ -60,7 +64,7 @@ public class CommentSupportService {
 
     private void judgeAndSave(Post post, Comment comment, List<VoteOption> options) {
         judge.judge(post.getTitle(), comment.getContent(), options)
-                .ifPresent(optionId -> commentRepository.updateSupport(comment.getId(), comment.getVersion(), optionId));
+                .ifPresent(optionId -> writer.save(post.getId(), comment.getId(), comment.getVersion(), optionId));
     }
 
     private Optional<Post> votePost(Long postId) {

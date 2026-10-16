@@ -33,8 +33,9 @@ class CommentSupportServiceTest {
     private final PostRepository postRepository = mock(PostRepository.class);
     private final VoteOptionRepository voteOptionRepository = mock(VoteOptionRepository.class);
     private final VoteSupportJudge judge = mock(VoteSupportJudge.class);
+    private final CommentSupportWriter writer = mock(CommentSupportWriter.class);
     private final CommentSupportService service =
-            new CommentSupportService(commentRepository, postRepository, voteOptionRepository, judge);
+            new CommentSupportService(commentRepository, postRepository, voteOptionRepository, judge, writer);
 
     private final List<VoteOption> options = List.of(option(100L, 1), option(101L, 2));
 
@@ -49,7 +50,7 @@ class CommentSupportServiceTest {
 
         service.judgeComment(1L);
 
-        verify(commentRepository).updateSupport(1L, 3L, 100L);
+        verify(writer).save(POST_ID, 1L, 3L, 100L);
     }
 
     @Test
@@ -61,7 +62,7 @@ class CommentSupportServiceTest {
 
         service.judgeComment(1L);
 
-        verify(commentRepository, never()).updateSupport(anyLong(), anyLong(), any());
+        verify(writer, never()).save(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
@@ -96,9 +97,9 @@ class CommentSupportServiceTest {
 
         service.judgePost(POST_ID);
 
-        verify(commentRepository).updateSupport(1L, 0L, 100L);
-        verify(commentRepository).updateSupport(2L, 0L, 101L);
-        verify(commentRepository, never()).updateSupport(eq(3L), anyLong(), any());
+        verify(writer).save(POST_ID, 1L, 0L, 100L);
+        verify(writer).save(POST_ID, 2L, 0L, 101L);
+        verify(writer, never()).save(anyLong(), eq(3L), anyLong(), any());
     }
 
     private static Post votePost() {
