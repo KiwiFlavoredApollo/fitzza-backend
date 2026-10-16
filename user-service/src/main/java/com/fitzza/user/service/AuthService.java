@@ -2,9 +2,7 @@ package com.fitzza.user.service;
 
 import com.fitzza.user.domain.User;
 import com.fitzza.user.dto.LoginRequest;
-import com.fitzza.user.dto.LoginResponse;
 import com.fitzza.user.dto.RefreshTokenRequest;
-import com.fitzza.user.dto.TokenResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.repository.UserRepository;
@@ -53,7 +51,7 @@ public class AuthService {
      * @throws UserApiException 인증 조건을 충족하지 못한 경우
      */
     @Transactional(readOnly = true)
-    public LoginResponse login(LoginRequest request) {
+    public LoginResult login(LoginRequest request) {
         User user = userRepository.findByEmail(User.normalizeEmail(request.email())).orElse(null);
         // 계정이 없어도 비밀번호 대조를 한 번 해서, 응답 시간으로 가입된 이메일인지 알아낼 수 없게 한다.
         String passwordHash = user == null ? dummyPasswordHash : user.getPassword();
@@ -62,7 +60,7 @@ public class AuthService {
             throw new UserApiException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        return new LoginResponse(
+        return new LoginResult(
                 jwtTokenProvider.createAccessToken(user.getId()),
                 refreshTokenStore.issue(user.getId()),
                 user.getId(),
@@ -71,7 +69,7 @@ public class AuthService {
 
     // 쓴 Refresh Token은 바로 폐기하고 새것을 준다. 탈취된 토큰이 한 번 쓰이면 원래 주인의 재발급이 실패해 드러난다.
     @Transactional(readOnly = true)
-    public TokenResponse reissue(RefreshTokenRequest request) {
+    public TokenResult reissue(RefreshTokenRequest request) {
         Long userId = refreshTokenStore
                 .consume(request.refreshToken())
                 .orElseThrow(() -> new UserApiException(ErrorCode.INVALID_REFRESH_TOKEN));
@@ -81,7 +79,7 @@ public class AuthService {
                 .filter(User::isActive)
                 .orElseThrow(() -> new UserApiException(ErrorCode.INVALID_REFRESH_TOKEN));
 
-        return new TokenResponse(jwtTokenProvider.createAccessToken(userId), refreshTokenStore.issue(userId));
+        return new TokenResult(jwtTokenProvider.createAccessToken(userId), refreshTokenStore.issue(userId));
     }
 
     // 이미 지워졌거나 모르는 토큰이어도 결과는 같다(다시 요청해도 성공).

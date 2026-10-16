@@ -11,9 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fitzza.user.domain.User;
 import com.fitzza.user.domain.UserStatus;
 import com.fitzza.user.dto.LoginRequest;
-import com.fitzza.user.dto.LoginResponse;
 import com.fitzza.user.dto.RefreshTokenRequest;
-import com.fitzza.user.dto.TokenResponse;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.UserApiException;
 import com.fitzza.user.repository.UserRepository;
@@ -72,9 +70,9 @@ class AuthServiceTest {
         when(jwtTokenProvider.createAccessToken(7L)).thenReturn("access");
         when(refreshTokenStore.issue(7L)).thenReturn("refresh");
 
-        LoginResponse response = authService.login(new LoginRequest(" Fit@Example.com", "password1"));
+        LoginResult response = authService.login(new LoginRequest(" Fit@Example.com", "password1"));
 
-        assertThat(response).isEqualTo(new LoginResponse("access", "refresh", 7L, "fitzza"));
+        assertThat(response).isEqualTo(new LoginResult("access", "refresh", 7L, "fitzza"));
     }
 
     @Test
@@ -93,9 +91,9 @@ class AuthServiceTest {
         when(jwtTokenProvider.createAccessToken(7L)).thenReturn("new-access");
         when(refreshTokenStore.issue(7L)).thenReturn("new-refresh");
 
-        TokenResponse response = authService.reissue(new RefreshTokenRequest("old-refresh"));
+        TokenResult response = authService.reissue(new RefreshTokenRequest("old-refresh"));
 
-        assertThat(response).isEqualTo(new TokenResponse("new-access", "new-refresh"));
+        assertThat(response).isEqualTo(new TokenResult("new-access", "new-refresh"));
         verify(refreshTokenStore).consume("old-refresh");
     }
 

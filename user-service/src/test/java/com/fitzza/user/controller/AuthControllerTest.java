@@ -8,11 +8,15 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import jakarta.servlet.http.Cookie;
 
 import com.fitzza.user.dto.LoginRequest;
-import com.fitzza.user.dto.LoginResponse;
+import com.fitzza.user.service.LoginResult;
 import com.fitzza.user.dto.RefreshTokenRequest;
-import com.fitzza.user.dto.TokenResponse;
+import com.fitzza.user.service.TokenResult;
 import com.fitzza.user.exception.ErrorCode;
 import com.fitzza.user.exception.GlobalExceptionHandler;
 import com.fitzza.user.exception.UserApiException;
@@ -33,18 +37,18 @@ class AuthControllerTest {
      */
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(authService, new com.fitzza.user.security.RefreshTokenCookie(false, 2592000)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 
     /**
-     * 인증 결과가 HTTP 200과 토큰·사용자 정보 JSON으로 전달되는지 검증한다.
+     * Access Token과 사용자 정보는 JSON으로, Refresh Token은 HttpOnly 쿠키로만 전달되는지 검증한다.
      */
     @Test
-    void loginReturnsBothTokensAndUserInfo() throws Exception {
+    void loginReturnsRefreshCookieAndAccessTokenWithUserInfo() throws Exception {
         when(authService.login(any(LoginRequest.class)))
-                .thenReturn(new LoginResponse("access", "refresh", 7L, "fitzza"));
+                .thenReturn(new LoginResult("access", "refresh", 7L, "fitzza"));
 
         mockMvc.perform(post("/api/auth/signin")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -53,7 +57,13 @@ class AuthControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access"))
-                .andExpect(jsonPath("$.refreshToken").value("refresh"))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(header().string("Set-Cookie", containsString("refreshToken=refresh")))
+                .andExpect(header().string("Set-Cookie", containsString("HttpOnly")))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Lax")))
+                .andExpect(header().string("Set-Cookie", containsString("Path=/api")))
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=2592000")))
+                .andExpect(header().string("Set-Cookie", not(containsString("Secure"))))
                 .andExpect(jsonPath("$.userId").value(7))
                 .andExpect(jsonPath("$.nickname").value("fitzza"));
     }
@@ -93,16 +103,14 @@ class AuthControllerTest {
     @Test
     void reissueReturnsANewTokenPair() throws Exception {
         when(authService.reissue(new RefreshTokenRequest("old-refresh")))
-                .thenReturn(new TokenResponse("new-access", "new-refresh"));
+                .thenReturn(new TokenResult("new-access", "new-refresh"));
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "old-refresh"}
-                                """))
+                        .cookie(new Cookie("refreshToken", "old-refresh")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("new-access"))
-                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(header().string("Set-Cookie", containsString("refreshToken=new-refresh")));
     }
 
     @Test
@@ -111,10 +119,7 @@ class AuthControllerTest {
                 .thenThrow(new UserApiException(ErrorCode.INVALID_REFRESH_TOKEN));
 
         mockMvc.perform(post("/api/auth/refresh")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "used-refresh"}
-                                """))
+                        .cookie(new Cookie("refreshToken", "used-refresh")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
     }
@@ -130,13 +135,13 @@ class AuthControllerTest {
     }
 
     @Test
-    void logoutPassesTheRefreshTokenAndReturnsOk() throws Exception {
+    void logoutPassesTheRefreshTokenAndClearsCookie() throws Exception {
         mockMvc.perform(post("/api/auth/signout")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "refresh"}
-                                """))
-                .andExpect(status().isOk());
+                        .cookie(new Cookie("refreshToken", "refresh")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=0")))
+                .andExpect(header().string("Set-Cookie", containsString("Path=/api")))
+                .andExpect(header().string("Set-Cookie", containsString("HttpOnly")));
         verify(authService).logout(new RefreshTokenRequest("refresh"), null);
     }
 
@@ -144,10 +149,7 @@ class AuthControllerTest {
     void logoutPassesTheAccessTokenFromTheAuthorizationHeader() throws Exception {
         mockMvc.perform(post("/api/auth/signout")
                         .header("Authorization", "Bearer access-token ")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "refresh"}
-                                """))
+                        .cookie(new Cookie("refreshToken", "refresh")))
                 .andExpect(status().isOk());
         verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
     }
@@ -157,10 +159,7 @@ class AuthControllerTest {
     void logoutReadsTheBearerSchemeWithoutRegardToCase() throws Exception {
         mockMvc.perform(post("/api/auth/signout")
                         .header("Authorization", "bearer access-token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "refresh"}
-                                """))
+                        .cookie(new Cookie("refreshToken", "refresh")))
                 .andExpect(status().isOk());
         verify(authService).logout(new RefreshTokenRequest("refresh"), "access-token");
     }
@@ -169,11 +168,41 @@ class AuthControllerTest {
     void logoutIgnoresAnAuthorizationHeaderThatIsNotABearerToken() throws Exception {
         mockMvc.perform(post("/api/auth/signout")
                         .header("Authorization", "Basic dXNlcjpwYXNz")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"refreshToken": "refresh"}
-                                """))
+                        .cookie(new Cookie("refreshToken", "refresh")))
                 .andExpect(status().isOk());
         verify(authService).logout(new RefreshTokenRequest("refresh"), null);
+    }
+
+    @Test
+    void missingAndBlankCookiesRejectBothEndpointsIncludingLegacyJson() throws Exception {
+        for (String endpoint : new String[] {"refresh", "signout"}) {
+            mockMvc.perform(post("/api/auth/" + endpoint)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"refreshToken\":\"legacy-token\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+            mockMvc.perform(post("/api/auth/" + endpoint).cookie(new Cookie("refreshToken", " ")))
+                    .andExpect(status().isBadRequest());
+        }
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    void productionCookieIsSecureOnIssueAndDeletion() throws Exception {
+        MockMvc secureMvc = MockMvcBuilders.standaloneSetup(
+                new AuthController(authService, new com.fitzza.user.security.RefreshTokenCookie(true, 60)))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        when(authService.login(any(LoginRequest.class)))
+                .thenReturn(new LoginResult("access", "refresh", 7L, "fitzza"));
+        secureMvc.perform(post("/api/auth/signin").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"fit@example.com\",\"password\":\"password1\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", containsString("Secure")))
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=60")));
+        secureMvc.perform(post("/api/auth/signout").cookie(new Cookie("refreshToken", "refresh")))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Set-Cookie", containsString("Secure")))
+                .andExpect(header().string("Set-Cookie", containsString("SameSite=Lax")))
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=0")));
     }
 }

@@ -47,11 +47,11 @@ Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
 user-service의 8081 포트와 notification-service의 8086 포트는 호스트에 공개하지 않습니다.
 
-브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 토큰은 `Authorization` 헤더로 보내므로 쿠키 허용은 켜지 않았습니다.
+브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 허용한 주소에서는 쿠키를 포함한 요청을 보낼 수 있습니다. Access Token은 `Authorization` 헤더로, Refresh Token은 HttpOnly 쿠키로 전달합니다.
 
 토큰 유효기간은 `JWT_EXPIRATION_SECONDS`(Access Token, 1~900초, 기본 15분)와 `JWT_REFRESH_EXPIRATION_SECONDS`(Refresh Token, 기본 30일)로 바꿀 수 있습니다. Refresh Token은 Redis에 저장합니다.
 
-로그아웃(`POST /api/auth/signout`)은 Body의 Refresh Token을 Redis에서 지웁니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
+로그아웃(`POST /api/auth/signout`)은 쿠키의 Refresh Token을 Redis에서 지우고 쿠키를 만료시킵니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
 
 투표글에 댓글·답글이 저장되거나 수정되면 community-service가 커밋 뒤 별도 스레드에서 TypeSafe Jev에 "이 댓글이 어느 선택지를 추천하는지"를 묻습니다(보기: 선택지 라벨 A~D와 `none`). 고른 선택지의 확신이 `JEV_SUPPORT_THRESHOLD`(기본 0.6) 이상이면 댓글의 `supportedOptionId`에 저장하고, 아니면 null로 둡니다. 댓글 목록은 `supportedOptionId`를 함께 내려주고 `?supportedOptionId=`로 그 선택지를 추천한 댓글만 볼 수 있으며, 투표 결과(`GET /api/community/posts/{postId}/poll`)의 `supportCommentCount`는 선택지별 추천 댓글 수입니다. 댓글을 수정하면 판정을 지우고 다시 판정하며, 투표 선택지를 바꾸면 그 글의 댓글을 모두 다시 판정합니다. `TYPESAFE_API_KEY`가 비어 있거나 Jev가 응답하지 않으면 판정만 건너뛰고 댓글 작성·수정은 그대로 성공합니다.
 
@@ -150,3 +150,28 @@ AWS 배포 기반은 [infra/aws/cloudformation/README.md](infra/aws/cloudformati
 - 비동기 연동의 개발 환경은 LocalStack의 SQS/S3로 대체합니다.
 - 운영 비밀값은 저장소에 커밋하지 않고 환경 변수로 주입합니다.
 - 인증은 Gateway의 Access Token 검증, Redis에 저장하는 Refresh Token, 로그아웃 시 Access Token 블랙리스트로 구현되어 있습니다. 서비스 간 호출은 서비스별 토큰(`X-Service-Token`)으로 인증하며, 관측성 대시보드는 아직 구성하지 않았습니다.
+
+## Refresh Token 쿠키 인증
+
+로그인(`POST /api/auth/signin`)은 `{ "accessToken": "...", "userId": 1, "nickname": "..." }`을 반환합니다.
+Refresh Token은 `Set-Cookie: refreshToken=...; Path=/api; HttpOnly; SameSite=Lax`로만 전달합니다.
+Refresh Token을 JSON 응답에 포함하거나 JSON 요청 본문에서 받지 않습니다.
+
+재발급(`POST /api/auth/refresh`)은 쿠키를 포함하고 요청 본문 없이 호출합니다. 응답에는
+`{ "accessToken": "..." }`만 포함되며, 쿠키는 새 Refresh Token으로 교체됩니다. 이전 토큰은 다시 사용할 수 없습니다.
+로그아웃(`POST /api/auth/signout`)도 쿠키를 포함하고 요청 본문 없이 호출하면 토큰을 폐기하고 브라우저 쿠키를 삭제합니다.
+`Authorization: Bearer <access-token>`을 함께 보내면 Access Token도 폐기합니다.
+쿠키가 없거나 비어 있으면 400 `INVALID_REQUEST`, 유효하지 않은 Refresh Token이면 401 `INVALID_REFRESH_TOKEN`을 반환합니다.
+Gateway의 `/api/v1/auth/...` 경로에서도 동일하게 동작합니다.
+
+브라우저에서 로그인·재발급·로그아웃을 호출할 때는 `fetch(url, { method: 'POST', credentials: 'include' })` 또는
+Axios의 `withCredentials: true`를 설정해야 합니다. Gateway는 `CORS_ALLOWED_ORIGINS`에 명시한 주소에만
+쿠키를 포함한 요청을 허용하므로 `*`를 사용하지 않습니다. `SameSite=Lax`를 사용하므로 FE와 API는 같은 사이트에 있어야 합니다.
+다른 API를 호출할 때는 기존처럼 Bearer 헤더로 Access Token을 전달합니다.
+
+쿠키 유효기간은 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 30일)를 따르며 Redis의 토큰 만료 시간과 같습니다.
+쿠키는 발급한 호스트에만 전송되며, 경로가 `/api`이므로 두 API 접두사에서 모두 동작합니다.
+`REFRESH_COOKIE_SECURE`로 Secure 속성을 설정하며, 미지정 시 기본값은 false입니다.
+Compose는 `.env` 또는 실행 환경의 값을 user-service에 전달하며, 로컬 HTTP 개발에서는 false를 사용합니다.
+운영 HTTPS 배포에서는 `REFRESH_COOKIE_SECURE=true`를 지정해야 합니다. 로컬에서 직접 실행할 때도
+user-service 환경 변수 또는 `.env`로 설정합니다.
