@@ -45,6 +45,72 @@ kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --
 kubectl get ingressclass alb
 ```
 
+## Delivery pipeline
+
+`delivery.yaml` creates a GitHub connection, a CodePipeline V2 pipeline, and one CodeBuild project. A push to `develop` runs:
+
+1. **Source**: the exact pushed commit through the GitHub App connection. The commit SHA is passed to CodeBuild as `SOURCE_COMMIT_ID`.
+2. **Build** (`buildspec.yml`): Gradle tests, both FastAPI test suites, and the root script tests run first. Only after they all pass does CodeBuild log in to ECR and run `scripts/publish_images.sh`, which publishes native `linux/arm64` images tagged with the 12-character commit SHA and checks each image's architecture.
+3. **Deploy**: disabled by default (`EnableDeployStage=false`). Enable it once RDS, the `fitzza-app-secrets` Kubernetes Secret, and the AWS Load Balancer Controller are ready.
+
+A failed test aborts the build phase, so no image is pushed and no later stage runs.
+
+### Budget guardrails
+
+CodeBuild, CodePipeline, and KMS are not line items in the approved estimate, so the pipeline is sized to stay at or near zero:
+
+- ARM `BUILD_GENERAL1_SMALL` (`arm1.small`) builds natively on Graviton without QEMU and is covered by the CodeBuild free tier of 100 build minutes per month.
+- A service whose image inputs did not change is retagged in ECR (`src-<content hash>` → commit tag) instead of rebuilt. Only changed services consume build minutes and ECR storage.
+- `SUPERSEDED` execution mode runs only the newest of several queued pushes. Builds are limited to one at a time and 60 minutes.
+- No customer-managed KMS key: artifacts use S3 default encryption and expire after 14 days. Build logs are kept for 7 days.
+- ECR keeps the latest three images per repository (foundation stack lifecycle policy), which stays within the 5 GB estimate and still allows rollback.
+- Base images come from the ECR Public mirror of Docker Official Images to avoid anonymous Docker Hub pull limits on shared CodeBuild addresses.
+
+### Deploy the build pipeline
+
+The defaults deploy the Source and Build stages only. Review the change set before executing it.
+
+```powershell
+aws cloudformation deploy `
+  --stack-name fitzza-prod-delivery `
+  --template-file infra/aws/cloudformation/delivery.yaml `
+  --capabilities CAPABILITY_IAM `
+  --tags Project=fitzza Environment=prod Owner=team3 CostCenter=lgcns5-retail `
+  --no-execute-changeset `
+  --profile fitzza `
+  --region ap-northeast-2
+```
+
+The connection created by CloudFormation remains `PENDING` until the repository owner completes the GitHub authorization in AWS Console → Developer Tools → Settings → Connections. Limit the GitHub App installation to `duckfairy-wak/fitzza_msa_finalproject`. The pipeline cannot fetch source until the connection is `AVAILABLE`, so the automatic run at pipeline creation fails at Source without starting CodeBuild.
+
+### Verify a build
+
+Run the pipeline for a specific commit, then confirm the images:
+
+```powershell
+aws codepipeline start-pipeline-execution `
+  --name fitzza-prod-delivery `
+  --source-revisions actionName=Source,revisionType=COMMIT_ID,revisionValue=<full commit SHA> `
+  --profile fitzza `
+  --region ap-northeast-2
+
+aws ecr describe-images `
+  --repository-name fitzza/gateway-service `
+  --image-ids imageTag=<first 12 characters of the SHA> `
+  --profile fitzza `
+  --region ap-northeast-2
+```
+
+The build artifact `image-publish-report.json` lists, for every service, whether the image was built, retagged, or already present, with its digest and architecture.
+
+### Enable the deploy stage
+
+Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The deploy stage intentionally stops if the `fitzza-app-secrets` Secret does not exist.
+
+### Rollback
+
+Images are immutable and tagged with the 12-character Git commit SHA. To roll back, rerun the pipeline for the desired commit with `--source-revisions`; unchanged images are reused, so the run only retags. Verify every Deployment and StatefulSet rollout before restoring traffic.
+
 ## Cost controls
 
 - Deploy only in `ap-northeast-2`, which is the approved estimate region.

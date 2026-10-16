@@ -4,41 +4,46 @@ env:
   shell: bash
   variables:
     ECR_REPOSITORY_PREFIX: fitzza
+  exported-variables:
+    - ECR_REGISTRY
+    - IMAGE_TAG
+    - SOURCE_COMMIT
 
 phases:
   install:
+    on-failure: ABORT
+    runtime-versions:
+      java: corretto21
+      python: 3.12
     commands:
-      - docker buildx create --name fitzza-builder --use
-      - docker buildx inspect --bootstrap
+      # The managed ARM image starts Docker in privileged mode, so images build natively without QEMU.
+      # The default docker builder keeps LOCAL_DOCKER_LAYER_CACHE effective and avoids pulling a BuildKit image.
+      - '[[ "$(uname -m)" == "aarch64" ]]'
+      - docker buildx version
   pre_build:
+    on-failure: ABORT
     commands:
+      - export SOURCE_COMMIT="${SOURCE_COMMIT_ID:-${CODEBUILD_RESOLVED_SOURCE_VERSION:-}}"
+      - '[[ "${SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || { echo "A full Git commit SHA is required" >&2; exit 1; }'
+      - export IMAGE_TAG="${SOURCE_COMMIT:0:12}"
       - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
       - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
-      - export IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION:?A resolved Git commit SHA is required}"
-      - '[[ "${IMAGE_TAG}" =~ ^[0-9a-f]{40}$ ]]'
-      - export IMAGE_TAG="${IMAGE_TAG:0:12}"
-      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+      # Every test runs before ECR login; a failure aborts the build before any image is pushed.
       - ./gradlew test --no-daemon
-      - python -m pip install -r recommendation-service/requirements.txt -r virtual-tryon-service/requirements.txt
+      - python -m pip install --quiet -r recommendation-service/requirements.txt -r virtual-tryon-service/requirements.txt
       - (cd recommendation-service && python -m pytest tests)
       - (cd virtual-tryon-service && python -m pytest tests)
+      - python -m pytest tests
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
   build:
+    on-failure: ABORT
     commands:
-      - |
-        set -eu
-        for service in config-service discovery-service gateway-service user-service product-service order-service community-service review-service notification-service; do
-          image="${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}/${service}:${IMAGE_TAG}"
-          docker buildx build --platform linux/arm64 --build-arg "MODULE=${service}" --file Dockerfile.java --tag "${image}" --push .
-        done
-      - |
-        set -eu
-        for service in recommendation-service virtual-tryon-service; do
-          image="${ECR_REGISTRY}/${ECR_REPOSITORY_PREFIX}/${service}:${IMAGE_TAG}"
-          docker buildx build --platform linux/arm64 --build-arg "SERVICE_DIR=${service}" --file Dockerfile.python --tag "${image}" --push .
-        done
+      - bash scripts/publish_images.sh
   post_build:
+    on-failure: ABORT
     commands:
-      - printf '{"imageTag":"%s","registry":"%s","repositoryPrefix":"%s"}\n' "${IMAGE_TAG}" "${ECR_REGISTRY}" "${ECR_REPOSITORY_PREFIX}" > image-definitions.json
+      - '[[ "${CODEBUILD_BUILD_SUCCEEDING}" == "1" ]]'
+      - printf '{"commit":"%s","imageTag":"%s","registry":"%s","repositoryPrefix":"%s"}\n' "${SOURCE_COMMIT}" "${IMAGE_TAG}" "${ECR_REGISTRY}" "${ECR_REPOSITORY_PREFIX}" > image-definitions.json
       - |
         python - <<'PY'
         import json
@@ -58,5 +63,8 @@ phases:
 
 artifacts:
   files:
+    - deployspec.yml
     - image-definitions.json
+    - image-publish-report.json
     - infra/k8s/**/*
+    - scripts/render_production_manifests.py

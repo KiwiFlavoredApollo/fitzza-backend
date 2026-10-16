@@ -1200,7 +1200,7 @@ Resources:
           ImageTagMutability: IMMUTABLE
           LifecyclePolicy:
             LifecyclePolicyText: >-
-              {"rules":[{"rulePriority":1,"description":"expire untagged images","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":2},"action":{"type":"expire"}},{"rulePriority":2,"description":"keep latest ten images","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":10},"action":{"type":"expire"}}]}
+              {"rules":[{"rulePriority":1,"description":"expire untagged images","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":1},"action":{"type":"expire"}},{"rulePriority":2,"description":"keep latest three images for rollback within the 5 GB budget","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}}]}
           RepositoryName:
             Fn::Sub:
               - '${EcrRepositoryPrefix}/${RepositoryPath}'
