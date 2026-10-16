@@ -1,3 +1,0 @@
-auth:
-  refresh-cookie:
-    secure: ${REFRESH_COOKIE_SECURE:true}

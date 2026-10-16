@@ -171,9 +171,10 @@ Axios의 `withCredentials: true`를 설정해야 합니다. Gateway는 `CORS_ALL
 
 쿠키 유효기간은 `JWT_REFRESH_EXPIRATION_SECONDS`(기본 30일)를 따르며 Redis의 토큰 만료 시간과 같습니다.
 쿠키는 발급한 호스트에만 전송되며, 경로가 `/api`이므로 두 API 접두사에서 모두 동작합니다.
-`REFRESH_COOKIE_SECURE`로 Secure 속성을 명시적으로 설정할 수 있습니다. 미지정 시 로컬은 false,
-**user-service**를 `SPRING_PROFILES_ACTIVE=prod`로 실행하면 true가 기본값입니다. 운영 환경에서는 HTTPS를 사용해야 합니다.
-로컬 HTTP 개발은 prod 프로파일 없이 실행하면 되며, 실제 `.env`를 변경할 필요는 없습니다.
+`REFRESH_COOKIE_SECURE`로 Secure 속성을 설정하며, 미지정 시 기본값은 false입니다.
+Compose는 `.env` 또는 실행 환경의 값을 user-service에 전달하며, 로컬 HTTP 개발에서는 false를 사용합니다.
+운영 HTTPS 배포에서는 `REFRESH_COOKIE_SECURE=true`를 지정해야 합니다. 로컬에서 직접 실행할 때도
+user-service 환경 변수 또는 `.env`로 설정합니다. 
 
 쿠키를 메모리에 보관하며 호출하는 PowerShell 예시:
 

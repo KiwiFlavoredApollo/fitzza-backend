@@ -14,17 +14,20 @@ class RefreshTokenCookieConfigurationTest {
             .withPropertyValues("spring.cloud.config.enabled=false", "jwt.refresh-expiration-seconds=120");
 
     @Test
-    void productionProfileDefaultsToSecureCookies() {
-        contextRunner.withPropertyValues("spring.profiles.active=prod").run(context -> {
+    void secureEnvironmentVariableEnablesSecureCookies() {
+        contextRunner.withPropertyValues("REFRESH_COOKIE_SECURE=true").run(context -> {
             assertThat(context).hasNotFailed();
             String cookie = context.getBean(RefreshTokenCookie.class).issue("test-token");
             assertThat(cookie).contains("; Secure", "; HttpOnly", "SameSite=Lax", "Path=/api", "Max-Age=120")
+                    .doesNotContain("Domain=");
+            assertThat(context.getBean(RefreshTokenCookie.class).clear())
+                    .contains("; Secure", "; HttpOnly", "SameSite=Lax", "Path=/api", "Max-Age=0")
                     .doesNotContain("Domain=");
         });
     }
 
     @Test
-    void localProfileDefaultsToHttpCompatibleCookies() {
+    void missingSecureSettingDefaultsToHttpCompatibleCookies() {
         contextRunner.run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context.getBean(RefreshTokenCookie.class).issue("test-token"))
@@ -33,11 +36,13 @@ class RefreshTokenCookieConfigurationTest {
     }
 
     @Test
-    void secureSettingCanBeExplicitlyEnabledLocally() {
-        contextRunner.withPropertyValues("REFRESH_COOKIE_SECURE=true").run(context -> {
+    void secureEnvironmentVariableCanDisableSecureCookies() {
+        contextRunner.withPropertyValues("REFRESH_COOKIE_SECURE=false").run(context -> {
             assertThat(context).hasNotFailed();
+            assertThat(context.getBean(RefreshTokenCookie.class).issue("test-token"))
+                    .contains("HttpOnly", "Max-Age=120", "Path=/api").doesNotContain("; Secure");
             assertThat(context.getBean(RefreshTokenCookie.class).clear())
-                    .contains("; Secure", "Max-Age=0", "Path=/api");
+                    .contains("HttpOnly", "Max-Age=0", "Path=/api").doesNotContain("; Secure");
         });
     }
 }
