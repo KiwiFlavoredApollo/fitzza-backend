@@ -1,3 +1,6 @@
+# Stack deletion: when Qdrant is deployed, follow infra/k8s/QDRANT.md first.
+# Copy and verify the latest snapshot in S3, then identify the Retain PV and
+# attached EBS volume and delete them manually only after confirming the target.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
