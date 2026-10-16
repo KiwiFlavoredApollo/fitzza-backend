@@ -8,6 +8,8 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.media.StringSchema;
 import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import io.swagger.v3.oas.models.servers.Server;
+import java.util.List;
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
@@ -26,6 +28,8 @@ public class OpenApiConfig {
                         .description("장바구니와 주문 API. 사용자 식별은 X-User-Id 헤더로 전달한다. "
                                 + "/api로 시작하지 않는 API는 서비스끼리만 호출하며 Gateway로는 호출할 수 없다.")
                         .version("v1"))
+                // Gateway Swagger UI에서 열리므로 Try it out은 Gateway 호스트(/)를 쓴다.
+                .servers(List.of(new Server().url("/")))
                 .components(new Components()
                         .addSecuritySchemes(
                                 SERVICE_TOKEN,

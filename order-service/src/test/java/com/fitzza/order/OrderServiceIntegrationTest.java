@@ -75,6 +75,7 @@ class OrderServiceIntegrationTest {
     void openApiDocumentExposesEveryEndpoint() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.servers[0].url").value("/"))
                 .andExpect(jsonPath("$.paths['/api/carts'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/carts'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].patch").exists())
