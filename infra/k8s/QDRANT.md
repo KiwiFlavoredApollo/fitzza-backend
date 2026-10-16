@@ -61,6 +61,17 @@ Invoke-RestMethod -Method Put -ContentType application/json -Body $body http://l
 
 PVC는 암호화된 gp3 20GiB이며 StorageClass의 reclaim policy는 `Retain`입니다. 노드가 0대로 축소되어도 EBS 볼륨과 비용은 유지되고, Qdrant는 노드가 다시 기동될 때까지 사용할 수 없습니다.
 
+Qdrant를 종료하거나 스택을 삭제하기 전에는 최신 스냅샷을 S3에 복사하고 복구 가능성을 확인합니다. 이후 PVC/PV를 조회해 Retain으로 남은 PV와 연결된 EBS 볼륨을 식별하고, 삭제 대상의 볼륨 ID·크기·AZ가 예상한 리소스와 일치하는지 확인한 뒤 수동으로 삭제합니다.
+
+```powershell
+kubectl -n fitzza get pvc qdrant-storage-qdrant-0 -o wide
+$pv = kubectl -n fitzza get pvc qdrant-storage-qdrant-0 -o jsonpath='{.spec.volumeName}'
+kubectl get pv $pv -o jsonpath='{.spec.csi.volumeHandle}{"\n"}'
+aws ec2 describe-volumes --volume-ids <volume-id> --query 'Volumes[0].{State:State,Size:Size,AZ:AvailabilityZone,Encrypted:Encrypted,Tags:Tags}'
+```
+
+백업과 대상 볼륨을 다시 확인한 후에만 PV와 EBS 볼륨을 수동 삭제합니다. 다른 워크로드가 사용 중인 볼륨이나 확인되지 않은 볼륨은 삭제하지 않습니다.
+
 ## AI 코드 경계
 
 FashionCLIP/Jev Python 코드는 `fashion-CLIP` 저장소에서 이미지로 빌드해 commit SHA로 ECR에 올립니다. 이 저장소는 Qdrant 배포와 데이터 계약만 소유합니다. 임베딩 Job은 Qdrant와 동시에 큰 메모리를 사용하지 않도록 결과를 S3에 먼저 기록하고, 경량 importer가 `fitzza_products_current` 대상 버전 컬렉션에 적재합니다.
