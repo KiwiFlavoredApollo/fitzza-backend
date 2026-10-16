@@ -117,17 +117,17 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$[0].children[0].code").value("KNIT"))
                 .andExpect(jsonPath("$[0].children[0].name").value("니트"));
 
-        mockMvc.perform(get("/api/products").param("category", "TOP").param("sort", "LOW_PRICE"))
+        mockMvc.perform(get("/api/products").param("category", "TOP").param("sort", "PRICE_ASC"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sort").value("LOW_PRICE"))
+                .andExpect(jsonPath("$.sort").value("PRICE_ASC"))
                 .andExpect(jsonPath("$.totalElements").value(2))
                 .andExpect(jsonPath("$.content[0].productName").value("셔츠"));
         mockMvc.perform(get("/api/products").param("sort", "OLDEST"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sort").value("LATEST"));
+                .andExpect(jsonPath("$.sort").value("TIME_DESC"));
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sort").value("LATEST"))
+                .andExpect(jsonPath("$.sort").value("TIME_DESC"))
                 .andExpect(jsonPath("$.content").isArray());
         mockMvc.perform(get("/api/products").param("category", "TO"))
                 .andExpect(status().isBadRequest())
