@@ -174,14 +174,4 @@ Axios의 `withCredentials: true`를 설정해야 합니다. Gateway는 `CORS_ALL
 `REFRESH_COOKIE_SECURE`로 Secure 속성을 설정하며, 미지정 시 기본값은 false입니다.
 Compose는 `.env` 또는 실행 환경의 값을 user-service에 전달하며, 로컬 HTTP 개발에서는 false를 사용합니다.
 운영 HTTPS 배포에서는 `REFRESH_COOKIE_SECURE=true`를 지정해야 합니다. 로컬에서 직접 실행할 때도
-user-service 환경 변수 또는 `.env`로 설정합니다. 
-
-쿠키를 메모리에 보관하며 호출하는 PowerShell 예시:
-
-```powershell
-$login = Invoke-RestMethod -Uri 'http://localhost:8080/api/auth/signin' -Method Post `
-    -ContentType 'application/json' -InFile './scripts/auth-signin.json' -SessionVariable authSession
-$tokens = Invoke-RestMethod -Uri 'http://localhost:8080/api/auth/refresh' -Method Post -WebSession $authSession
-Invoke-RestMethod -Uri 'http://localhost:8080/api/auth/signout' -Method Post -WebSession $authSession `
-    -Headers @{ Authorization = "Bearer $($tokens.accessToken)" }
-```
+user-service 환경 변수 또는 `.env`로 설정합니다.
