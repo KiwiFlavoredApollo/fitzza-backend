@@ -53,10 +53,10 @@ class CommentControllerTest {
     @Test
     void listIsPublicAndReturnsRepliesUnderTheirComment() throws Exception {
         CommentResponse reply =
-                new CommentResponse(2L, "답글", new AuthorResponse(8L, "coordi"), 0, false, false, null, List.of());
+                new CommentResponse(2L, "답글", new AuthorResponse(8L, "coordi"), 0, false, false, 100L, null, List.of());
         CommentResponse deletedParent =
-                new CommentResponse(1L, "삭제된 댓글입니다", null, 0, false, true, null, List.of(reply));
-        when(commentService.getComments(3L, null)).thenReturn(List.of(deletedParent));
+                new CommentResponse(1L, "삭제된 댓글입니다", null, 0, false, true, null, null, List.of(reply));
+        when(commentService.getComments(3L, null, null)).thenReturn(List.of(deletedParent));
 
         mockMvc.perform(get(POST_COMMENTS))
                 .andExpect(status().isOk())
@@ -66,15 +66,25 @@ class CommentControllerTest {
                 .andExpect(jsonPath("$[0].author").doesNotExist())
                 .andExpect(jsonPath("$[0].replies[0].commentId").value(2))
                 .andExpect(jsonPath("$[0].replies[0].isDeleted").value(false))
-                .andExpect(jsonPath("$[0].replies[0].author.nickname").value("coordi"));
+                .andExpect(jsonPath("$[0].replies[0].author.nickname").value("coordi"))
+                .andExpect(jsonPath("$[0].supportedOptionId").doesNotExist())
+                .andExpect(jsonPath("$[0].replies[0].supportedOptionId").value(100));
+    }
+
+    @Test
+    void listCanBeFilteredByTheSupportedOption() throws Exception {
+        when(commentService.getComments(3L, null, 100L)).thenReturn(List.of());
+
+        mockMvc.perform(get(POST_COMMENTS).param("supportedOptionId", "100")).andExpect(status().isOk());
+        verify(commentService).getComments(3L, null, 100L);
     }
 
     @Test
     void listPassesTheViewerWhenLoggedIn() throws Exception {
-        when(commentService.getComments(3L, 8L)).thenReturn(List.of());
+        when(commentService.getComments(3L, 8L, null)).thenReturn(List.of());
 
         mockMvc.perform(get(POST_COMMENTS).header(USER_ID_HEADER, "8")).andExpect(status().isOk());
-        verify(commentService).getComments(3L, 8L);
+        verify(commentService).getComments(3L, 8L, null);
     }
 
     @Test

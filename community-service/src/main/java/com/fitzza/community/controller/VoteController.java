@@ -71,7 +71,8 @@ public class VoteController {
 
     @Operation(
             summary = "투표 결과 조회",
-            description = "토큰 없이도 조회된다. 토큰을 보내면 myVoteOptionId에 내 선택이 담기고, 아니면 null이다.",
+            description = "토큰 없이도 조회된다. 토큰을 보내면 myVoteOptionId에 내 선택이 담기고, 아니면 null이다. "
+                    + "supportCommentCount는 그 선택지를 추천한다고 판정된 댓글 수다(Jev 판정, 지운 댓글 제외).",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),

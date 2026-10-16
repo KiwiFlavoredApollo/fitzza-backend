@@ -28,6 +28,8 @@ import com.fitzza.community.repository.CommentLikeRepository;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
 import com.fitzza.community.repository.PostRepository;
+import com.fitzza.community.votesupport.CommentSupportRequested;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +43,7 @@ class CommentServiceTest {
 
     private static final Long POST_ID = 10L;
     private static final Long OTHER_POST_ID = 11L;
+    private static final Long VOTE_POST_ID = 12L;
     private static final Long AUTHOR_ID = 7L;
     private static final Long OTHER_ID = 8L;
 
@@ -192,7 +195,7 @@ class CommentServiceTest {
         when(userDirectory.findNicknames(List.of(AUTHOR_ID, OTHER_ID, OTHER_ID)))
                 .thenReturn(Map.of(AUTHOR_ID, "fitzza", OTHER_ID, "coordi"));
 
-        List<CommentResponse> comments = commentService.getComments(POST_ID, OTHER_ID);
+        List<CommentResponse> comments = commentService.getComments(POST_ID, OTHER_ID, null);
 
         assertThat(comments).extracting(CommentResponse::commentId).containsExactly(1L, 2L);
         CommentResponse top = comments.get(0);
@@ -221,7 +224,7 @@ class CommentServiceTest {
         when(commentLikeRepository.countByCommentIds(List.of(3L))).thenReturn(List.of());
         when(userDirectory.findNicknames(List.of(OTHER_ID))).thenReturn(Map.of(OTHER_ID, "coordi"));
 
-        List<CommentResponse> comments = commentService.getComments(POST_ID, null);
+        List<CommentResponse> comments = commentService.getComments(POST_ID, null, null);
 
         assertThat(comments).hasSize(1);
         CommentResponse placeholder = comments.get(0);
@@ -237,7 +240,7 @@ class CommentServiceTest {
     void listOfMissingOrDeletedPostIsNotFound() {
         when(postRepository.existsByIdAndDeletedAtIsNull(POST_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> commentService.getComments(POST_ID, null))
+        assertThatThrownBy(() -> commentService.getComments(POST_ID, null, null))
                 .isInstanceOf(CommunityApiException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.POST_NOT_FOUND);
@@ -345,6 +348,79 @@ class CommentServiceTest {
         verify(commentLikeRepository, never()).insertIfAbsent(anyLong(), anyLong());
     }
 
+    @Test
+    void commentOnAVotePostAsksForItsSupportedOption() {
+        when(postRepository.findByIdAndDeletedAtIsNull(VOTE_POST_ID)).thenReturn(Optional.of(votePost(VOTE_POST_ID)));
+
+        commentService.create(AUTHOR_ID, VOTE_POST_ID, new CommentCreateRequest("A가 나아요", null));
+
+        verify(eventPublisher).publishEvent(new CommentSupportRequested(100L));
+    }
+
+    @Test
+    void commentOnANormalPostDoesNotAskForASupportedOption() {
+        commentService.create(OTHER_ID, POST_ID, new CommentCreateRequest("잘 어울려요", null));
+
+        verify(eventPublisher, never()).publishEvent(any(CommentSupportRequested.class));
+    }
+
+    @Test
+    void updateClearsTheOldSupportedOptionAndAsksAgain() {
+        Comment comment = comment(1L, POST_ID, AUTHOR_ID, "A가 나아요");
+        ReflectionTestUtils.setField(comment, "supportedOptionId", 100L);
+        when(commentRepository.findById(1L)).thenReturn(Optional.of(comment));
+
+        commentService.update(AUTHOR_ID, 1L, new CommentUpdateRequest("다시 보니 B가 나아요"));
+
+        assertThat(comment.getSupportedOptionId()).isNull();
+        verify(eventPublisher).publishEvent(new CommentSupportRequested(1L));
+    }
+
+    @Test
+    void listCarriesEachCommentsSupportedOption() {
+        Comment first = comment(1L, POST_ID, AUTHOR_ID, "A가 나아요");
+        ReflectionTestUtils.setField(first, "supportedOptionId", 100L);
+        Comment second = comment(2L, POST_ID, OTHER_ID, "둘 다 좋아요");
+        when(commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(POST_ID)).thenReturn(List.of(first, second));
+        when(commentLikeRepository.countByCommentIds(List.of(1L, 2L))).thenReturn(List.of());
+        when(userDirectory.findNicknames(any())).thenReturn(Map.of());
+
+        List<CommentResponse> comments = commentService.getComments(POST_ID, null, null);
+
+        assertThat(comments).extracting(CommentResponse::supportedOptionId).containsExactly(100L, null);
+    }
+
+    @Test
+    void listFilteredByAnOptionShowsOnlyCommentsAndRepliesSupportingItInOneLine() {
+        Comment supporting = comment(1L, POST_ID, AUTHOR_ID, "A가 나아요");
+        ReflectionTestUtils.setField(supporting, "supportedOptionId", 100L);
+        Comment other = comment(2L, POST_ID, OTHER_ID, "B요");
+        ReflectionTestUtils.setField(other, "supportedOptionId", 101L);
+        Comment replyToOther = reply(3L, other, AUTHOR_ID, "저는 A");
+        ReflectionTestUtils.setField(replyToOther, "supportedOptionId", 100L);
+        Comment deletedSupporting = comment(4L, POST_ID, OTHER_ID, "A!");
+        ReflectionTestUtils.setField(deletedSupporting, "supportedOptionId", 100L);
+        deletedSupporting.delete();
+        when(commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(POST_ID))
+                .thenReturn(List.of(supporting, other, replyToOther, deletedSupporting));
+        when(commentLikeRepository.countByCommentIds(List.of(1L, 3L))).thenReturn(List.of());
+        when(userDirectory.findNicknames(any())).thenReturn(Map.of());
+
+        List<CommentResponse> comments = commentService.getComments(POST_ID, null, 100L);
+
+        assertThat(comments).extracting(CommentResponse::commentId).containsExactly(1L, 3L);
+        assertThat(comments).allSatisfy(comment -> assertThat(comment.replies()).isEmpty());
+    }
+
+    @Test
+    void listFilteredByAnOptionNobodySupportsIsEmpty() {
+        Comment comment = comment(1L, POST_ID, AUTHOR_ID, "고민되네요");
+        when(commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(POST_ID)).thenReturn(List.of(comment));
+
+        assertThat(commentService.getComments(POST_ID, null, 100L)).isEmpty();
+        verifyNoInteractions(userDirectory);
+    }
+
     private Comment savedComment() {
         ArgumentCaptor<Comment> captor = ArgumentCaptor.forClass(Comment.class);
         verify(commentRepository).save(captor.capture());
@@ -353,6 +429,12 @@ class CommentServiceTest {
 
     private static Post post(Long postId, Long authorId) {
         Post post = Post.createNormal(authorId, "제목", "내용", PostCategory.DAILY, null);
+        ReflectionTestUtils.setField(post, "id", postId);
+        return post;
+    }
+
+    private static Post votePost(Long postId) {
+        Post post = Post.createVote(AUTHOR_ID, "어떤 게 나아요?", "골라 주세요", PostCategory.COORDI_QUESTION, Instant.now());
         ReflectionTestUtils.setField(post, "id", postId);
         return post;
     }

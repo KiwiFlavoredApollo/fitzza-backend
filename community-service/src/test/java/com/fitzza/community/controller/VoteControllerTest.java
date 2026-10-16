@@ -88,6 +88,7 @@ class VoteControllerTest {
                 .andExpect(jsonPath("$.closed").value(false))
                 .andExpect(jsonPath("$.options[0].label").value("A"))
                 .andExpect(jsonPath("$.options[0].count").value(3))
+                .andExpect(jsonPath("$.options[0].supportCommentCount").value(2))
                 .andExpect(jsonPath("$.myVoteOptionId").doesNotExist());
         mockMvc.perform(get(POSTS + "/3/poll").header(USER_ID_HEADER, "8"))
                 .andExpect(status().isOk())
@@ -127,7 +128,7 @@ class VoteControllerTest {
 
     private static VoteResultResponse sampleResults(Long myVoteOptionId) {
         return new VoteResultResponse(
-                List.of(new VoteOptionResult(100L, "A", 3, 1.0), new VoteOptionResult(101L, "B", 0, 0.0)),
+                List.of(new VoteOptionResult(100L, "A", 3, 1.0, 2), new VoteOptionResult(101L, "B", 0, 0.0, 0)),
                 3,
                 null,
                 false,

@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,7 +47,10 @@ public class CommentController {
     @Operation(
             summary = "댓글 목록",
             description = "답글은 replies에 담긴다(1단계까지). 답글이 남아 있는 삭제된 댓글은 isDeleted=true, author=null로 "
-                    + "내려가고 내용은 안내 문구로 바뀐다. 토큰을 보내면 liked에 내 좋아요 여부가 담긴다.",
+                    + "내려가고 내용은 안내 문구로 바뀐다. 토큰을 보내면 liked에 내 좋아요 여부가 담긴다. "
+                    + "투표글이면 supportedOptionId에 댓글이 추천하는 선택지 ID가 담긴다(Jev 판정 확신이 기준 이상일 때만, "
+                    + "아니면 null. 작성·수정 직후에는 판정 전이라 null일 수 있다). supportedOptionId로 거르면 그 선택지를 "
+                    + "추천한 댓글·답글만 작성순으로 한 줄로 내려간다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "조회 성공"),
@@ -58,8 +62,10 @@ public class CommentController {
     @GetMapping("/community/posts/{postId}/comments")
     public List<CommentResponse> getComments(
             @PathVariable("postId") Long postId,
+            @Parameter(description = "투표글에서 이 선택지를 추천한다고 판정된 댓글·답글만 볼 때 선택지 ID")
+                    @RequestParam(name = "supportedOptionId", required = false) Long supportedOptionId,
             @Parameter(hidden = true) @RequestHeader(name = AuthHeaders.USER_ID, required = false) Long userId) {
-        return commentService.getComments(postId, userId);
+        return commentService.getComments(postId, userId, supportedOptionId);
     }
 
     @Operation(

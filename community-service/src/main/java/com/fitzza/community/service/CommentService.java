@@ -18,6 +18,7 @@ import com.fitzza.community.repository.CommentLikeRepository;
 import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
 import com.fitzza.community.repository.PostRepository;
+import com.fitzza.community.votesupport.CommentSupportRequested;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,11 +54,16 @@ public class CommentService {
     }
 
     // 댓글은 작성순, 답글은 각 댓글 아래에 작성순으로 내려간다. viewerId는 비로그인이면 null이다.
+    // supportedOptionId를 주면 그 선택지를 추천한다고 판정된 댓글·답글만 작성순으로 한 줄로 내려간다(replies는 빈 목록).
     @Transactional(readOnly = true)
-    public List<CommentResponse> getComments(Long postId, Long viewerId) {
+    public List<CommentResponse> getComments(Long postId, Long viewerId, Long supportedOptionId) {
         requireVisiblePost(postId);
         List<Comment> comments = commentRepository.findByPostIdOrderByCreatedAtAscIdAsc(postId);
-        List<Comment> active = comments.stream().filter(comment -> !comment.isDeleted()).toList();
+        List<Comment> active = comments.stream()
+                .filter(comment -> !comment.isDeleted())
+                .filter(comment -> supportedOptionId == null
+                        || supportedOptionId.equals(comment.getSupportedOptionId()))
+                .toList();
         if (active.isEmpty()) {
             return List.of();
         }
@@ -69,6 +75,11 @@ public class CommentService {
                 : new HashSet<>(commentLikeRepository.findLikedCommentIds(viewerId, activeIds));
         Map<Long, String> nicknames =
                 userDirectory.findNicknames(active.stream().map(Comment::getUserId).toList());
+        if (supportedOptionId != null) {
+            return active.stream()
+                    .map(comment -> toResponse(comment, List.of(), likeCounts, likedIds, nicknames))
+                    .toList();
+        }
 
         Map<Long, List<CommentResponse>> repliesByParent = new HashMap<>();
         for (Comment comment : active) {
@@ -90,13 +101,14 @@ public class CommentService {
             } else if (!replies.isEmpty()) {
                 // 지워진 댓글이라도 답글이 남아 있으면 자리를 표시해 답글의 맥락을 유지한다.
                 result.add(new CommentResponse(
-                        comment.getId(), DELETED_CONTENT, null, 0, false, true, comment.getCreatedAt(), replies));
+                        comment.getId(), DELETED_CONTENT, null, 0, false, true, null, comment.getCreatedAt(), replies));
             }
         }
         return result;
     }
 
     // 다른 사람이 단 댓글·답글이면 글 작성자에게 알림을 보낸다. 실제 전송은 커밋 뒤에 한다.
+    // 투표글이면 커밋 뒤 별도 스레드에서 이 댓글이 추천하는 선택지를 판정한다(실패해도 작성은 성공).
     @Transactional
     public CommentCreatedResponse create(Long userId, Long postId, CommentCreateRequest request) {
         Post post = postRepository
@@ -106,6 +118,9 @@ public class CommentService {
                 ? Comment.create(postId, userId, request.content())
                 : Comment.replyTo(findReplyTarget(postId, request.parentCommentId()), userId, request.content());
         Comment saved = commentRepository.save(comment);
+        if (post.isVote()) {
+            eventPublisher.publishEvent(new CommentSupportRequested(saved.getId()));
+        }
         if (!post.isWrittenBy(userId)) {
             eventPublisher.publishEvent(
                     new CommentCreatedEvent(saved.getId(), postId, post.getUserId(), saved.getContent()));
@@ -113,9 +128,11 @@ public class CommentService {
         return new CommentCreatedResponse(saved.getId());
     }
 
+    // 내용이 바뀌면 지지 선택지를 지우고 커밋 뒤 다시 판정한다. 투표글이 아니면 판정 단계에서 건너뛴다.
     @Transactional
     public void update(Long userId, Long commentId, CommentUpdateRequest request) {
         findOwnComment(userId, commentId).changeContent(request.content());
+        eventPublisher.publishEvent(new CommentSupportRequested(commentId));
     }
 
     @Transactional
@@ -193,6 +210,7 @@ public class CommentService {
                 likeCounts.getOrDefault(comment.getId(), 0L),
                 likedIds.contains(comment.getId()),
                 false,
+                comment.getSupportedOptionId(),
                 comment.getCreatedAt(),
                 replies);
     }

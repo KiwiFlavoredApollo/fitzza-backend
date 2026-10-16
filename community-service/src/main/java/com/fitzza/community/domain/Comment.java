@@ -38,6 +38,11 @@ public class Comment {
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
 
+    // 투표글에서 이 댓글이 추천하는 선택지. Jev 판정 확신이 기준 이상일 때만 채우고, 아니면 NULL이다.
+    // 저장 뒤 별도 스레드에서 채우므로 작성 직후에는 비어 있을 수 있다.
+    @Column(name = "supported_option_id")
+    private Long supportedOptionId;
+
     // 수정과 삭제가 겹치면 늦게 끝난 요청이 앞선 변경을 덮어쓰지 않고 실패한다.
     // 기본값은 이미 행이 있는 테이블에 이 컬럼을 추가할 때 필요하다.
     @Version
@@ -89,8 +94,10 @@ public class Comment {
         return parentCommentId != null;
     }
 
+    // 내용이 바뀌면 이전 판정은 맞지 않으므로 지우고, 커밋 뒤 다시 판정한다.
     public void changeContent(String content) {
         this.content = content.trim();
+        this.supportedOptionId = null;
     }
 
     // 답글이 달린 댓글을 지워도 답글은 남아야 하므로 행은 두고 표시만 바꾼다.
@@ -120,6 +127,14 @@ public class Comment {
 
     public Long getParentCommentId() {
         return parentCommentId;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public Long getSupportedOptionId() {
+        return supportedOptionId;
     }
 
     public Instant getCreatedAt() {

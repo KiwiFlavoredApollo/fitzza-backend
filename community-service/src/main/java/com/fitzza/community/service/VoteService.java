@@ -16,10 +16,12 @@ import com.fitzza.community.dto.VoteOptionResult;
 import com.fitzza.community.dto.VoteResultResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
+import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
 import com.fitzza.community.repository.PostRepository;
 import com.fitzza.community.repository.VoteOptionRepository;
 import com.fitzza.community.repository.VoteRepository;
+import com.fitzza.community.votesupport.VoteOptionsReplaced;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -28,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,16 +41,22 @@ public class VoteService {
     private final VoteOptionRepository voteOptionRepository;
     private final VoteRepository voteRepository;
     private final VoteItemGateway voteItemGateway;
+    private final CommentRepository commentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public VoteService(
             PostRepository postRepository,
             VoteOptionRepository voteOptionRepository,
             VoteRepository voteRepository,
-            VoteItemGateway voteItemGateway) {
+            VoteItemGateway voteItemGateway,
+            CommentRepository commentRepository,
+            ApplicationEventPublisher eventPublisher) {
         this.postRepository = postRepository;
         this.voteOptionRepository = voteOptionRepository;
         this.voteRepository = voteRepository;
         this.voteItemGateway = voteItemGateway;
+        this.commentRepository = commentRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     // POST /community/posts에 postType=VOTE로 들어온 글. 글과 선택지를 한 트랜잭션에 저장한다.
@@ -89,6 +98,9 @@ public class VoteService {
 
         voteOptionRepository.deleteByPostId(postId);
         voteOptionRepository.saveAll(toOptions(postId, requested, snapshots));
+        // 선택지 ID가 새로 생겼으므로 댓글의 이전 판정을 지우고, 커밋 뒤 새 선택지 기준으로 다시 판정한다.
+        commentRepository.clearSupportByPostId(postId);
+        eventPublisher.publishEvent(new VoteOptionsReplaced(postId));
     }
 
     @Transactional
@@ -118,12 +130,14 @@ public class VoteService {
         requireVotePost(post);
 
         Map<Long, Long> counts = IdCount.toMap(voteRepository.countByOption(postId));
+        Map<Long, Long> supportCounts = IdCount.toMap(commentRepository.countSupportByOption(postId));
         long total = counts.values().stream().mapToLong(Long::longValue).sum();
         List<VoteOptionResult> results = voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(postId).stream()
                 .map(option -> {
                     long count = counts.getOrDefault(option.getId(), 0L);
                     double ratio = total == 0 ? 0.0 : (double) count / total;
-                    return new VoteOptionResult(option.getId(), option.getLabel(), count, ratio);
+                    return new VoteOptionResult(option.getId(), option.getLabel(), count, ratio,
+                            supportCounts.getOrDefault(option.getId(), 0L));
                 })
                 .toList();
         Long myVoteOptionId = viewerId == null
