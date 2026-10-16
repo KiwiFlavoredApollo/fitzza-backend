@@ -9,11 +9,13 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - One public NAT Gateway and one Elastic IP
 - An S3 Gateway VPC Endpoint for pipeline traffic and ECR image-layer downloads without NAT processing
 - Dedicated security groups for the public ALB and private RDS/managed Redis access
+- One private, encrypted PostgreSQL 17.6 `db.t4g.micro` instance with a Secrets Manager-managed master password
 - One EKS 1.36 Standard cluster
 - One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
 - The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
+- An EKS Pod Identity role for AWS Load Balancer Controller v3.6.0
 - A private, encrypted, versioned S3 bucket for crawler and AI pipeline data
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
 
@@ -21,7 +23,27 @@ The single NAT Gateway is a temporary cost decision for this project. It is a si
 
 The ALB itself is created from `infra/k8s/base/ingress.yaml` by AWS Load Balancer Controller. Replace `CHANGE_ME_ALB_SECURITY_GROUP_ID` with the stack output `AlbSecurityGroupId`. The controller manages the matching backend rule for pod targets; do not attach the public ALB security group to EKS nodes or data stores.
 
-RDS must be deployed in the private subnets with the stack output `RdsSecurityGroupId` and public accessibility disabled. The current Redis deployment is exposed only as a Kubernetes `ClusterIP`; `ManagedRedisSecurityGroupId` is reserved for a future managed Redis migration.
+RDS is deployed in the private subnets with `PubliclyAccessible=false`. Use the stack outputs `RdsEndpointAddress` and `RdsMasterSecretArn` when preparing the production Kubernetes Secret. The current Redis deployment is exposed only as a Kubernetes `ClusterIP`; `ManagedRedisSecurityGroupId` is reserved for a future managed Redis migration.
+
+## Install the AWS Load Balancer Controller
+
+The foundation stack creates the IAM policy, Pod Identity role, and association for service account `kube-system/aws-load-balancer-controller`. Install the pinned controller only after the stack update completes. Pass the region and VPC explicitly so the Pod never needs EC2 instance metadata.
+
+```powershell
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update eks
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller `
+  --namespace kube-system `
+  --version 3.6.0 `
+  --set clusterName=fitzza-prod `
+  --set region=ap-northeast-2 `
+  --set vpcId=<VpcId stack output> `
+  --set serviceAccount.create=true `
+  --set serviceAccount.name=aws-load-balancer-controller
+
+kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=300s
+kubectl get ingressclass alb
+```
 
 ## Cost controls
 

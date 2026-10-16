@@ -67,6 +67,20 @@ Parameters:
     Type: String
     Default: fitzza
     AllowedPattern: '^[a-z0-9]+(?:[._/-][a-z0-9]+)*$'
+  DatabaseEngineVersion:
+    Type: String
+    Default: '17.6'
+    AllowedPattern: '^[0-9]+\.[0-9]+$'
+    Description: PostgreSQL engine version validated for db.t4g.micro in ap-northeast-2.
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    AllowedValues: [db.t4g.micro, db.t4g.small]
+  DatabaseAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 100
 
 Mappings:
   EcrRepositoryNames:
@@ -462,6 +476,89 @@ Resources:
         - { Key: Environment, Value: !Ref Environment }
       VpcId: !Ref Vpc
 
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: keep PostgreSQL ENIs in both private subnets while using single-AZ compute for the project budget
+        must:
+          - include only private subnets
+          - never add public subnets
+        mutable: change-with-constraints
+    Properties:
+      DBSubnetGroupDescription: Private subnets for Fitzza PostgreSQL
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  RdsParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: require TLS for every PostgreSQL client connection
+        must:
+          - rds.force_ssl stays enabled
+        mutable: change-with-constraints
+    Properties:
+      Description: Fitzza PostgreSQL parameters
+      Family: postgres17
+      Parameters:
+        rds.force_ssl: '1'
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private PostgreSQL for EKS services; single-AZ burstable ARM chosen for temporary project cost
+        must:
+          - PubliclyAccessible stays false
+          - attach only RdsSecurityGroup + RdsSubnetGroup
+          - storage stays encrypted
+          - master password stays managed by Secrets Manager
+        mutable: review-required
+        mutability:
+          AllocatedStorage: change-with-constraints
+          DBInstanceClass: change-with-constraints
+    Properties:
+      AllocatedStorage: !Ref DatabaseAllocatedStorage
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBName: fitzza
+      DBParameterGroupName: !Ref RdsParameterGroup
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      DeleteAutomatedBackups: false
+      DeletionProtection: false
+      Engine: postgres
+      EngineVersion: !Ref DatabaseEngineVersion
+      ManageMasterUserPassword: true
+      MasterUsername: fitzza_admin
+      MaxAllocatedStorage: 100
+      MultiAZ: false
+      Port: 5432
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp3
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroup
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
   EksClusterRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -854,6 +951,232 @@ Resources:
       ClusterName: !Ref EksCluster
       ResolveConflicts: OVERWRITE
 
+  LoadBalancerControllerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: AWS-published v3.6.0 controller permissions for reconciling ALB resources from Kubernetes Ingress
+        must:
+          - keep request/resource tag conditions from the upstream policy
+          - review against the pinned controller release before upgrades
+        mutable: review-required
+    Properties:
+      Description: AWS Load Balancer Controller v3.6.0 permissions
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: iam:CreateServiceLinkedRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
+          - Effect: Allow
+            Action:
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeAddresses
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcPeeringConnections
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeInstances
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeTags
+              - ec2:GetCoipPoolUsage
+              - ec2:DescribeCoipPools
+              - ec2:GetSecurityGroupsForVpc
+              - ec2:DescribeIpamPools
+              - ec2:DescribeRouteTables
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeListenerCertificates
+              - elasticloadbalancing:DescribeSSLPolicies
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeTrustStores
+              - elasticloadbalancing:DescribeListenerAttributes
+              - elasticloadbalancing:DescribeCapacityReservation
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - acm:ListCertificates
+              - acm:DescribeCertificate
+              - iam:ListServerCertificates
+              - iam:GetServerCertificate
+              - waf-regional:GetWebACL
+              - waf-regional:GetWebACLForResource
+              - waf-regional:AssociateWebACL
+              - waf-regional:DisassociateWebACL
+              - wafv2:GetWebACL
+              - wafv2:GetWebACLForResource
+              - wafv2:AssociateWebACL
+              - wafv2:DisassociateWebACL
+              - shield:GetSubscriptionState
+              - shield:DescribeProtection
+              - shield:CreateProtection
+              - shield:DeleteProtection
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateSecurityGroup
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateTags
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateSecurityGroup
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:DeleteSecurityGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:CreateTargetGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:CreateRule
+              - elasticloadbalancing:DeleteRule
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/net/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/app/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/net/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/app/*/*/*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:SetIpAddressType
+              - elasticloadbalancing:SetSecurityGroups
+              - elasticloadbalancing:SetSubnets
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:ModifyTargetGroup
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:ModifyListenerAttributes
+              - elasticloadbalancing:ModifyCapacityReservation
+              - elasticloadbalancing:ModifyIpPools
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action: elasticloadbalancing:AddTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
+            Condition:
+              StringEquals:
+                elasticloadbalancing:CreateAction:
+                  - CreateTargetGroup
+                  - CreateLoadBalancer
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
+            Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:SetWebAcl
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:AddListenerCertificates
+              - elasticloadbalancing:RemoveListenerCertificates
+              - elasticloadbalancing:ModifyRule
+              - elasticloadbalancing:SetRulePriorities
+            Resource: '*'
+
+  LoadBalancerControllerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolate ALB reconciliation permissions behind EKS Pod Identity
+        must:
+          - trust only pods.eks.amazonaws.com
+          - attach only the pinned controller policy
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      ManagedPolicyArns:
+        - !Ref LoadBalancerControllerPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  LoadBalancerControllerPodIdentityAssociation:
+    Type: AWS::EKS::PodIdentityAssociation
+    DependsOn: PodIdentityAgentAddon
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: bind the controller service account to its dedicated AWS role without node credentials
+        must:
+          - namespace stays kube-system
+          - service account matches the Helm release
+    Properties:
+      ClusterName: !Ref EksCluster
+      Namespace: kube-system
+      RoleArn: !GetAtt LoadBalancerControllerRole.Arn
+      ServiceAccount: aws-load-balancer-controller
+
   'Fn::ForEach::EcrRepositories':
     - RepositoryIdentifier
     - - ConfigService
@@ -912,9 +1235,21 @@ Outputs:
   ManagedRedisSecurityGroupId:
     Description: Private managed Redis security group allowing Redis only from EKS workloads
     Value: !Ref ManagedRedisSecurityGroup
+  RdsEndpointAddress:
+    Description: Private PostgreSQL endpoint for the production Kubernetes overlay
+    Value: !GetAtt RdsInstance.Endpoint.Address
+  RdsPort:
+    Description: PostgreSQL listener port
+    Value: !GetAtt RdsInstance.Endpoint.Port
+  RdsMasterSecretArn:
+    Description: Secrets Manager ARN holding the generated PostgreSQL master credentials
+    Value: !GetAtt RdsInstance.MasterUserSecret.SecretArn
   EksClusterName:
     Description: EKS cluster name
     Value: !Ref EksCluster
+  EksClusterSecurityGroupId:
+    Description: EKS-created cluster security group for private API and workload access
+    Value: !GetAtt EksCluster.ClusterSecurityGroupId
   EksNodeGroupName:
     Description: Scale-to-zero ARM64 managed node group name
     Value: !Ref EksNodeGroup
@@ -930,3 +1265,6 @@ Outputs:
   NodeScaleDownScheduleName:
     Description: Weekday 18:00 Asia/Seoul node scale-down schedule
     Value: !Ref NodeScaleDownSchedule
+  LoadBalancerControllerRoleArn:
+    Description: EKS Pod Identity role for AWS Load Balancer Controller v3.6.0
+    Value: !GetAtt LoadBalancerControllerRole.Arn
