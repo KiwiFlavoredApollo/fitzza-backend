@@ -28,10 +28,12 @@ import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.VoteResultResponse;
 import com.fitzza.community.exception.CommunityApiException;
 import com.fitzza.community.exception.ErrorCode;
+import com.fitzza.community.repository.CommentRepository;
 import com.fitzza.community.repository.IdCount;
 import com.fitzza.community.repository.PostRepository;
 import com.fitzza.community.repository.VoteOptionRepository;
 import com.fitzza.community.repository.VoteRepository;
+import com.fitzza.community.votesupport.VoteOptionsReplaced;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -40,6 +42,7 @@ import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class VoteServiceTest {
@@ -58,8 +61,11 @@ class VoteServiceTest {
     private final PostRepository postRepository = mock(PostRepository.class);
     private final VoteOptionRepository voteOptionRepository = mock(VoteOptionRepository.class);
     private final VoteRepository voteRepository = mock(VoteRepository.class);
+    private final CommentRepository commentRepository = mock(CommentRepository.class);
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final VoteService voteService = new VoteService(
-            postRepository, voteOptionRepository, voteRepository, PASS_THROUGH_GATEWAY);
+            postRepository, voteOptionRepository, voteRepository, PASS_THROUGH_GATEWAY, commentRepository,
+            eventPublisher);
 
     @Test
     void createStoresAVotePostThatClosesInSixHoursWithItsOptionsInOrder() {
@@ -190,6 +196,7 @@ class VoteServiceTest {
         Vote myVote = voteFor(OPTION_A);
         when(voteRepository.countByOption(POST_ID)).thenReturn(List.of(new IdCount(OPTION_A, 3L)));
         when(voteRepository.findByPostIdAndUserId(POST_ID, VOTER_ID)).thenReturn(Optional.of(myVote));
+        when(commentRepository.countSupportByOption(POST_ID)).thenReturn(List.of(new IdCount(OPTION_B, 2L)));
 
         VoteResultResponse results = voteService.getResults(POST_ID, VOTER_ID);
 
@@ -203,6 +210,8 @@ class VoteServiceTest {
         assertThat(results.options().get(1).label()).isEqualTo("B");
         assertThat(results.options().get(1).count()).isZero();
         assertThat(results.options().get(1).ratio()).isZero();
+        assertThat(results.options().get(0).supportCommentCount()).isZero();
+        assertThat(results.options().get(1).supportCommentCount()).isEqualTo(2);
     }
 
     @Test
@@ -261,6 +270,8 @@ class VoteServiceTest {
                         tuple(POST_ID, "A", null),
                         tuple(POST_ID, "B", "56"),
                         tuple(POST_ID, "C", "57"));
+        verify(commentRepository).clearSupportByPostId(POST_ID);
+        verify(eventPublisher).publishEvent(new VoteOptionsReplaced(POST_ID));
     }
 
     @Test
@@ -271,6 +282,7 @@ class VoteServiceTest {
         assertRejected(
                 () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.VOTE_OPTIONS_LOCKED);
         verify(voteOptionRepository, never()).deleteByPostId(anyLong());
+        verifyNoInteractions(commentRepository, eventPublisher);
     }
 
     @Test

@@ -114,4 +114,28 @@ class InteractionRepositoryTest {
     private static String newVoteId() {
         return UUID.randomUUID().toString();
     }
+
+    @Test
+    void aJudgementIsSavedOnlyForTheJudgedVersionAndCountedPerOption() {
+        Comment first = commentRepository.saveAndFlush(Comment.create(POST_ID, USER_ID, "A가 나아요"));
+        Comment second = commentRepository.saveAndFlush(Comment.create(POST_ID, OTHER_ID, "저도 A"));
+        Comment third = commentRepository.saveAndFlush(Comment.create(POST_ID, OTHER_ID, "B요"));
+        Comment deleted = commentRepository.saveAndFlush(Comment.create(POST_ID, OTHER_ID, "A!"));
+        Comment elsewhere = commentRepository.saveAndFlush(Comment.create(OTHER_POST_ID, USER_ID, "A"));
+
+        assertThat(commentRepository.updateSupport(first.getId(), first.getVersion(), OPTION_A)).isEqualTo(1);
+        assertThat(commentRepository.updateSupport(second.getId(), second.getVersion(), OPTION_A)).isEqualTo(1);
+        assertThat(commentRepository.updateSupport(third.getId(), third.getVersion() + 1, OPTION_B)).isZero();
+        assertThat(commentRepository.updateSupport(elsewhere.getId(), elsewhere.getVersion(), OPTION_A)).isEqualTo(1);
+        commentRepository.updateSupport(deleted.getId(), deleted.getVersion(), OPTION_A);
+        commentRepository.findById(deleted.getId()).orElseThrow().delete();
+        commentRepository.flush();
+
+        assertThat(IdCount.toMap(commentRepository.countSupportByOption(POST_ID)))
+                .containsOnly(Map.entry(OPTION_A, 2L));
+
+        assertThat(commentRepository.clearSupportByPostId(POST_ID)).isEqualTo(4);
+        assertThat(commentRepository.countSupportByOption(POST_ID)).isEmpty();
+        assertThat(commentRepository.countSupportByOption(OTHER_POST_ID)).hasSize(1);
+    }
 }

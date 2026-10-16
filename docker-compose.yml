@@ -148,6 +148,7 @@ services:
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-}
       VTON_SERVICE_URL: ${VTON_SERVICE_URL:-}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
     depends_on: *domain-dependencies
     expose: ["8084"]
     healthcheck:
