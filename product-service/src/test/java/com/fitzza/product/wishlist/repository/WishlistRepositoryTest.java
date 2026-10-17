@@ -7,6 +7,7 @@ import com.fitzza.product.product.entity.BrandEntity;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductStatus;
 import com.fitzza.product.wishlist.entity.WishlistEntity;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ class WishlistRepositoryTest {
 
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
+    private static final AtomicLong PRODUCT_IDS = new AtomicLong(20_000);
 
     @Autowired
     private TestEntityManager entityManager;
@@ -85,6 +87,7 @@ class WishlistRepositoryTest {
 
     private ProductEntity persistProduct(BrandEntity brand, String category1) {
         return entityManager.persist(ProductEntity.builder()
+                .productId(PRODUCT_IDS.getAndIncrement())
                 .brand(brand)
                 .productName(category1 + " 상품")
                 .category1(category1)

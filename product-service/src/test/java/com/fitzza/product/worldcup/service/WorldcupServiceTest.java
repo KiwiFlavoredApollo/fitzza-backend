@@ -139,15 +139,14 @@ class WorldcupServiceTest {
     }
 
     private ProductEntity product(Long productId, ProductStatus status) {
-        ProductEntity product = ProductEntity.builder()
+        return ProductEntity.builder()
+                .productId(productId)
                 .brand(BrandEntity.builder().brandName("Fitzza").build())
                 .productName("상품 " + productId)
                 .category1("TOP")
                 .price(10000)
                 .status(status)
                 .build();
-        ReflectionTestUtils.setField(product, "productId", productId);
-        return product;
     }
 
     private void assertErrorCode(ThrowingCallable callable, ErrorCode expected) {
