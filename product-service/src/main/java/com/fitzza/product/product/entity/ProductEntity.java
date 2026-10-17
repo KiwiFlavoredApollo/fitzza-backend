@@ -5,14 +5,14 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import jakarta.persistence.Transient;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,34 +25,37 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.domain.Persistable;
 
 @Entity
 @Table(name = "product",
         indexes = {
                 @Index(name = "idx_product_category", columnList = "category_1, category_2, subcategory"),
                 @Index(name = "idx_product_status", columnList = "status")
-        },
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_product_source", columnNames = {"source", "source_product_id"}))
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProductEntity {
+public class ProductEntity implements Persistable<Long> {
 
+    /**
+     * 상품 PK. 무신사 수집 상품은 원천(무신사) product_id를 그대로 쓴다.
+     * 애플리케이션이 할당하며 DB identity 자동발급에 의존하지 않는다. 재시드 멱등키이기도 하다.
+     */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "product_id")
     private Long productId;
+
+    /** ID를 미리 넣어도 Spring Data가 merge가 아니라 persist 하도록 한다. */
+    @Transient
+    private boolean isNew = true;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "brand_id", nullable = false)
     private BrandEntity brand;
 
-    /** 원천 쇼핑몰 구분(예: musinsa). 시딩 멱등성 판단에 {@link #sourceProductId}와 함께 쓴다. */
+    /** 원천 쇼핑몰 구분(예: musinsa). */
     @Column(name = "source", length = 30)
     private String source;
-
-    @Column(name = "source_product_id")
-    private Long sourceProductId;
 
     @Column(name = "source_url", length = 300)
     private String sourceUrl;
@@ -131,9 +134,9 @@ public class ProductEntity {
 
     @Builder
     private ProductEntity(
+            Long productId,
             BrandEntity brand,
             String source,
-            Long sourceProductId,
             String sourceUrl,
             String productName,
             String productNameEn,
@@ -152,9 +155,9 @@ public class ProductEntity {
             String description,
             String imageUrl,
             ProductStatus status) {
+        this.productId = productId;
         this.brand = brand;
         this.source = source;
-        this.sourceProductId = sourceProductId;
         this.sourceUrl = sourceUrl;
         this.productName = productName;
         this.productNameEn = productNameEn;
@@ -181,5 +184,21 @@ public class ProductEntity {
             return subcategory;
         }
         return category2 != null ? category2 : category1;
+    }
+
+    @Override
+    public Long getId() {
+        return productId;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.isNew = false;
     }
 }

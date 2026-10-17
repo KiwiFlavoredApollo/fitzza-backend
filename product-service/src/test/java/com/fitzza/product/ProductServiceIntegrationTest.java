@@ -19,6 +19,7 @@ import com.fitzza.product.product.entity.ProductStatus;
 import com.fitzza.product.product.entity.Season;
 import jakarta.persistence.EntityManager;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 class ProductServiceIntegrationTest {
 
     private static final String USER_ID = "1";
+    private static final AtomicLong PRODUCT_IDS = new AtomicLong(10_000);
 
     @Autowired
     private MockMvc mockMvc;
@@ -344,6 +346,7 @@ class ProductServiceIntegrationTest {
     private ProductEntity persistProduct(
             BrandEntity brand, String name, String category1, String category2, int price, ProductStatus status) {
         ProductEntity product = ProductEntity.builder()
+                .productId(PRODUCT_IDS.getAndIncrement())
                 .brand(brand)
                 .productName(name)
                 .category1(category1)

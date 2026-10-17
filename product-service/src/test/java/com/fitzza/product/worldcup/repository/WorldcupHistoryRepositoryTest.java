@@ -6,6 +6,7 @@ import com.fitzza.product.product.entity.BrandEntity;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductStatus;
 import com.fitzza.product.worldcup.entity.WorldcupHistoryEntity;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +20,7 @@ import org.springframework.data.domain.Sort;
 class WorldcupHistoryRepositoryTest {
 
     private static final Long USER_ID = 1L;
+    private static final AtomicLong PRODUCT_IDS = new AtomicLong(30_000);
 
     @Autowired
     private TestEntityManager entityManager;
@@ -84,6 +86,7 @@ class WorldcupHistoryRepositoryTest {
 
     private ProductEntity persistProduct(BrandEntity brand, String name) {
         return entityManager.persist(ProductEntity.builder()
+                .productId(PRODUCT_IDS.getAndIncrement())
                 .brand(brand)
                 .productName(name)
                 .category1("TOP")
