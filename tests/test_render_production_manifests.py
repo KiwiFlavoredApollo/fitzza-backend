@@ -82,3 +82,23 @@ def test_render_rejects_partial_tls_configuration(tmp_path: Path) -> None:
             alb_security_group_id="sg-0123456789abcdef0",
             api_domain="api.example.com",
         )
+
+
+def test_render_failure_preserves_both_inputs(tmp_path: Path) -> None:
+    write_manifests(tmp_path)
+    base = tmp_path / "infra/k8s/base"
+    ingress = base / "ingress.yaml"
+    ingress.write_text(ingress.read_text() + "unknown: CHANGE_ME_UNKNOWN\n")
+    before = {path: path.read_bytes() for path in base.iterdir()}
+    with pytest.raises(ValueError, match="unresolved"):
+        render(tmp_path, "db.example.com", "https://app.example.com", "sg-0123456789abcdef0")
+    assert all(path.read_bytes() == content for path, content in before.items())
+
+
+def test_frontend_path_rejected_without_writing(tmp_path: Path) -> None:
+    write_manifests(tmp_path)
+    base = tmp_path / "infra/k8s/base"
+    before = {path: path.read_bytes() for path in base.iterdir()}
+    with pytest.raises(ValueError, match="must not include a path"):
+        render(tmp_path, "db.example.com", "https://app.example.com/login", "sg-0123456789abcdef0")
+    assert all(path.read_bytes() == content for path, content in before.items())

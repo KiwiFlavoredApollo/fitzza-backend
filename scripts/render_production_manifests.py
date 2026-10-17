@@ -23,6 +23,8 @@ def validate_frontend_origin(value: str) -> str:
         raise ValueError("frontend origin must be an absolute HTTP(S) URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("frontend origin must not include credentials, query, or fragment")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("frontend origin must not include a path")
     return value.rstrip("/")
 
 
@@ -73,7 +75,6 @@ def render(
     configmap = replace_once(
         configmap, "CHANGE_ME_FRONTEND_ORIGIN", frontend_origin, "frontend origin"
     )
-    configmap_path.write_text(configmap, encoding="utf-8", newline="\n")
 
     ingress = ingress_path.read_text(encoding="utf-8")
     ingress = replace_once(
@@ -103,14 +104,16 @@ def render(
             "",
         )
         ingress = ingress.replace("    - host: CHANGE_ME_API_DOMAIN\n", "    -\n")
-    ingress_path.write_text(ingress, encoding="utf-8", newline="\n")
 
     unresolved = []
-    for path in (configmap_path, ingress_path):
-        if "CHANGE_ME_" in path.read_text(encoding="utf-8"):
+    for path, content in ((configmap_path, configmap), (ingress_path, ingress)):
+        if "CHANGE_ME_" in content:
             unresolved.append(str(path))
     if unresolved:
         raise ValueError(f"unresolved production placeholders: {', '.join(unresolved)}")
+    # Validate both documents before writing either, so invalid input can be corrected and retried.
+    configmap_path.write_text(configmap, encoding="utf-8", newline="\n")
+    ingress_path.write_text(ingress, encoding="utf-8", newline="\n")
 
 
 def parse_args() -> argparse.Namespace:
