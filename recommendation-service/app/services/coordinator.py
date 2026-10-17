@@ -96,6 +96,17 @@ class FashionPipelineCoordinator:
         print("-" * 60)
 
         # [2단계 - 단품 검색] 추출된 슬롯이 1개이거나 search_type이 single인 경우
+        if not intent.slots and intent.search_type == "single":
+            return {
+                "type": "single",
+                "query": user_query,
+                "tpo": intent.tpo_summary,
+                "intent": intent,
+                "excluded_categories": [],
+                "comment": "요청에서 검색할 상품을 찾지 못했습니다.",
+                "results": [],
+            }
+
         if intent.search_type == "single" or len(intent.slots) == 1:
             slot = intent.slots[0]
             items = self._search_slot_items(
