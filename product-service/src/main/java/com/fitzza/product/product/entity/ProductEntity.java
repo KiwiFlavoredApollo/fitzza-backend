@@ -13,7 +13,6 @@ import jakarta.persistence.PostLoad;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
-import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,16 +32,14 @@ import org.springframework.data.domain.Persistable;
         indexes = {
                 @Index(name = "idx_product_category", columnList = "category_1, category_2, subcategory"),
                 @Index(name = "idx_product_status", columnList = "status")
-        },
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_product_source", columnNames = {"source", "source_product_id"}))
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductEntity implements Persistable<Long> {
 
     /**
-     * 상품 PK. 무신사 수집 상품은 원천 상품 ID({@code source_product_id}와 동일)를 그대로 쓴다.
-     * 애플리케이션이 할당하며 DB identity 자동발급에 의존하지 않는다.
+     * 상품 PK. 무신사 수집 상품은 원천(무신사) product_id를 그대로 쓴다.
+     * 애플리케이션이 할당하며 DB identity 자동발급에 의존하지 않는다. 재시드 멱등키이기도 하다.
      */
     @Id
     @Column(name = "product_id")
@@ -56,12 +53,9 @@ public class ProductEntity implements Persistable<Long> {
     @JoinColumn(name = "brand_id", nullable = false)
     private BrandEntity brand;
 
-    /** 원천 쇼핑몰 구분(예: musinsa). 시딩 멱등성 판단에 {@link #sourceProductId}와 함께 쓴다. */
+    /** 원천 쇼핑몰 구분(예: musinsa). */
     @Column(name = "source", length = 30)
     private String source;
-
-    @Column(name = "source_product_id")
-    private Long sourceProductId;
 
     @Column(name = "source_url", length = 300)
     private String sourceUrl;
@@ -143,7 +137,6 @@ public class ProductEntity implements Persistable<Long> {
             Long productId,
             BrandEntity brand,
             String source,
-            Long sourceProductId,
             String sourceUrl,
             String productName,
             String productNameEn,
@@ -165,7 +158,6 @@ public class ProductEntity implements Persistable<Long> {
         this.productId = productId;
         this.brand = brand;
         this.source = source;
-        this.sourceProductId = sourceProductId;
         this.sourceUrl = sourceUrl;
         this.productName = productName;
         this.productNameEn = productNameEn;

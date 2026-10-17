@@ -89,8 +89,8 @@ public interface ProductRepository
             """)
     long countWithUnknownCategoryCode();
 
-    @Query("select p.sourceProductId from ProductEntity p where p.source = :source and p.sourceProductId is not null")
-    Set<Long> findSourceProductIds(@Param("source") String source);
+    @Query("select p.productId from ProductEntity p where p.source = :source")
+    Set<Long> findProductIdsBySource(@Param("source") String source);
 
     boolean existsByProductIdAndStatusNot(Long productId, ProductStatus status);
 }

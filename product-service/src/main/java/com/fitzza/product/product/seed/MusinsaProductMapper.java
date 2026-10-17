@@ -33,7 +33,7 @@ import org.springframework.util.StringUtils;
  *
  * <p>주요 변환 규칙
  * <ul>
- *   <li>product_id → productId(PK) 및 sourceProductId, name → productName, price.sale → price,
+ *   <li>product_id → productId(PK), name → productName, price.sale → price,
  *       price.normal → normalPrice, images[0] → imageUrl(썸네일)</li>
  *   <li>option_items의 활성(activated) 조합만 옵션으로 만들고, 활성 옵션이 없으면 상품을 SOLD_OUT으로 둔다.</li>
  *   <li>옵션 값 중 이름에 사이즈가 들어간 그룹의 값을 size로, 나머지를 color로 둔다.</li>
@@ -99,12 +99,11 @@ public class MusinsaProductMapper {
 
     public ProductEntity toProduct(MusinsaProductDocument document, BrandEntity brand) {
         CategoryInfo category = document.category();
-        // API productId = 무신사 product_id. source_product_id에도 같은 값을 두어 재시드 멱등키로 쓴다.
+        // API·DB productId = 무신사 product_id (재시드 멱등키).
         return ProductEntity.builder()
                 .productId(document.productId())
                 .brand(brand)
                 .source(SOURCE)
-                .sourceProductId(document.productId())
                 .sourceUrl(document.sourceUrl())
                 .productName(document.name())
                 .productNameEn(blankToNull(document.nameEn()))

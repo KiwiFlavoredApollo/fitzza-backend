@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * 애플리케이션 시작 시 무신사 크롤링 JSON을 읽어 저장한다. 읽을 위치는 {@code fitzza.seed.musinsa.location}이며
  * 기본값은 resources의 final_products 하위(모자, 상의 등 하위 폴더 포함) JSON 전체다.
  *
- * <p>이미 저장된 상품(source + source_product_id가 같은 상품)은 건너뛰므로 재시작해도 중복 저장되지 않는다.
+ * <p>이미 저장된 상품(무신사 product_id = DB product_id)은 건너뛰므로 재시작해도 중복 저장되지 않는다.
  * 파일 하나가 잘못되어도 나머지 파일은 계속 처리한다. 끄려면 {@code fitzza.seed.musinsa.enabled=false}로 설정한다.
  */
 @Slf4j
@@ -68,7 +68,7 @@ public class ProductDataInitializer implements CommandLineRunner {
         Resource[] sortedResources = Arrays.stream(resources)
                 .sorted(Comparator.comparing(Resource::getDescription))
                 .toArray(Resource[]::new);
-        Set<Long> savedSourceIds = new HashSet<>(productRepository.findSourceProductIds(MusinsaProductMapper.SOURCE));
+        Set<Long> savedProductIds = new HashSet<>(productRepository.findProductIdsBySource(MusinsaProductMapper.SOURCE));
 
         int imported = 0;
         int skipped = 0;
@@ -76,12 +76,12 @@ public class ProductDataInitializer implements CommandLineRunner {
         for (Resource resource : sortedResources) {
             try {
                 MusinsaProductDocument document = readDocument(resource);
-                if (savedSourceIds.contains(document.productId())) {
+                if (savedProductIds.contains(document.productId())) {
                     skipped++;
                     continue;
                 }
                 productSeedService.saveProduct(document);
-                savedSourceIds.add(document.productId());
+                savedProductIds.add(document.productId());
                 imported++;
             } catch (IOException | RuntimeException exception) {
                 failed++;
