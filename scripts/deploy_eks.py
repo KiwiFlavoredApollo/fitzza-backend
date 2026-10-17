@@ -4,6 +4,9 @@ import argparse
 import subprocess
 
 
+# Leave a minute for process overhead beyond kubectl's 600-second rollout wait.
+KUBECTL_TIMEOUT_SECONDS = 660
+
 APPLICATIONS = (
     "user-service", "product-service", "order-service", "community-service",
     "review-service", "notification-service", "recommendation-service",
@@ -13,7 +16,7 @@ APPLICATIONS = (
 
 def deploy(manifest: str) -> None:
     def kubectl(*args: str) -> None:
-        subprocess.run(["kubectl", *args], check=True)
+        subprocess.run(["kubectl", *args], check=True, timeout=KUBECTL_TIMEOUT_SECONDS)
 
     def apply(selector: str | None = None) -> None:
         args = ["apply", "--server-side", "--field-manager=fitzza-codebuild", "-f", manifest]
