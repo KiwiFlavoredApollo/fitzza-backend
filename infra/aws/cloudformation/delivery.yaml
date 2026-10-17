@@ -105,6 +105,14 @@ Rules:
         AssertDescription: AlbSecurityGroupId is required when EnableDeployStage is true.
       - Assert: !Not [!Equals [!Ref RdsEndpointAddress, '']]
         AssertDescription: RdsEndpointAddress is required when EnableDeployStage is true.
+      - Assert: !Or
+          - !And
+            - !Equals [!Ref ApiDomain, '']
+            - !Equals [!Ref AcmCertificateArn, '']
+          - !And
+            - !Not [!Equals [!Ref ApiDomain, '']]
+            - !Not [!Equals [!Ref AcmCertificateArn, '']]
+        AssertDescription: ApiDomain and AcmCertificateArn must both be provided or both be empty.
 
 Conditions:
   DeployEnabled: !Equals [!Ref EnableDeployStage, 'true']
