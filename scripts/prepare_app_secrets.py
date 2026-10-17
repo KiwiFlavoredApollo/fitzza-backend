@@ -53,7 +53,7 @@ def main() -> int:
         print("Credential preparation failed; no values emitted.", file=sys.stderr)
         return 1
     if args.emit_json:
-        json.dump(values, sys.stdout)
+        json.dump(values, sys.stdout, ensure_ascii=True)
     else:
         print("Credential contract validated; no values emitted or saved.")
     return 0

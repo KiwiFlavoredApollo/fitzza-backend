@@ -51,6 +51,29 @@ def test_missing_key_rejected():
         validate(values)
 
 
+def test_escaped_unicode_output_over_limit_is_rejected():
+    values = valid_values()
+    values["JWT_SECRET"] = "한" * 700
+    assert len(json.dumps(values, ensure_ascii=False).encode("utf-8")) < 4096
+    assert len(json.dumps(values, ensure_ascii=True).encode("utf-8")) > 4096
+    with pytest.raises(ValueError, match="4 KiB"):
+        validate(values)
+
+
+@pytest.mark.parametrize("size", [4096, 4097])
+def test_actual_json_output_size_boundary(size):
+    values = valid_values()
+    values["JWT_SECRET"] = ""
+    overhead = len(json.dumps(values, ensure_ascii=True).encode("utf-8"))
+    values["JWT_SECRET"] = "x" * (size - overhead)
+    assert len(json.dumps(values, ensure_ascii=True).encode("utf-8")) == size
+    if size == 4096:
+        assert validate(values) == values
+    else:
+        with pytest.raises(ValueError, match="4 KiB"):
+            validate(values)
+
+
 @pytest.mark.parametrize("payload,success", [(json.dumps(valid_values()), True),
                                             ('{"secret":"do-not-print-this"', False)])
 def test_cli_does_not_echo_secrets(payload, success):

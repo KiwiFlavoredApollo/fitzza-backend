@@ -39,7 +39,7 @@ def validate(values: object) -> dict[str, str]:
             valid = False
         if not valid:
             raise ValueError(f"{key}: Redis endpoint, database, or password does not match")
-    if len(json.dumps(values, ensure_ascii=False).encode("utf-8")) > 4096:
+    if len(json.dumps(values, ensure_ascii=True).encode("utf-8")) > 4096:
         raise ValueError("JSON exceeds the 4 KiB SSM Standard parameter limit")
     return values
 
