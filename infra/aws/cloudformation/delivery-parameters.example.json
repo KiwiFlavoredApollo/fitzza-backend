@@ -1,0 +1,20 @@
+[
+  { "ParameterKey": "ProjectName", "ParameterValue": "fitzza" },
+  { "ParameterKey": "Environment", "ParameterValue": "prod" },
+  { "ParameterKey": "Owner", "ParameterValue": "team3" },
+  { "ParameterKey": "CostCenter", "ParameterValue": "lgcns5-retail" },
+  { "ParameterKey": "GitHubRepository", "ParameterValue": "duckfairy-wak/fitzza_msa_finalproject" },
+  { "ParameterKey": "SourceBranch", "ParameterValue": "develop" },
+  { "ParameterKey": "EcrRepositoryPrefix", "ParameterValue": "fitzza" },
+  { "ParameterKey": "EksClusterName", "ParameterValue": "fitzza-prod" },
+  { "ParameterKey": "EnableDeployStage", "ParameterValue": "true" },
+  { "ParameterKey": "VpcId", "ParameterValue": "vpc-REPLACE_ME" },
+  { "ParameterKey": "VpcCidr", "ParameterValue": "10.20.0.0/16" },
+  { "ParameterKey": "PrivateSubnetIds", "ParameterValue": "subnet-REPLACE_A,subnet-REPLACE_C" },
+  { "ParameterKey": "EksClusterSecurityGroupId", "ParameterValue": "sg-REPLACE_EKS" },
+  { "ParameterKey": "AlbSecurityGroupId", "ParameterValue": "sg-REPLACE_ALB" },
+  { "ParameterKey": "RdsEndpointAddress", "ParameterValue": "REPLACE_ME.ap-northeast-2.rds.amazonaws.com" },
+  { "ParameterKey": "FrontendOrigin", "ParameterValue": "https://REPLACE_ME" },
+  { "ParameterKey": "ApiDomain", "ParameterValue": "" },
+  { "ParameterKey": "AcmCertificateArn", "ParameterValue": "" }
+]

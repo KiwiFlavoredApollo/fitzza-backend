@@ -1,11 +1,11 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM public.ecr.aws/docker/library/eclipse-temurin:21-jdk-alpine AS builder
 ARG MODULE
 WORKDIR /workspace
 COPY . .
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     chmod +x gradlew && ./gradlew :${MODULE}:bootJar --no-daemon
 
-FROM eclipse-temurin:21-jre-alpine
+FROM public.ecr.aws/docker/library/eclipse-temurin:21-jre-alpine
 ARG MODULE
 WORKDIR /app
 RUN addgroup -S fitzza && adduser -S fitzza -G fitzza
