@@ -7,11 +7,9 @@
 
 BEGIN;
 
-DELETE FROM product_service.wishlist
-WHERE user_id = 1001 AND item_id = '4695999' AND item_type = 'PRODUCT';
-
 INSERT INTO product_service.wishlist (user_id, item_id, item_type, created_at)
-VALUES (1001, '4695999', 'PRODUCT', NOW());
+VALUES (1001, '4695999', 'PRODUCT', NOW())
+ON CONFLICT (user_id, item_id, item_type) DO NOTHING;
 
 COMMIT;
 

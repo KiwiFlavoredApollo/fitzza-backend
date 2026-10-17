@@ -3,17 +3,18 @@
 -- 전제: productId=무신사 번호 스키마(source_product_id 컬럼 없음).
 -- 실행 순서: product-service 기동으로 테이블 생성 후
 --   docker compose exec -T postgres psql -U fitzza -d fitzza < infra/seed/product_service_seed.sql
--- 재실행 가능: 이 product_id / source_option_id 행을 먼저 지운다.
+-- 재실행 가능: product_id=4695999 관련 행만 먼저 지운다.
+-- 주의: 아래 wishlist/worldcup_history DELETE는 해당 상품에 대한 모든 사용자 데이터를 지운다.
 
 BEGIN;
 
--- cleanup product_id=4695999
+-- cleanup product_id=4695999 (다른 상품 옵션은 건드리지 않음)
 DELETE FROM product_service.option_measurement
 WHERE option_id IN (
   SELECT option_id FROM product_service.product_option
-  WHERE product_id = 4695999 OR source_option_id IN (21092422, 21092423, 21092424, 21092425, 21092426)
+  WHERE product_id = 4695999
 );
-DELETE FROM product_service.product_option WHERE product_id = 4695999 OR source_option_id IN (21092422, 21092423, 21092424, 21092425, 21092426);
+DELETE FROM product_service.product_option WHERE product_id = 4695999;
 DELETE FROM product_service.product_image WHERE product_id = 4695999;
 DELETE FROM product_service.product_size_guide WHERE product_id = 4695999;
 DELETE FROM product_service.wishlist WHERE item_type = 'PRODUCT' AND item_id = '4695999';
@@ -39,7 +40,7 @@ INSERT INTO product_service.product (
   category_1, category_2, subcategory,
   price, normal_price, discount_rate, season, features, image_url, status,
   created_at, updated_at
-) OVERRIDING SYSTEM VALUE VALUES (
+) VALUES (
   4695999,
   (SELECT brand_id FROM product_service.brand WHERE brand_code = 'musinsastandard' OR brand_name = '무신사 스탠다드' ORDER BY brand_id LIMIT 1),
   'musinsa', 'https://www.musinsa.com/products/4695999',
