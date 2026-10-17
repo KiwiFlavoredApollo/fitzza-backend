@@ -8,9 +8,11 @@ This directory contains the local, credential-free Kubernetes deployment baselin
 - ECR repositories for every application image, with tag immutability enabled
 - An RDS PostgreSQL endpoint reachable from the private subnets
 - An IAM association for the `fitzza-application` service account using EKS Pod Identity or IRSA
-- A Kubernetes Secret named `fitzza-app-secrets`, populated from AWS Secrets Manager in the deployed environment
+- A Kubernetes Secret named `fitzza-app-secrets`, populated from the approved secret store. The SSM transition is tracked in FITZZA-251; the existing RDS password still uses Secrets Manager until that transition is verified.
 
 Do not apply `base/secret.example.yaml`. It documents required keys only and is intentionally excluded from Kustomize.
+
+Use `python scripts/validate_app_secrets.py` with JSON on stdin to validate all 12 keys without printing values or contacting AWS. The optional `--emit-manifest` writes sensitive JSON for direct piping to kubectl only. See the [pilot deployment runbook](../aws/cloudformation/PILOT_DEPLOYMENT.md) for the SSM transition, operating restrictions, and validation order.
 
 ## Values to replace
 
