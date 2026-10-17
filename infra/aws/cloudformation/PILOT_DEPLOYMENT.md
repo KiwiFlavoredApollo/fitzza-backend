@@ -38,6 +38,12 @@
    터미널 출력, Git, Jira, 로그, 빌드 아티팩트에 기록하지 않는다.
    애플리케이션 키 계약은 `infra/k8s/base/secret.example.yaml`의 12개 키다.
    하나의 JSON 파라미터 `/fitzza/prod/app-secrets`를 사용할 경우 4 KiB 이하인지 검증한다.
+   `python scripts/prepare_app_secrets.py`로 터미널에서 DB 암호를 숨김 입력하고
+   키 계약을 검사할 수 있다. 기본 모드는 값 출력·파일 저장·AWS 호출이 없다.
+   `--emit-json`은 SSM 저장 등 보호된 표준 입력 소비자에 직접 연결할 때만 사용한다.
+   생성한 앱 JSON은 1회 준비해 저장한 값을 재사용한다. 재실행마다 Redis·JWT·내부 토큰이
+   바뀌므로 기존 배포에 재생성 값을 무작정 적용하면 세션·서비스 인증이 끊긴다.
+   DB 암호 전용 SSM 버전과 앱 JSON의 POSTGRES_PASSWORD는 같은 값이어야 한다.
 4. 운영자에게 해당 파라미터의 `ssm:GetParameter`만 부여한다.
    사용자 관리형 KMS 키를 선택하면 해당 키의 복호화 권한·예산도 재검토한다.
    빌드 역할에 Secret 읽기 권한을 부여하지 않는다.
