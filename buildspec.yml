@@ -68,3 +68,4 @@ artifacts:
     - image-publish-report.json
     - infra/k8s/**/*
     - scripts/render_production_manifests.py
+    - scripts/deploy_eks.py
