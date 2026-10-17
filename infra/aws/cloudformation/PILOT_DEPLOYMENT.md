@@ -18,10 +18,21 @@
 ## FITZZA-251: 운영 시간에 Secret 전환
 
 1. 기존 DB 상태, Secret 소비자, 자동 회전 및 복구 가능성을 확인한다.
-2. RDS 관리형 비밀번호 해제와 수동 비밀번호 전환의 CloudFormation 변경안을
-   별도로 만든다. `MasterUserSecret` 출력 참조도 함께 처리한다.
+2. foundation의 기본 `DatabasePasswordSource=managed`는 현재 동작을 유지한다.
+   운영 시간에 다음 값을 명시한 Change Set을 만들고 실행 전 검토한다.
+   - `DatabasePasswordSource=ssm`
+   - `DatabasePasswordSsmParameter=/fitzza/prod/db/master-password`
+   - `DatabasePasswordSsmVersion=<보존할 실제 정수 버전>`
+   비밀번호 전용 SecureString을 먼저 준비한다. 앱 JSON 파라미터를 여기에
+   지정하면 JSON 전체가 DB 비밀번호로 설정되므로 사용하지 않는다.
+   SSM 모드에서는 `RdsMasterSecretArn` 출력이 제거되고 비밀값 없는
+   `RdsPasswordSsmParameter` 경로 출력만 제공된다. 기존 출력 소비자를 확인한다.
+   RDS 교체·삭제가 나타나는 Change Set은 실행하지 않는다.
    **관리형 비밀번호를 해제하면 RDS가 관리하던 Secret이 삭제된다.**
    따라서 변경 실행 전에 보호된 복구용 자격 증명을 확보하고 소비자를 파악한다.
+   CloudFormation 실행 주체에는 비밀번호 전용 경로의 `ssm:GetParameters`와
+   선택한 키에 필요한 복호화 권한이 있어야 한다. 버전을 고정해 암호 회전 시
+   템플릿 변경이 발생하게 하고, 롤백에 필요한 이전 SSM 버전을 보존한다.
    [AWS 전환 동작](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html).
 3. 자격 증명은 승인된 SSM SecureString에 보관한다. 비밀값을 CLI 인자,
    터미널 출력, Git, Jira, 로그, 빌드 아티팩트에 기록하지 않는다.
