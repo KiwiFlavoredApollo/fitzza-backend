@@ -105,6 +105,8 @@ The build artifact `image-publish-report.json` lists, for every service, whether
 
 ### Enable the deploy stage
 
+Follow [the pilot deployment runbook](PILOT_DEPLOYMENT.md) for the Secret budget correction and the 10/20 validation sequence before the 10/21 pilot.
+
 Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The deploy stage intentionally stops if the `fitzza-app-secrets` Secret does not exist.
 
 ### Rollback

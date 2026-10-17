@@ -81,6 +81,32 @@ Parameters:
     Default: 20
     MinValue: 20
     MaxValue: 100
+  DatabasePasswordSource:
+    Type: String
+    Default: managed
+    AllowedValues: [managed, ssm]
+    Description: Keep managed until the SSM migration is reviewed; ssm disables RDS-managed credentials.
+  DatabasePasswordSsmParameter:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^/[a-zA-Z0-9_./-]+$'
+    Description: Existing SecureString containing only the PostgreSQL password, not application JSON.
+  DatabasePasswordSsmVersion:
+    Type: String
+    Default: '1'
+    AllowedPattern: '^[1-9][0-9]*$'
+    Description: Pin the retained SecureString version; increment explicitly when rotating the database password.
+
+Rules:
+  SsmDatabasePasswordInputs:
+    RuleCondition: !Equals [!Ref DatabasePasswordSource, ssm]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DatabasePasswordSsmParameter, '']]
+        AssertDescription: An existing password-only SecureString path is required for ssm mode.
+
+Conditions:
+  ManagedDatabasePassword: !Equals [!Ref DatabasePasswordSource, managed]
+  SsmDatabasePassword: !Equals [!Ref DatabasePasswordSource, ssm]
 
 Mappings:
   EcrRepositoryNames:
@@ -524,7 +550,8 @@ Resources:
           - PubliclyAccessible stays false
           - attach only RdsSecurityGroup + RdsSubnetGroup
           - storage stays encrypted
-          - master password stays managed by Secrets Manager
+          - password is RDS-managed until explicitly migrated to a version-pinned SSM SecureString
+          - disabling managed credentials deletes the RDS-managed secret; preserve recovery credentials first
         mutable: review-required
         mutability:
           AllocatedStorage: change-with-constraints
@@ -543,7 +570,11 @@ Resources:
       DeletionProtection: false
       Engine: postgres
       EngineVersion: !Ref DatabaseEngineVersion
-      ManageMasterUserPassword: true
+      ManageMasterUserPassword: !If [ManagedDatabasePassword, true, false]
+      MasterUserPassword: !If
+        - SsmDatabasePassword
+        - !Sub '{{resolve:ssm-secure:${DatabasePasswordSsmParameter}:${DatabasePasswordSsmVersion}}}'
+        - !Ref AWS::NoValue
       MasterUsername: fitzza_admin
       MaxAllocatedStorage: 100
       MultiAZ: false
@@ -1242,8 +1273,13 @@ Outputs:
     Description: PostgreSQL listener port
     Value: !GetAtt RdsInstance.Endpoint.Port
   RdsMasterSecretArn:
+    Condition: ManagedDatabasePassword
     Description: Secrets Manager ARN holding the generated PostgreSQL master credentials
     Value: !GetAtt RdsInstance.MasterUserSecret.SecretArn
+  RdsPasswordSsmParameter:
+    Condition: SsmDatabasePassword
+    Description: Password-only SSM parameter path; never the resolved password
+    Value: !Ref DatabasePasswordSsmParameter
   EksClusterName:
     Description: EKS cluster name
     Value: !Ref EksCluster
