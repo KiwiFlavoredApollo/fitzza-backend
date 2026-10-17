@@ -6,6 +6,16 @@ labels:
   - pairs:
       app.kubernetes.io/part-of: fitzza
       environment: prod
+patches:
+  - target:
+      kind: Deployment
+      name: config-service
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env
+        value:
+          - name: SPRING_PROFILES_ACTIVE
+            value: native,prod
 images:
   - name: fitzza/config-service
     newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/config-service
