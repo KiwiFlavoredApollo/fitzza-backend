@@ -65,6 +65,25 @@
 
 ## 10/20: 배포·네트워크·복구 검증
 
+### 로컬 사전 점검 결과 (2026-10-17)
+
+251 → 167 → 161 순서로 준비하며 실제 완료 판정은 운영 시간 검증 후 한다.
+
+- 251: 기본 managed 모드 유지, 선택형 버전 고정 SSM 전환 코드 정적 검증 완료.
+  실제 SSM 생성·암호 전환·DB 연결 검증은 미실행.
+- 167: `kubectl kustomize` 결과는 애플리케이션 11개 + Redis + Qdrant로
+  총 13 Pod, requests 합계 **CPU 1400m / 메모리 2752Mi**다.
+  시스템·컨트롤러 Pod와 롤링 업데이트 중 추가 Pod는 이 합계에 포함되지 않는다.
+  노드 1대에 배포 가능하다는 의미가 아니며 운영 시간에 allocatable CPU·메모리·Pod 수와
+  기존 시스템 Pod의 요청량을 반드시 함께 비교한다. 부족 시 비용을 늘리기 전에
+  배포 범위 및 업데이트 전략을 검토한다. 모든 앱 readiness는 `/health`·`http` 포트를 사용한다.
+- 161: 렌더된 Service 14개가 모두 ClusterIP다. ALB 진입은 Gateway 8080을 가리킨다.
+  코드상 RDS 비공개 및 private subnet, RDS SG의 EKS SG→5432 제한,
+  private 기본 NAT 경로와 S3 Gateway Endpoint 연결이 구성되어 있다.
+  이는 정적 구성 확인이며 실제 AWS 연결·라우팅 성공을 증명하지 않는다.
+
+### 운영 시간 실행 순서
+
 1. 위 Secret 전환과 배포 관련 PR 병합 완료 확인.
 2. 허용 시간에 노드 1대 Ready 확인. 전체 앱·시스템 Pod requests 및 Pod 수가
    실제 노드 allocatable에 들어가는지 확인하고 부족하면 배포를 멈춘다.
@@ -75,6 +94,23 @@
    Pod 외부 통신, NAT·S3 Gateway Endpoint 경로를 확인한다.
 6. FITZZA-221 비용 알림 확인. 이전 이미지 버전으로 롤백 후 복구를 시험한다.
 7. 커밋·이미지 digest·실행 ID·검증 결과만 Jira에 기록하고 운영 종료 시 노드 0 확인.
+
+### 161 검증 증적
+
+기동 제외일에는 실행하지 않는다. 운영 시간에 다음 결과를 기록한다.
+
+- `kubectl get nodes -L topology.kubernetes.io/zone` 및
+  `kubectl describe node`: 실제 노드 1대/AZ-c, allocatable·시스템 Pod 용량 확인.
+- `kubectl -n fitzza get pods,svc,ingress,pvc -o wide`: 전체 Ready, PVC Bound,
+  Redis·Qdrant ClusterIP 및 외부 진입 ALB 확인.
+- ALB DNS의 `/health` 응답과 핵심 사용자 흐름 성공.
+- AWS RDS 설정: `PubliclyAccessible=false`, private subnet group,
+  지정 RDS SG 연결. 앱에서 TLS DB 인증 성공.
+- Private Pod에서 필요한 외부 API 호출 성공. 실제 연결된 private route table의
+  기본 경로→NAT, S3 prefix-list 경로→Gateway Endpoint를 확인.
+- Redis에 외부 LoadBalancer·NodePort·Ingress 경로가 없는지 확인.
+- FITZZA-221 Budget은 payer 관리자 설정이 선행되어야 하며,
+  linked-account 권한으로 설정 완료를 가정하지 않는다.
 
 ## 10/21: 시범 배포
 
