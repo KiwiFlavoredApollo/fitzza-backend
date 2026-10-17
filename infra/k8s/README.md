@@ -36,6 +36,8 @@ kubectl kustomize infra/k8s/overlays/prod
 
 ## Deployment order
 
+The production overlay explicitly sets `SPRING_PROFILES_ACTIVE=native,prod` for Config Server. Its classpath configuration backend requires `native`; the shared ConfigMap's `prod` profile alone would disable that backend. Other services retain the shared `prod` profile.
+
 1. Create the namespace and synchronized secret.
 2. Deploy Redis, Config Server, and Discovery Service.
 3. Deploy domain services and Python services.
