@@ -1,0 +1,83 @@
+{
+  "users": [
+    {
+      "user_id": "user_test_001",
+      "height": 175.0,
+      "weight": 68.0
+    },
+    {
+      "user_id": "user_test_002",
+      "height": 176.0,
+      "weight": 70.0
+    }
+  ],
+  "user_preferences": [
+    {
+      "preference_id": 1,
+      "user_id": "user_test_001",
+      "subcategory": "니트/스웨터",
+      "fit_type": "레귤러",
+      "preference_spec": {
+        "top_length": 72.0,
+        "shoulder": 53.0,
+        "chest": 61.0,
+        "sleeve": 62.0
+      },
+      "sample_count": 5
+    },
+    {
+      "preference_id": 2,
+      "user_id": "user_test_001",
+      "subcategory": "후드 티셔츠",
+      "fit_type": "오버 사이즈",
+      "preference_spec": {
+        "top_length": 74.0,
+        "shoulder": 55.0,
+        "chest": 63.0,
+        "sleeve": 64.0
+      },
+      "sample_count": 3
+    },
+    {
+      "preference_id": 3,
+      "user_id": "user_test_001",
+      "subcategory": "데님 팬츠",
+      "fit_type": "레귤러",
+      "preference_spec": {
+        "bottom_length": 102.0,
+        "waist": 41.0,
+        "hip": 52.0,
+        "thigh": 31.0
+      },
+      "sample_count": 4
+    },
+    {
+      "preference_id": 4,
+      "user_id": "user_test_001",
+      "subcategory": "슈트/블레이저 재킷",
+      "fit_type": "레귤러",
+      "preference_spec": {
+        "top_length": 75.0,
+        "shoulder": 52.0,
+        "chest": 58.0,
+        "sleeve": 63.0
+      },
+      "sample_count": 2
+    },
+    {
+      "preference_id": 5,
+      "user_id": "user_test_001",
+      "subcategory": "슈트 팬츠/슬랙스",
+      "fit_type": "레귤러",
+      "preference_spec": {
+        "bottom_length": 104.0,
+        "waist": 42.0,
+        "hip": 53.0,
+        "thigh": 32.0
+      },
+      "sample_count": 3
+    }
+  ],
+  "orders_and_surveys": [],
+  "other_users_fits": []
+}
