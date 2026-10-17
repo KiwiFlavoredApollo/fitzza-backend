@@ -25,17 +25,7 @@ phases:
   build:
     on-failure: ABORT
     commands:
-      - kubectl apply --server-side --field-manager=fitzza-codebuild -f /tmp/fitzza-rendered.yaml
-      - |
-        set -eu
-        for resource in $(kubectl -n fitzza get deployments -o name); do
-          kubectl -n fitzza rollout status "${resource}" --timeout=600s
-        done
-      - |
-        set -eu
-        for resource in $(kubectl -n fitzza get statefulsets -o name); do
-          kubectl -n fitzza rollout status "${resource}" --timeout=600s
-        done
+      - python scripts/deploy_eks.py --manifest /tmp/fitzza-rendered.yaml
       - kubectl -n fitzza wait --for=condition=available deployment/gateway-service --timeout=600s
       - kubectl -n fitzza get ingress gateway
   post_build:

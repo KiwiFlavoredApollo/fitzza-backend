@@ -38,6 +38,10 @@ kubectl kustomize infra/k8s/overlays/prod
 
 The production overlay explicitly sets `SPRING_PROFILES_ACTIVE=native,prod` for Config Server. Its classpath configuration backend requires `native`; the shared ConfigMap's `prod` profile alone would disable that backend. Other services retain the shared `prod` profile.
 
+Production Java Config clients override `SPRING_CONFIG_IMPORT` with a required `configserver:http://config-service:8888` import. They fail startup if configuration is unavailable instead of silently continuing with local defaults. Local application YAML keeps its optional import.
+
+CodeBuild runs `scripts/deploy_eks.py`: apply non-application resources, apply Config Server/Discovery, wait for Config Server/Discovery/Redis/Qdrant rollouts, then apply the full manifests and wait for the nine remaining applications. A prerequisite failure stops before the application apply; it does not automatically undo resources already applied. The script contacts the active Kubernetes context and must only run during the approved operating window.
+
 1. Create the namespace and synchronized secret.
 2. Deploy Redis, Config Server, and Discovery Service.
 3. Deploy domain services and Python services.
