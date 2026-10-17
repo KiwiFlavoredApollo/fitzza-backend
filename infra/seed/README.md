@@ -2,7 +2,7 @@
 
 | 파일 | 스키마 | 설명 |
 |------|--------|------|
-| `user_service_seed.sql` | `user_service` | 테스트 사용자 1001~1020 (지현) |
+| `user_service_seed.sql` | `user_service` | 테스트 사용자 1001~1020 |
 | `product_service_seed.sql` | `product_service` | 무신사 `4695999` 상품 1건 (`product_id` = 무신사 번호) |
 | `product_service_wishlist_seed.sql` | `product_service` | user `1001` + product `4695999` 찜 1건 |
 
