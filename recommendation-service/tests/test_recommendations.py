@@ -463,3 +463,40 @@ def test_settings_builds_postgres_dsn_from_env_fields() -> None:
         == "postgresql://fitzza:fitzza_local@postgres:5432/fitzza"
     )
     assert settings.postgres_schema == "recommendation"
+
+
+def test_verify_service_token_allows_shared_token_across_callers() -> None:
+    shared_token = "shared-service-token-at-least-32-bytes-long"
+    settings = Settings(
+        community_service_token=shared_token,
+        product_service_token=shared_token,
+        review_service_token=shared_token,
+    )
+    assert settings.verify_service_token(shared_token, ("community",)) is True
+    assert settings.verify_service_token(shared_token, ("product",)) is True
+    assert settings.verify_service_token(shared_token, ("review",)) is True
+
+
+def test_find_option_measurement_normalizes_int_and_returns_none_on_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.clients.product_client import ProductServiceClient
+
+    client = ProductServiceClient(Settings())
+    monkeypatch.setattr(
+        client,
+        "get_product_measurements",
+        lambda product_ids, request_id_header=None: {
+            101: [
+                {
+                    "option_id": "5001",
+                    "color": "블랙",
+                    "size": "L",
+                    "measurements": {"총장": 71.0, "어깨너비": 51.0},
+                }
+            ]
+        },
+    )
+
+    assert client.find_option_measurement(101, 5001) == {"총장": 71.0, "어깨너비": 51.0}
+    assert client.find_option_measurement(101, 9999) is None

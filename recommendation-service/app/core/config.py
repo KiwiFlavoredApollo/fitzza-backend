@@ -8,7 +8,7 @@ from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 _ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
-load_dotenv(dotenv_path=_ENV_PATH, override=True)
+load_dotenv(dotenv_path=_ENV_PATH, override=False)
 
 MIN_SERVICE_TOKEN_BYTES = 32
 
@@ -114,7 +114,7 @@ class Settings:
 
         caller_tokens = self.get_caller_tokens()
         allowed_set = set(allowed_callers)
-        matched_caller: str | None = None
+        matched_callers: set[str] = set()
 
         for caller, configured_token in caller_tokens.items():
             if not configured_token or not configured_token.strip():
@@ -123,9 +123,9 @@ class Settings:
             if len(configured_bytes) < MIN_SERVICE_TOKEN_BYTES:
                 continue
             if secrets.compare_digest(configured_bytes, given_bytes):
-                matched_caller = caller
+                matched_callers.add(caller)
 
-        return matched_caller in allowed_set
+        return bool(matched_callers & allowed_set)
 
 
 def get_settings() -> Settings:
