@@ -254,7 +254,11 @@ def generate_tryon_image(
             (f"clothing_{index + 1}.png", clothing_png, "image/png")
         )
 
-    client = openai_client or OpenAI(api_key=resolved_api_key)
+    client = openai_client or OpenAI(
+        api_key=resolved_api_key,
+        timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "120")),
+        max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "1")),
+    )
 
     try:
         result = client.images.edit(
