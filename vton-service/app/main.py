@@ -9,14 +9,24 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, HttpUrl
 
+import logging
+from starlette.concurrency import run_in_threadpool
+from PIL import Image
+
 from app.services.vton_generator import (
     DEFAULT_MODEL,
+    SUPPORTED_CATEGORIES,
     VtonConfigurationError,
     VtonError,
     VtonUpstreamError,
     VtonValidationError,
     generate_tryon_image,
 )
+
+logger = logging.getLogger(__name__)
+
+MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 파일당 최대 15MB
+
 
 app = FastAPI(
     title="Fitzza Virtual Try-On Service",
@@ -115,23 +125,42 @@ async def clothing_transfer(
         str,
         Form(
             description=(
-                '착용할 카테고리 목록. JSON 배열(예: ["top", "shoes"] 또는 ["상의", "신발"]) '
-                '또는 쉼표 구분 문자열(예: top,shoes)'
+                '착용할 카테고리 목록. JSON 배열(예: ["상의", "하의"]) '
+                '또는 쉼표 구분 문자열(예: 상의,하의). '
+                '허용 카테고리: 상의, 하의, 아우터, 신발, 모자'
             )
         ),
     ],
     clothing_images: Annotated[
         list[UploadFile],
-        File(description="카테고리 순서와 동일한 순서로 첨부할 의류 상품 이미지 파일들"),
+        File(description="카테고리 순서와 동일한 순서로 첨부할 의류 상품 이미지 파일들 (최대 5개, 파일당 15MB 이하)"),
     ],
 ) -> Response:
+    if len(clothing_images) > len(SUPPORTED_CATEGORIES):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"첨부 가능한 의류 이미지는 최대 {len(SUPPORTED_CATEGORIES)}개입니다.",
+        )
+
     try:
         raw_images: list[bytes] = []
-        for upload in clothing_images:
-            content = await upload.read()
-            raw_images.append(content)
+        for index, upload in enumerate(clothing_images):
+            chunk = await upload.read(MAX_FILE_SIZE_BYTES + 1)
+            if len(chunk) > MAX_FILE_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{index + 1}번째 이미지 파일 크기가 제한({MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB)을 초과했습니다.",
+                )
+            if not chunk:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{index + 1}번째 이미지 파일이 비어 있습니다.",
+                )
+            raw_images.append(chunk)
 
-        output_png = generate_tryon_image(
+        # 이벤트 루프 차단을 방지하기 위해 동기 함수인 generate_tryon_image를 스레드 풀에서 실행
+        output_png = await run_in_threadpool(
+            generate_tryon_image,
             categories=categories_json,
             clothing_images=raw_images,
         )
@@ -143,16 +172,30 @@ async def clothing_transfer(
         )
     except VtonValidationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except VtonConfigurationError as exc:
+    except Image.DecompressionBombError as exc:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="해상도가 비정상적으로 큰 이미지(Decompression Bomb)는 처리할 수 없습니다.",
         ) from exc
-    except VtonUpstreamError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except Exception as exc:
+    except VtonConfigurationError as exc:
+        logger.error("VTON 서버 설정 오류: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"가상 피팅 처리 중 예기치 않은 오류가 발생했습니다: {exc}",
+            detail="가상 피팅 서비스 환경 설정 오류가 발생했습니다. 관리자에게 문의하세요.",
+        ) from exc
+    except VtonUpstreamError as exc:
+        logger.error("VTON OpenAI API 호출 오류: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="AI 이미지 생성 서버와의 통신에 실패했습니다.",
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("VTON 예기치 않은 오류 발생: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="가상 피팅 처리 중 일시적인 오류가 발생했습니다.",
         ) from exc
     finally:
         for upload in clothing_images:
