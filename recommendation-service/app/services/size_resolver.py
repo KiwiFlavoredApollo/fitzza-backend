@@ -1,6 +1,9 @@
+import logging
 import os
 import json
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class SizeProfileResolver:
@@ -17,9 +20,9 @@ class SizeProfileResolver:
         if os.path.exists(self.data_path):
             with open(self.data_path, "r", encoding="utf-8") as f:
                 self.mock_db = json.load(f)
-            print(f">> [SizeProfileResolver] Mock 데이터 로드 성공: {self.data_path}")
+            logger.info("[SizeProfileResolver] Mock 데이터 로드 성공: %s", self.data_path)
         else:
-            print(f"⚠️ [SizeProfileResolver 경고] Mock 데이터 파일을 찾을 수 없습니다: {self.data_path}")
+            logger.warning("[SizeProfileResolver 경고] Mock 데이터 파일을 찾을 수 없습니다: %s", self.data_path)
             self.mock_db = {
                 "users": [],
                 "user_preferences": [],

@@ -1,7 +1,10 @@
+import logging
 import os
 import time
 from openai import OpenAI
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -73,7 +76,7 @@ class ResponseGenerator:
         end_time = time.perf_counter()
 
         self.last_latency = end_time - start_time
-        print(f"⏱️ [성능 측정] ResponseGenerator 단일 ({self.model_name}) 응답 시간: {self.last_latency:.4f}초")
+        logger.debug("ResponseGenerator 단일 (%s) 응답 시간: %.4f초", self.model_name, self.last_latency)
         return res.choices[0].message.content
 
     def generate_coordination_response(self, query: str, tpo: str, outfits: list) -> str:
@@ -129,5 +132,5 @@ class ResponseGenerator:
         end_time = time.perf_counter()
 
         self.last_latency = end_time - start_time
-        print(f"⏱️ [성능 측정] ResponseGenerator 단일 ({self.model_name}) 응답 시간: {self.last_latency:.4f}초")
+        logger.debug("ResponseGenerator 코디 (%s) 응답 시간: %.4f초", self.model_name, self.last_latency)
         return res.choices[0].message.content

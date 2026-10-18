@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from itertools import product
@@ -6,6 +7,8 @@ import numpy as np
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -316,7 +319,7 @@ class OutfitHarmonizer:
         end_time = time.perf_counter()
 
         self.last_latency = end_time - start_time
-        print(f"⏱️ [성능 측정] Harmonizer 단일 ({self.model_name}) 응답 시간: {self.last_latency:.4f}초")
+        logger.debug("Harmonizer 단일 (%s) 응답 시간: %.4f초", self.model_name, self.last_latency)
 
         message = completion.choices[0].message
 
@@ -456,9 +459,10 @@ class OutfitHarmonizer:
                     tpo_context,
                 )
             except Exception as error:
-                print(
-                    f"[WARN] 후보 코디 Vision 검수 실패로 해당 후보를 건너뜁니다: "
-                    f"{type(error).__name__}: {error}"
+                logger.warning(
+                    "후보 코디 Vision 검수 실패로 해당 후보를 건너뜁니다: %s: %s",
+                    type(error).__name__,
+                    error,
                 )
                 continue
 
@@ -492,10 +496,7 @@ class OutfitHarmonizer:
         )
 
         if not passed_outfits and rejected_outfits:
-            print(
-                "[INFO] 모든 후보가 Vision Gate 기준을 통과하지 못해 "
-                "차선책 후보를 반환합니다."
-            )
+            logger.info("모든 후보가 Vision Gate 기준을 통과하지 못해 차선책 후보를 반환합니다.")
             rejected_outfits.sort(
                 key=lambda outfit: outfit["final_score"],
                 reverse=True,

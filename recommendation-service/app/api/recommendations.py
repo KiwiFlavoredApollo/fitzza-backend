@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
+
+logger = logging.getLogger(__name__)
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
@@ -302,9 +305,12 @@ def process_recommendation_request(
                 message=comment,
             )
     except Exception as exc:
-        print(
-            f"[ERROR] 추천 파이프라인 처리 실패 (requestId={request_id}, userId={user_id}): "
-            f"{type(exc).__name__}: {exc}"
+        logger.error(
+            "추천 파이프라인 처리 실패 (requestId=%s, userId=%s): %s",
+            request_id,
+            user_id,
+            exc,
+            exc_info=True,
         )
         failure_msg = "추천을 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
         repository.fail_request(
