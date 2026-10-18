@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 
 import httpx
 
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 SERVICE_TOKEN_HEADER = "X-Service-Token"
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -91,9 +94,11 @@ class ProductServiceClient:
                     measurements_by_product[int(pid)] = parsed_options
                 return measurements_by_product
         except Exception as exc:
-            print(
-                f"[WARN] product-service 실측 조회 실패 (productIds={distinct_ids}): "
-                f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "product-service 실측 조회 실패 (productIds=%s): %s: %s",
+                distinct_ids,
+                type(exc).__name__,
+                exc,
             )
             return {}
 

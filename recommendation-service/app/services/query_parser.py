@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 import datetime
@@ -8,6 +9,8 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from dotenv import load_dotenv
 from app.services.color_palette import FILTERABLE_COLORS
+
+logger = logging.getLogger(__name__)
 
 # OpenAI를 활용해 사용자의 한국어 질의를 파싱
 load_dotenv()
@@ -781,7 +784,7 @@ class QueryParser:
 
         end_time = time.perf_counter()  # 측정 종료
         self.last_latency = end_time - start_time  # 소요 시간 저장 (초 단위)
-        print(f"⏱️ [성능 측정] QueryParser ({self.model_name}) 응답 시간: {self.last_latency:.4f}초")
+        logger.debug("QueryParser (%s) 응답 시간: %.4f초", self.model_name, self.last_latency)
 
         parsed_intent = completion.choices[0].message.parsed
 

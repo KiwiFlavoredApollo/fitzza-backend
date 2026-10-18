@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 
 import httpx
 
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 SERVICE_TOKEN_HEADER = "X-Service-Token"
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -44,8 +47,10 @@ class UserServiceClient:
                 data = response.json()
                 return data if isinstance(data, dict) else {}
         except Exception as exc:
-            print(
-                f"[WARN] user-service 신체 정보 조회 실패 (userId={user_id}): "
-                f"{type(exc).__name__}: {exc}"
+            logger.warning(
+                "user-service 신체 정보 조회 실패 (userId=%s): %s: %s",
+                user_id,
+                type(exc).__name__,
+                exc,
             )
             return {}

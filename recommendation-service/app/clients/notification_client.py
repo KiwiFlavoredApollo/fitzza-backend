@@ -1,6 +1,9 @@
+import logging
 import httpx
 
 from app.core.config import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 SERVICE_TOKEN_HEADER = "X-Service-Token"
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -52,8 +55,12 @@ class NotificationServiceClient:
                 response.raise_for_status()
                 return True
         except Exception as exc:
-            print(
-                f"[WARN] notification-service RECOMMENDATION_DONE 전송 실패 "
-                f"(requestId={request_id}, userId={user_id}): {type(exc).__name__}: {exc}"
+            logger.warning(
+                "notification-service RECOMMENDATION_DONE 전송 실패 (requestId=%s, userId=%s): %s: %s",
+                request_id,
+                user_id,
+                type(exc).__name__,
+                exc,
             )
             return False
+
