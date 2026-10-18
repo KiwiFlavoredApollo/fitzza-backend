@@ -14,6 +14,10 @@ data:
   QDRANT_URL: http://qdrant:6333
   VIRTUAL_TRYON_URL: http://virtual-tryon-service:8000
   RECOMMENDATION_URL: http://recommendation-service:8000
+  RECOMMENDATION_SERVICE_URL: http://recommendation-service:8000
+  USER_SERVICE_URL: http://user-service:8081
+  PRODUCT_SERVICE_URL: http://product-service:8082
+  NOTIFICATION_SERVICE_URL: http://notification-service:8086
   SPRING_PROFILES_ACTIVE: prod
   SPRINGDOC_API_DOCS_ENABLED: "false"
   SPRINGDOC_SWAGGER_UI_ENABLED: "false"

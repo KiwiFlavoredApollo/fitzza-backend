@@ -147,7 +147,7 @@ services:
     environment:
       <<: *java-environment
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
-      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-}
+      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
       VTON_SERVICE_URL: ${VTON_SERVICE_URL:-}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai}
@@ -163,7 +163,7 @@ services:
     environment:
       <<: *java-environment
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
-      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-}
+      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
@@ -209,8 +209,19 @@ services:
       dockerfile: Dockerfile.python
       args: { SERVICE_DIR: recommendation-service }
     environment:
+      <<: *java-environment
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/1
+      QDRANT_URL: ${QDRANT_URL:-http://host.docker.internal:6333}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      USER_SERVICE_URL: http://user-service:8081
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:-}
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
     depends_on:
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
     ports: ["8092:8000"]
     healthcheck:
