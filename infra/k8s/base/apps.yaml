@@ -317,20 +317,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: virtual-tryon-service
-  labels: { app.kubernetes.io/name: virtual-tryon-service, fitzza.io/workload: application }
+  name: vton-service
+  labels: { app.kubernetes.io/name: vton-service, fitzza.io/workload: application }
 spec:
   replicas: 1
   selector:
-    matchLabels: { app.kubernetes.io/name: virtual-tryon-service }
+    matchLabels: { app.kubernetes.io/name: vton-service }
   template:
     metadata:
-      labels: { app.kubernetes.io/name: virtual-tryon-service }
+      labels: { app.kubernetes.io/name: vton-service }
     spec:
       serviceAccountName: fitzza-application
       containers:
-        - name: virtual-tryon-service
-          image: fitzza/virtual-tryon-service:latest
+        - name: vton-service
+          image: fitzza/vton-service:latest
           imagePullPolicy: Always
           ports: [{ name: http, containerPort: 8000 }]
           env:
@@ -344,8 +344,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: virtual-tryon-service
+  name: vton-service
 spec:
-  selector: { app.kubernetes.io/name: virtual-tryon-service }
+  selector: { app.kubernetes.io/name: vton-service }
   ports: [{ name: http, port: 8000, targetPort: http }]
 

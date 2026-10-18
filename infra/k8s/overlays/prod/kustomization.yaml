@@ -56,6 +56,6 @@ images:
   - name: fitzza/recommendation-service
     newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/recommendation-service
     newTag: CHANGE_ME_COMMIT_TAG
-  - name: fitzza/virtual-tryon-service
-    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/virtual-tryon-service
+  - name: fitzza/vton-service
+    newName: CHANGE_ME_ECR_REGISTRY/CHANGE_ME_ECR_REPOSITORY_PREFIX/vton-service
     newTag: CHANGE_ME_COMMIT_TAG

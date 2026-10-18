@@ -37,5 +37,5 @@ def test_health_returns_service_unavailable_when_application_is_not_ready() -> N
 
 
 def test_legacy_status_endpoint_is_not_exposed() -> None:
-    assert "/api/v1/tryon/status" not in {route.path for route in app.routes}
+    assert "/api/vton/status" not in {route.path for route in app.routes}
 

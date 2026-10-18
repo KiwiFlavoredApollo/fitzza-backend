@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [virtual-tryon-service, recommendation-service]
+        service: [vton-service, recommendation-service]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

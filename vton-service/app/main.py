@@ -36,7 +36,7 @@ def health(request: Request, response: Response) -> HealthResponse:
     )
 
 
-@app.post("/api/v1/tryon/jobs", response_model=TryOnJob, status_code=status.HTTP_202_ACCEPTED)
+@app.post("/api/vton/jobs", response_model=TryOnJob, status_code=status.HTTP_202_ACCEPTED)
 def create_job(_: TryOnRequest) -> TryOnJob:
     """Queue contract placeholder; connect SQS and the image worker next."""
     return TryOnJob(job_id=uuid4())
