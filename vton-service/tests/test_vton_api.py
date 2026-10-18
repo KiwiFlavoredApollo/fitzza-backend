@@ -167,8 +167,55 @@ def test_background_vton_failure_flow() -> None:
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "FAILED"
-    assert "OpenAI error" in detail["errorMessage"]
+    assert "가상 피팅 생성 중 오류가 발생했습니다." in detail["errorMessage"]
 
+    mock_notif_client.send_fitting_failed.assert_called_once()
+
+
+def test_background_vton_duplicate_category_flow() -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+
+    mock_prod_client.resolve_product_item.side_effect = [
+        {
+            "productId": 101,
+            "productName": "상의 1",
+            "price": 20000,
+            "imageUrl": "https://cdn.example.com/top1.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+        {
+            "productId": 102,
+            "productName": "상의 2",
+            "price": 25000,
+            "imageUrl": "https://cdn.example.com/top2.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+    ]
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101, 102])
+
+    _run_background_vton(
+        fitting_id=fitting_id,
+        user_id=7,
+        photo_id=1,
+        product_ids=[101, 102],
+        result_image_url="/api/vton/1/image",
+    )
+
+    detail = repo.get_fitting_detail(fitting_id)
+    assert detail is not None
+    assert detail["status"] == "FAILED"
+    assert "같은 카테고리(상의)의 상품은 하나만 피팅할 수 있습니다." in detail["errorMessage"]
     mock_notif_client.send_fitting_failed.assert_called_once()
 
 

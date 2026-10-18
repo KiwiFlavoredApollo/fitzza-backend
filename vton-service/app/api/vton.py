@@ -81,9 +81,6 @@ def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
     if settings.public_base_url.strip():
         base = settings.public_base_url.rstrip("/")
         return f"{base}/api/vton/{fitting_id}/image"
-    if request:
-        base_url = str(request.base_url).rstrip("/")
-        return f"{base_url}/api/vton/{fitting_id}/image"
     return f"/api/vton/{fitting_id}/image"
 
 
@@ -105,11 +102,10 @@ def _run_background_vton(
 
     try:
         # 1. 상품 정보 및 이미지 수집 (기본 5대 카테고리 매핑)
-        # 만약 카테고리가 겹치면 뒤쪽 지원 카테고리로 순차 매핑
         used_categories: set[str] = set()
         resolved_products: list[dict[str, Any]] = []
 
-        for index, pid in enumerate(product_ids):
+        for pid in product_ids:
             # 사용되지 않은 후보 카테고리 선정
             fallback_category = next(
                 (c for c in SUPPORTED_CATEGORIES if c not in used_categories),
@@ -122,12 +118,9 @@ def _run_background_vton(
             )
             cat = item.get("categoryName") or "상의"
             if cat in used_categories:
-                # 카테고리 중복 방지
-                cat = next(
-                    (c for c in SUPPORTED_CATEGORIES if c not in used_categories),
-                    "상의",
+                raise VtonValidationError(
+                    f"같은 카테고리({cat})의 상품은 하나만 피팅할 수 있습니다."
                 )
-                item["categoryName"] = cat
             used_categories.add(cat)
             resolved_products.append(item)
 
@@ -173,12 +166,19 @@ def _run_background_vton(
             err_msg,
             exc_info=True,
         )
-        repo.mark_failed(fitting_id, error_message=err_msg)
+        # 내부 시스템 경로 등 상세 스택트레이스를 숨기고 정제된 안내 메시지 저장
+        user_error_message = (
+            str(exc)
+            if isinstance(exc, VtonValidationError)
+            else "가상 피팅 생성 중 오류가 발생했습니다."
+        )
+        repo.mark_failed(fitting_id, error_message=user_error_message)
         notif_client.send_fitting_failed(
             user_id=user_id,
             fitting_id=fitting_id,
             request_id_header=request_id_header,
         )
+
 
 
 @router.post(
