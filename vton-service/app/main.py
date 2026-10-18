@@ -13,6 +13,9 @@ import logging
 from starlette.concurrency import run_in_threadpool
 from PIL import Image
 
+from fastapi.routing import APIRoute
+
+from app.api.vton import router as vton_router
 from app.services.vton_generator import (
     DEFAULT_MODEL,
     SUPPORTED_CATEGORIES,
@@ -28,12 +31,34 @@ logger = logging.getLogger(__name__)
 MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 파일당 최대 15MB
 
 
+def _mount_router_routes(
+    target_app: FastAPI,
+    router: APIRouter,
+    prefix: str = "",
+) -> None:
+    for route in router.routes:
+        if isinstance(route, APIRoute):
+            target_app.add_api_route(
+                path=f"{prefix}{route.path}",
+                endpoint=route.endpoint,
+                response_model=route.response_model,
+                status_code=route.status_code,
+                tags=route.tags,
+                summary=route.summary,
+                methods=list(route.methods or []),
+                responses=route.responses,
+                response_class=route.response_class,
+            )
+
+
 app = FastAPI(
     title="Fitzza Virtual Try-On Service",
     description="Fitzza AI 가상 피팅 서비스 (OpenAI 기반 다중 의류 가상 착용)",
     version="0.2.0",
 )
 app.state.ready = True
+_mount_router_routes(app, vton_router)
+
 
 
 def custom_openapi():
