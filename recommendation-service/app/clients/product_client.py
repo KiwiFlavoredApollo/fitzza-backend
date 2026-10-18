@@ -109,8 +109,9 @@ class ProductServiceClient:
         )
         options = measurements_by_product.get(int(product_id), [])
         for option in options:
-            if option.get("option_id") == option_id:
-                return option.get("measurements")
-        if options:
-            return options[0].get("measurements")
+            try:
+                if int(option.get("option_id")) == int(option_id):
+                    return option.get("measurements")
+            except (TypeError, ValueError):
+                continue
         return None
