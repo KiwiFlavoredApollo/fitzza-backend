@@ -1,0 +1,151 @@
+"""vton-service 환경 설정 및 토큰 검증 유틸."""
+
+from __future__ import annotations
+
+import os
+import secrets
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Iterable
+from urllib.parse import quote_plus
+
+from dotenv import load_dotenv
+
+APP_DIR = Path(__file__).resolve().parents[1]
+SERVICE_ROOT = APP_DIR.parent
+PROJECT_ROOT = SERVICE_ROOT.parent
+
+load_dotenv(dotenv_path=SERVICE_ROOT / ".env", override=False)
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+
+MIN_SERVICE_TOKEN_BYTES = 32
+
+
+def _default_db_path() -> str:
+    data_dir = SERVICE_ROOT / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir / "vton.db")
+
+
+def _default_storage_dir() -> str:
+    storage_dir = SERVICE_ROOT / "data" / "fittings"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    return str(storage_dir)
+
+
+@dataclass
+class Settings:
+    openai_api_key: str = field(
+        default_factory=lambda: os.getenv("OPENAI_API_KEY", "")
+    )
+    openai_image_model: str = field(
+        default_factory=lambda: os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst")
+    )
+    openai_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv("OPENAI_TIMEOUT_SECONDS", "120.0"))
+    )
+    openai_max_retries: int = field(
+        default_factory=lambda: int(os.getenv("OPENAI_MAX_RETRIES", "1"))
+    )
+    postgres_host: str = field(
+        default_factory=lambda: os.getenv("POSTGRES_HOST", "")
+    )
+    postgres_port: int = field(
+        default_factory=lambda: int(os.getenv("POSTGRES_PORT", "5432"))
+    )
+    postgres_db: str = field(
+        default_factory=lambda: os.getenv("POSTGRES_DB", "fitzza")
+    )
+    postgres_user: str = field(
+        default_factory=lambda: os.getenv("POSTGRES_USER", "fitzza")
+    )
+    postgres_password: str = field(
+        default_factory=lambda: os.getenv("POSTGRES_PASSWORD", "fitzza_local")
+    )
+    postgres_schema: str = field(
+        default_factory=lambda: os.getenv("POSTGRES_SCHEMA", "vton")
+    )
+    database_url: str = field(
+        default_factory=lambda: os.getenv("DATABASE_URL", "")
+    )
+    product_service_url: str = field(
+        default_factory=lambda: os.getenv("PRODUCT_SERVICE_URL", "http://localhost:8082")
+    )
+    notification_service_url: str = field(
+        default_factory=lambda: os.getenv("NOTIFICATION_SERVICE_URL", "http://localhost:8086")
+    )
+    vton_service_token: str = field(
+        default_factory=lambda: os.getenv("VTON_SERVICE_TOKEN", "")
+    )
+    community_service_token: str = field(
+        default_factory=lambda: os.getenv("COMMUNITY_SERVICE_TOKEN", "")
+    )
+    db_path: str = field(
+        default_factory=lambda: os.getenv("VTON_DB_PATH", _default_db_path())
+    )
+    storage_dir: str = field(
+        default_factory=lambda: os.getenv("VTON_STORAGE_DIR", _default_storage_dir())
+    )
+    http_timeout_seconds: float = field(
+        default_factory=lambda: float(os.getenv("HTTP_TIMEOUT_SECONDS", "5.0"))
+    )
+    public_base_url: str = field(
+        default_factory=lambda: os.getenv("VTON_PUBLIC_BASE_URL", "")
+    )
+
+    def get_postgres_dsn(self) -> str | None:
+        if self.database_url.strip():
+            return self.database_url.strip()
+        host = self.postgres_host.strip()
+        if not host:
+            return None
+        user = quote_plus(self.postgres_user)
+        password = quote_plus(self.postgres_password)
+        return (
+            f"postgresql://{user}:{password}"
+            f"@{host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    def get_caller_tokens(self) -> dict[str, str]:
+        return {
+            "community": self.community_service_token,
+        }
+
+    def verify_service_token(
+        self,
+        provided_token: str | None,
+        allowed_callers: Iterable[str],
+    ) -> bool:
+        if not provided_token or not provided_token.strip():
+            return False
+
+        given_bytes = provided_token.encode("utf-8")
+        if len(given_bytes) < MIN_SERVICE_TOKEN_BYTES:
+            return False
+
+        caller_tokens = self.get_caller_tokens()
+        for caller in allowed_callers:
+            expected_token = caller_tokens.get(caller, "")
+            if not expected_token:
+                continue
+            expected_bytes = expected_token.encode("utf-8")
+            if len(expected_bytes) >= MIN_SERVICE_TOKEN_BYTES and secrets.compare_digest(
+                given_bytes, expected_bytes
+            ):
+                return True
+        return False
+
+
+_SETTINGS_INSTANCE: Settings | None = None
+
+
+def get_settings() -> Settings:
+    global _SETTINGS_INSTANCE
+    if _SETTINGS_INSTANCE is None:
+        _SETTINGS_INSTANCE = Settings()
+    return _SETTINGS_INSTANCE
+
+
+def reset_settings_for_tests(settings: Settings | None = None) -> None:
+    global _SETTINGS_INSTANCE
+    _SETTINGS_INSTANCE = settings

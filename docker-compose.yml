@@ -190,12 +190,16 @@ services:
       dockerfile: Dockerfile.python
       args: { SERVICE_DIR: vton-service }
     environment:
+      <<: *java-environment
+      POSTGRES_SCHEMA: vton
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
-      AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
     depends_on:
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       localstack: { condition: service_healthy }
     ports: ["8091:8000"]
