@@ -1,7 +1,12 @@
+import logging
+import os
+
 from fastapi import APIRouter, FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
 from app.api.recommendations import (
     RecommendationApiError,
