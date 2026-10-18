@@ -148,7 +148,7 @@ services:
       <<: *java-environment
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
-      VTON_SERVICE_URL: ${VTON_SERVICE_URL:-}
+      VTON_SERVICE_URL: ${VTON_SERVICE_URL:-http://vton-service:8000}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai}
       JEV_SUPPORT_THRESHOLD: ${JEV_SUPPORT_THRESHOLD:-0.6}
@@ -184,11 +184,11 @@ services:
       <<: *app-healthcheck
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/health"]
 
-  virtual-tryon-service:
+  vton-service:
     build:
       context: .
       dockerfile: Dockerfile.python
-      args: { SERVICE_DIR: virtual-tryon-service }
+      args: { SERVICE_DIR: vton-service }
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
       AWS_ENDPOINT_URL: http://localstack:4566
@@ -235,14 +235,14 @@ services:
       args: { MODULE: gateway-service }
     environment:
       <<: *java-environment
-      VIRTUAL_TRYON_URL: http://virtual-tryon-service:8000
+      VTON_SERVICE_URL: http://vton-service:8000
       RECOMMENDATION_URL: http://recommendation-service:8000
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       config-service: { condition: service_healthy }
       discovery-service: { condition: service_healthy }
       redis: { condition: service_healthy }
-      virtual-tryon-service: { condition: service_healthy }
+      vton-service: { condition: service_healthy }
       recommendation-service: { condition: service_healthy }
     ports: ["8080:8080"]
     healthcheck:

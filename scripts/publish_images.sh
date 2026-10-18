@@ -9,7 +9,7 @@ set -euo pipefail
 : "${IMAGE_TAG:?IMAGE_TAG is required}"
 
 JAVA_SERVICES=(config-service discovery-service gateway-service user-service product-service order-service community-service review-service notification-service)
-PYTHON_SERVICES=(recommendation-service virtual-tryon-service)
+PYTHON_SERVICES=(recommendation-service vton-service)
 ACCEPTED_MEDIA_TYPES=(
   application/vnd.docker.distribution.manifest.v2+json
   application/vnd.docker.distribution.manifest.list.v2+json

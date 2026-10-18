@@ -26,12 +26,14 @@ spring:
             # 브라우저 코드가 응답의 요청 ID를 읽어 오류 문의 때 알려줄 수 있게 한다.
             exposedHeaders: [X-Request-Id]
             maxAge: 3600
-      # FE는 /api/v1/**, 스웨거·기존 호출은 /api/** 를 쓴다. Java 서비스는 /api 만 받으므로
-      # /api/v1 요청은 RewritePath로 /api 로 넘긴다. tryon·recommendations는 서비스가 이미 /api/v1 이라 그대로 둔다.
+      # FE는 /api/v1/**, 스웨거·기존 호출은 /api/** 를 쓴다. 서비스는 /api 를 받으므로
+      # /api/v1 요청은 RewritePath로 /api 로 넘긴다. recommendations는 서비스가 이미 /api/v1 이라 그대로 둔다.
       routes:
-        - id: virtual-tryon-service
-          uri: ${VIRTUAL_TRYON_URL:http://localhost:8091}
-          predicates: [Path=/api/v1/tryon/**]
+        - id: vton-service
+          uri: ${VTON_SERVICE_URL:http://localhost:8091}
+          predicates: ["Path=/api/vton,/api/vton/**,/api/v1/vton,/api/v1/vton/**"]
+          filters:
+            - RewritePath=/api/v1/(?<segment>.*), /api/$\{segment}
         - id: recommendation-service
           uri: ${RECOMMENDATION_URL:http://localhost:8092}
           predicates: [Path=/api/v1/recommendations/**]

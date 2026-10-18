@@ -74,7 +74,7 @@ def test_create_job_returns_a_new_queued_job_for_each_call(job_payload: dict[str
 
 def test_post_job_accepts_request_and_serializes_queued_job(job_payload: dict[str, str]) -> None:
     with TestClient(app) as client:
-        response = client.post("/api/v1/tryon/jobs", json=job_payload)
+        response = client.post("/api/vton/jobs", json=job_payload)
 
     assert response.status_code == 202
     payload = response.json()
@@ -87,7 +87,7 @@ def test_post_job_accepts_request_and_serializes_queued_job(job_payload: dict[st
 def test_post_job_reports_missing_fields(job_payload: dict[str, str], field: str) -> None:
     del job_payload[field]
     with TestClient(app) as client:
-        response = client.post("/api/v1/tryon/jobs", json=job_payload)
+        response = client.post("/api/vton/jobs", json=job_payload)
 
     assert response.status_code == 422
     assert any(error["loc"] == ["body", field] for error in response.json()["detail"])
@@ -106,7 +106,7 @@ def test_post_job_reports_invalid_fields(
 ) -> None:
     job_payload[field] = value
     with TestClient(app) as client:
-        response = client.post("/api/v1/tryon/jobs", json=job_payload)
+        response = client.post("/api/vton/jobs", json=job_payload)
 
     assert response.status_code == 422
     assert any(error["loc"] == ["body", field] for error in response.json()["detail"])
@@ -114,7 +114,7 @@ def test_post_job_reports_invalid_fields(
 
 def test_post_job_requires_a_body() -> None:
     with TestClient(app) as client:
-        response = client.post("/api/v1/tryon/jobs")
+        response = client.post("/api/vton/jobs")
 
     assert response.status_code == 422
     assert any(error["loc"] == ["body"] for error in response.json()["detail"])

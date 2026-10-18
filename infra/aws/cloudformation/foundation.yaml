@@ -120,7 +120,7 @@ Mappings:
     ReviewService: { Name: review-service }
     NotificationService: { Name: notification-service }
     RecommendationService: { Name: recommendation-service }
-    VirtualTryOnService: { Name: virtual-tryon-service }
+    VirtualTryOnService: { Name: vton-service }
     Crawler: { Name: crawler }
     FashionClip: { Name: fashion-clip }
 

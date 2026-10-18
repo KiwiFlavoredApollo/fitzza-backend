@@ -134,7 +134,7 @@ order-service/           주문 도메인
 community-service/       커뮤니티 도메인
 review-service/          리뷰 도메인
 notification-service/    알림 도메인
-virtual-tryon-service/   FastAPI 가상 피팅 작업 API
+vton-service/            FastAPI 가상 피팅 작업 API
 recommendation-service/  FastAPI 추천 API
 infra/                   PostgreSQL 초기화
 scripts/                 운영 보조 스크립트

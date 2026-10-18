@@ -30,9 +30,9 @@ phases:
       - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
       # Every test runs before ECR login; a failure aborts the build before any image is pushed.
       - ./gradlew test --no-daemon
-      - python -m pip install --quiet -r recommendation-service/requirements.txt -r virtual-tryon-service/requirements.txt
+      - python -m pip install --quiet -r recommendation-service/requirements.txt -r vton-service/requirements.txt
       - (cd recommendation-service && python -m pytest tests)
-      - (cd virtual-tryon-service && python -m pytest tests)
+      - (cd vton-service && python -m pytest tests)
       - python -m pytest tests
       - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
   build:

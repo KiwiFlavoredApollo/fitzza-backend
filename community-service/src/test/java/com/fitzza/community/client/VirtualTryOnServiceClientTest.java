@@ -22,7 +22,7 @@ import org.springframework.web.client.RestClientException;
 
 class VirtualTryOnServiceClientTest {
 
-    private static final String BASE_URL = "http://virtual-tryon-service:8000";
+    private static final String BASE_URL = "http://vton-service:8000";
     private static final String SERVICE_TOKEN = "test-community-service-token";
 
     @Test
