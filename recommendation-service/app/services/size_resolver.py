@@ -1,6 +1,7 @@
+import json
 import logging
 import os
-import json
+import re
 from typing import Any, Optional
 
 from app.services.size_spec_normalizer import (
@@ -224,7 +225,6 @@ class SizeCalculator:
                             or normalized_baseline.get("발길이")
                         )
                         if user_shoe:
-                            import re
                             m = re.search(r"\d+", str(size_option.get("size", "")))
                             if m:
                                 try:

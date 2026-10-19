@@ -115,9 +115,25 @@ def _sync_user_body(
 ) -> None:
     if size_resolver is None or not user_body:
         return
-    height = user_body.get("height")
-    weight = user_body.get("weight")
-    shoe_size = user_body.get("shoeSize")
+    raw_height = user_body.get("height")
+    raw_weight = user_body.get("weight")
+    raw_shoe = user_body.get("shoeSize")
+
+    try:
+        height = float(raw_height) if raw_height is not None else None
+    except (TypeError, ValueError):
+        height = None
+
+    try:
+        weight = float(raw_weight) if raw_weight is not None else None
+    except (TypeError, ValueError):
+        weight = None
+
+    try:
+        shoe_size = float(raw_shoe) if raw_shoe is not None else None
+    except (TypeError, ValueError):
+        shoe_size = None
+
     if height is None and weight is None and shoe_size is None:
         return
 
@@ -133,19 +149,19 @@ def _sync_user_body(
     if existing is None:
         entry: dict[str, Any] = {"user_id": str(user_id)}
         if height is not None:
-            entry["height"] = float(height)
+            entry["height"] = height
         if weight is not None:
-            entry["weight"] = float(weight)
+            entry["weight"] = weight
         if shoe_size is not None:
-            entry["shoe_size"] = float(shoe_size)
+            entry["shoe_size"] = shoe_size
         users.append(entry)
     else:
         if height is not None:
-            existing["height"] = float(height)
+            existing["height"] = height
         if weight is not None:
-            existing["weight"] = float(weight)
+            existing["weight"] = weight
         if shoe_size is not None:
-            existing["shoe_size"] = float(shoe_size)
+            existing["shoe_size"] = shoe_size
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:

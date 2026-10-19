@@ -1,14 +1,22 @@
 {
   "users": [
     {
+      "user_id": "1",
+      "height": 175.0,
+      "weight": 70.0,
+      "shoe_size": 265.0
+    },
+    {
       "user_id": "user_test_001",
       "height": 175.0,
-      "weight": 68.0
+      "weight": 68.0,
+      "shoe_size": 270.0
     },
     {
       "user_id": "user_test_002",
       "height": 176.0,
-      "weight": 70.0
+      "weight": 70.0,
+      "shoe_size": 260.0
     }
   ],
   "user_preferences": [
