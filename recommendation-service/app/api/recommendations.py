@@ -27,6 +27,7 @@ FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
     "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
     "recent_purchase": "최근 구매하신 상품 실측을 기준으로 추천된 사이즈입니다.",
     "similar_body_profile": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다.",
+    "body_profile": "등록하신 사용자 신체 프로필 정보를 기준으로 추천된 사이즈입니다.",
 }
 
 
@@ -114,9 +115,26 @@ def _sync_user_body(
 ) -> None:
     if size_resolver is None or not user_body:
         return
-    height = user_body.get("height")
-    weight = user_body.get("weight")
-    if height is None and weight is None:
+    raw_height = user_body.get("height")
+    raw_weight = user_body.get("weight")
+    raw_shoe = user_body.get("shoeSize")
+
+    try:
+        height = float(raw_height) if raw_height is not None else None
+    except (TypeError, ValueError):
+        height = None
+
+    try:
+        weight = float(raw_weight) if raw_weight is not None else None
+    except (TypeError, ValueError):
+        weight = None
+
+    try:
+        shoe_size = float(raw_shoe) if raw_shoe is not None else None
+    except (TypeError, ValueError):
+        shoe_size = None
+
+    if height is None and weight is None and shoe_size is None:
         return
 
     mock_db = getattr(size_resolver, "mock_db", None)
@@ -131,15 +149,19 @@ def _sync_user_body(
     if existing is None:
         entry: dict[str, Any] = {"user_id": str(user_id)}
         if height is not None:
-            entry["height"] = float(height)
+            entry["height"] = height
         if weight is not None:
-            entry["weight"] = float(weight)
+            entry["weight"] = weight
+        if shoe_size is not None:
+            entry["shoe_size"] = shoe_size
         users.append(entry)
     else:
         if height is not None:
-            existing["height"] = float(height)
+            existing["height"] = height
         if weight is not None:
-            existing["weight"] = float(weight)
+            existing["weight"] = weight
+        if shoe_size is not None:
+            existing["shoe_size"] = shoe_size
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:

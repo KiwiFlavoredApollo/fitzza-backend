@@ -7,28 +7,19 @@ from app.core.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+from app.services.size_spec_normalizer import (
+    normalize_measurement_spec as _normalize_spec,
+)
+
 SERVICE_TOKEN_HEADER = "X-Service-Token"
 REQUEST_ID_HEADER = "X-Request-Id"
 
 
-def normalize_measurement_spec(raw_spec: dict[str, Any] | None) -> dict[str, float]:
-    if not raw_spec or not isinstance(raw_spec, dict):
-        return {}
-
-    normalized: dict[str, float] = {}
-    for raw_key, raw_val in raw_spec.items():
-        if raw_val is None:
-            continue
-        try:
-            numeric_val = float(raw_val)
-        except (TypeError, ValueError):
-            continue
-
-        clean_key = str(raw_key).strip()
-        if clean_key and numeric_val > 0:
-            normalized[clean_key] = numeric_val
-
-    return normalized
+def normalize_measurement_spec(
+    raw_spec: dict[str, Any] | None,
+    category: str | None = None,
+) -> dict[str, float]:
+    return _normalize_spec(raw_spec, category=category)
 
 
 class ProductServiceClient:
