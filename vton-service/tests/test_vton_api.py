@@ -119,14 +119,14 @@ def test_background_vton_success_flow(tmp_path: Path) -> None:
         notification_client=mock_notif_client,
     )
 
-    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101, 201])
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 201])
     result_url = f"http://api.fitzza.com/api/vton/{fitting_id}/image"
 
     with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()):
         _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
-            photo_id=1,
+            photo_id=None,
             product_ids=[101, 201],
             result_image_url=result_url,
         )
@@ -202,12 +202,12 @@ def test_background_vton_duplicate_category_flow() -> None:
         notification_client=mock_notif_client,
     )
 
-    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101, 102])
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 102])
 
     _run_background_vton(
         fitting_id=fitting_id,
         user_id=7,
-        photo_id=1,
+        photo_id=None,
         product_ids=[101, 102],
         result_image_url="/api/vton/1/image",
     )
@@ -405,12 +405,20 @@ def test_user_photo_upload_and_get_flow() -> None:
     assert data["photoUrl"] == f"http://api.fitzza.com/api/vton/photos/{data['photoId']}"
     assert "createdAt" in data
 
-    # 2. 업로드된 사진 조회 (200 OK)
+    # 2. 본인 사진 조회 (200 OK)
     photo_id = data["photoId"]
-    resp_get = client.get(f"/api/vton/photos/{photo_id}")
+    resp_get = client.get(f"/api/vton/photos/{photo_id}", headers={"X-User-Id": "7"})
     assert resp_get.status_code == 200
     assert resp_get.headers["content-type"] == "image/png"
     assert len(resp_get.content) > 0
+
+    # 3. 인증 헤더 누락 시 401 Unauthorized
+    resp_no_auth = client.get(f"/api/vton/photos/{photo_id}")
+    assert resp_no_auth.status_code == 401
+
+    # 4. 타인(사용자 99)이 조회 시 404 Not Found (IDOR 방어)
+    resp_other = client.get(f"/api/vton/photos/{photo_id}", headers={"X-User-Id": "99"})
+    assert resp_other.status_code == 404
 
 
 def test_user_photo_upload_validations() -> None:
@@ -464,7 +472,7 @@ def test_user_photo_upload_validations() -> None:
 
 def test_get_user_photo_not_found() -> None:
     client = TestClient(app)
-    resp = client.get("/api/vton/photos/999999")
+    resp = client.get("/api/vton/photos/999999", headers={"X-User-Id": "7"})
     assert resp.status_code == 404
     assert "찾을 수 없습니다" in resp.json()["detail"]
 
@@ -557,4 +565,48 @@ def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
         kwargs = mock_generate.call_args.kwargs
         assert kwargs["avatar_bytes"] == user_photo_bytes
         mock_notif_client.send_fitting_done.assert_called_once()
+
+
+def test_background_vton_fails_when_user_photo_file_missing() -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+
+    # 존재하지 않는 경로로 사진 메타데이터 저장
+    photo_record = repo.save_user_photo(user_id=7, file_path="/non/existent/path/photo.png")
+    photo_id = photo_record["photoId"]
+
+    mock_prod_client.resolve_product_item.return_value = {
+        "productId": 101,
+        "productName": "상의",
+        "price": 20000,
+        "imageUrl": "https://cdn.example.com/top.png",
+        "categoryName": "상의",
+        "imageBytes": _create_sample_png(),
+    }
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101])
+
+    with patch("app.api.vton.generate_tryon_image") as mock_generate:
+        _run_background_vton(
+            fitting_id=fitting_id,
+            user_id=7,
+            photo_id=photo_id,
+            product_ids=[101],
+            result_image_url="/api/vton/1/image",
+        )
+
+        # 사진 파일 로드 실패 시 마네킹으로 대체하지 않고 피팅 실패 처리되어야 함
+        mock_generate.assert_not_called()
+        detail = repo.get_fitting_detail(fitting_id)
+        assert detail is not None
+        assert detail["status"] == "FAILED"
+        mock_notif_client.send_fitting_failed.assert_called_once()
+
 

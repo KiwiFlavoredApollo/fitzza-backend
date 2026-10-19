@@ -155,22 +155,27 @@ def _run_background_vton(
         avatar_bytes: bytes | None = None
         if photo_id is not None:
             photo_info = repo.get_user_photo(photo_id)
-            if photo_info and photo_info.get("filePath"):
-                photo_file = Path(photo_info["filePath"])
-                if photo_file.is_file():
-                    try:
-                        avatar_bytes = photo_file.read_bytes()
-                        logger.info(
-                            "사용자 전신 사진 적용 (photoId=%s, path=%s)",
-                            photo_id,
-                            photo_file,
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "사용자 전신 사진 파일 로드 실패 (photoId=%s): %s (기본 아바타 사용)",
-                            photo_id,
-                            exc,
-                        )
+            if not photo_info or not photo_info.get("filePath"):
+                raise VtonValidationError(f"지정된 사용자 전신 사진(photoId={photo_id}) 정보를 찾을 수 없습니다.")
+
+            photo_file = Path(photo_info["filePath"])
+            if not photo_file.is_file():
+                raise VtonValidationError(f"지정된 사용자 전신 사진 파일(photoId={photo_id})을 찾을 수 없습니다.")
+
+            try:
+                avatar_bytes = photo_file.read_bytes()
+                logger.info(
+                    "사용자 전신 사진 적용 (photoId=%s, path=%s)",
+                    photo_id,
+                    photo_file,
+                )
+            except Exception as exc:
+                logger.error(
+                    "사용자 전신 사진 파일 로드 실패 (photoId=%s): %s",
+                    photo_id,
+                    exc,
+                )
+                raise VtonValidationError(f"사용자 전신 사진(photoId={photo_id}) 파일을 읽는 데 실패했습니다.") from exc
 
         # 2. OpenAI 이미지 편집 피팅 실행
         output_png = generate_tryon_image(
@@ -255,8 +260,8 @@ async def upload_user_photo(
             detail="지원하지 않는 이미지 형식입니다. (PNG, JPG, WEBP 지원)",
         )
 
-    # 2. 파일 바이트 읽기 및 용량 검증
-    content = await file.read()
+    # 2. 파일 바이트 읽기 및 용량 검증 (메모리 고갈 방지를 위해 최대 용량 + 1바이트까지만 제한 읽기)
+    content = await file.read(MAX_PHOTO_SIZE_BYTES + 1)
     if not content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -305,18 +310,26 @@ async def upload_user_photo(
     "/api/vton/photos/{photoId}",
     response_class=FileResponse,
     summary="사용자 전신 사진 조회",
-    description="등록된 사용자 전신 사진 이미지를 반환합니다.",
+    description="등록된 사용자 본인의 전신 사진 이미지를 반환합니다.",
     responses={
         200: {"content": {"image/png": {}}, "description": "사용자 전신 사진 PNG 이미지"},
+        401: {"description": "인증 필요"},
         404: {"description": "사진을 찾을 수 없음"},
     },
 )
 def get_user_photo(
     photoId: int,
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FileResponse:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
     repo = get_repo()
     photo_info = repo.get_user_photo(photoId)
-    if not photo_info:
+    if not photo_info or photo_info.get("userId") != x_user_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="등록된 전신 사진 정보를 찾을 수 없습니다.",
