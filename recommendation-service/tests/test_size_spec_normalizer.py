@@ -167,3 +167,80 @@ class TestSizeCalculatorWithMusinsaSpecs:
         assert best["product_id"] == 101
         assert best["size_label"] == "L"
         assert best["predicted_fit_score"] > 0.8
+
+    def test_shoes_label_matching_exact(self):
+        """실측표 없이 라벨(250, 260, 270)만 있는 신발 상품의 표기 사이즈 직접 매칭 테스트"""
+        candidate_shoes = [
+            {
+                "product_id": 201,
+                "product_name": "클래식 스니커즈",
+                "sizes": [
+                    {"size": "250", "measurements": {}},
+                    {"size": "260", "measurements": {}},
+                    {"size": "270", "measurements": {}},
+                ]
+            }
+        ]
+        user_baseline = {"shoe_size": 260.0}
+
+        best = SizeCalculator.evaluate(
+            candidate_products=candidate_shoes,
+            baseline_spec=user_baseline,
+            category_type="shoes"
+        )
+        assert best is not None
+        assert best["product_id"] == 201
+        assert best["size_label"] == "260"
+        assert best["predicted_fit_score"] == 1.0
+
+    def test_shoes_label_matching_half_size_tolerance(self):
+        """5mm 차이 옵션(반업/반다운)에 대한 점수 감점(85%) 테스트"""
+        candidate_shoes = [
+            {
+                "product_id": 202,
+                "product_name": "러닝화",
+                "sizes": [
+                    {"size": "255", "measurements": {}},
+                    {"size": "275", "measurements": {}},
+                ]
+            }
+        ]
+        user_baseline = {"shoe_size": 260.0}
+
+        best = SizeCalculator.evaluate(
+            candidate_products=candidate_shoes,
+            baseline_spec=user_baseline,
+            category_type="shoes"
+        )
+        assert best is not None
+        assert best["size_label"] == "255"
+        assert best["predicted_fit_score"] == 0.85
+
+    def test_shoes_with_detailed_measurements(self):
+        """정밀 실측표가 있는 신발의 경우 실측 기반 채점 테스트"""
+        candidate_shoes = [
+            {
+                "product_id": 203,
+                "product_name": "수제화 더비슈즈",
+                "sizes": [
+                    {
+                        "size": "260",
+                        "measurements": {"발길이": 275.0, "발볼": 97.0, "굽높이": 4.0}
+                    },
+                    {
+                        "size": "270",
+                        "measurements": {"발길이": 285.0, "발볼": 102.0, "굽높이": 4.0}
+                    }
+                ]
+            }
+        ]
+        user_baseline = {"발길이": 274.0, "발볼": 96.5, "굽높이": 4.0}
+
+        best = SizeCalculator.evaluate(
+            candidate_products=candidate_shoes,
+            baseline_spec=user_baseline,
+            category_type="shoes"
+        )
+        assert best is not None
+        assert best["size_label"] == "260"
+        assert best["predicted_fit_score"] > 0.9

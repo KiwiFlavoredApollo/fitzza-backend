@@ -27,6 +27,7 @@ FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
     "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
     "recent_purchase": "최근 구매하신 상품 실측을 기준으로 추천된 사이즈입니다.",
     "similar_body_profile": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다.",
+    "body_profile": "등록하신 사용자 신체 프로필 정보를 기준으로 추천된 사이즈입니다.",
 }
 
 
@@ -116,7 +117,8 @@ def _sync_user_body(
         return
     height = user_body.get("height")
     weight = user_body.get("weight")
-    if height is None and weight is None:
+    shoe_size = user_body.get("shoeSize")
+    if height is None and weight is None and shoe_size is None:
         return
 
     mock_db = getattr(size_resolver, "mock_db", None)
@@ -134,12 +136,16 @@ def _sync_user_body(
             entry["height"] = float(height)
         if weight is not None:
             entry["weight"] = float(weight)
+        if shoe_size is not None:
+            entry["shoe_size"] = float(shoe_size)
         users.append(entry)
     else:
         if height is not None:
             existing["height"] = float(height)
         if weight is not None:
             existing["weight"] = float(weight)
+        if shoe_size is not None:
+            existing["shoe_size"] = float(shoe_size)
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:

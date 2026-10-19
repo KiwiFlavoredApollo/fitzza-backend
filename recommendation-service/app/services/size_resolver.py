@@ -50,7 +50,7 @@ class SizeProfileResolver:
         우선순위 체인을 타서 가장 신뢰도 높은 베이스라인(기준 치수)을 확보한 뒤,
         SizeCalculator를 통해 최적의 사이즈를 도출한다.
         """
-        baseline_spec = self._get_baseline_spec(user_id, subcategory, fit_type)
+        baseline_spec = self._get_baseline_spec(user_id, subcategory, fit_type, category_type=category_type)
 
         if not baseline_spec or baseline_spec["data"] is None:
             return {
@@ -71,16 +71,23 @@ class SizeProfileResolver:
             "recommendation": recommended_result
         }
 
-    def _get_baseline_spec(self, user_id: str, subcategory: str, fit_type: str) -> dict[str, Any]:
+    def _get_baseline_spec(
+            self,
+            user_id: str,
+            subcategory: str,
+            fit_type: str,
+            category_type: Optional[str] = None
+    ) -> dict[str, Any]:
         """
         [2. 우선순위 체인 (Fallback Chain) 라우팅]
         1순위: 선호 실측 (learned_preference)
         2순위: 최근 구매 이력 실측 (recent_purchase)
-        3순위: 키/몸무게 기반 비슷한 체형 타 사용자 인증 데이터 (similar_body_profile)
+        3순위 (신발): 사용자 등록 신발 사이즈 직접 반영 (body_profile)
+        3순위 (의류): 키/몸무게 기반 비슷한 체형 타 사용자 인증 데이터 (similar_body_profile)
         """
         # 1순위: 선호 실측 탐색 (subcategory 매칭)
         for pref in self.mock_db.get("user_preferences", []):
-            if pref.get("user_id") == user_id and pref.get("subcategory") == subcategory:
+            if str(pref.get("user_id")) == str(user_id) and pref.get("subcategory") == subcategory:
                 return {
                     "source": "learned_preference",
                     "data": pref.get("preference_spec")
@@ -88,14 +95,31 @@ class SizeProfileResolver:
 
         # 2순위: 최근 구매 이력 상품 실측 탐색
         for order in self.mock_db.get("orders_and_surveys", []):
-            if order.get("user_id") == user_id and order.get("subcategory") == subcategory:
+            if str(order.get("user_id")) == str(user_id) and order.get("subcategory") == subcategory:
                 return {
                     "source": "recent_purchase",
                     "data": order.get("measurement_spec")
                 }
 
-        # 3순위: 비슷한 체형 타 사용자의 '맞다' 인증 데이터 탐색
-        target_user = next((u for u in self.mock_db.get("users", []) if u.get("user_id") == user_id), None)
+        target_user = next((u for u in self.mock_db.get("users", []) if str(u.get("user_id")) == str(user_id)), None)
+
+        # 3순위 (신발 특화): 유저 등록 shoeSize를 발길이 기준 치수로 반영
+        if category_type == "shoes" and target_user and target_user.get("shoe_size"):
+            try:
+                shoe_val = float(target_user["shoe_size"])
+                if shoe_val < 50.0:
+                    shoe_val *= 10.0
+                return {
+                    "source": "body_profile",
+                    "data": {
+                        "발길이": shoe_val,
+                        "shoe_size": shoe_val,
+                    }
+                }
+            except (ValueError, TypeError):
+                pass
+
+        # 3순위 (의류): 비슷한 체형 타 사용자의 '맞다' 인증 데이터 탐색
         if target_user:
             t_height = target_user.get("height", 175.0)
             t_weight = target_user.get("weight", 70.0)
@@ -191,7 +215,31 @@ class SizeCalculator:
                         penalty += abs(meas_val - base_val)
                         valid_fields_count += 1
 
-                if valid_fields_count == 0 or penalty > 25.0:
+                if valid_fields_count == 0:
+                    # 신발 특화: 상세 실측표가 없고 표기 사이즈(260, 265 등)만 제공되는 상품의 라벨 직접 매칭
+                    if category_type == "shoes":
+                        user_shoe = (
+                            baseline_spec.get("shoe_size")
+                            or baseline_spec.get("발길이")
+                            or normalized_baseline.get("발길이")
+                        )
+                        if user_shoe:
+                            import re
+                            m = re.search(r"\d+", str(size_option.get("size", "")))
+                            if m:
+                                try:
+                                    opt_shoe = float(m.group())
+                                    if opt_shoe < 50.0:
+                                        opt_shoe *= 10.0
+                                    diff = abs(opt_shoe - float(user_shoe))
+                                    penalty = diff * 0.8
+                                    valid_fields_count = 1
+                                    fit_score = max(0.0, 1.0 - (diff / 33.3))
+                                except (ValueError, TypeError):
+                                    pass
+                    if valid_fields_count == 0:
+                        fit_score = 0.0
+                elif penalty > 25.0:
                     fit_score = 0.0
                 else:
                     fit_score = max(0.0, 1.0 - (penalty / 25.0))
