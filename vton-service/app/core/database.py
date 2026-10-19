@@ -105,6 +105,16 @@ class VtonRepository:
                             );
                             CREATE INDEX IF NOT EXISTS idx_fitting_products_fitting
                                 ON {schema}.fitting_products (fitting_id);
+
+                            CREATE TABLE IF NOT EXISTS {schema}.user_photos (
+                                photo_id BIGSERIAL PRIMARY KEY,
+                                user_id BIGINT NOT NULL,
+                                file_path TEXT NOT NULL,
+                                is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+                                created_at TEXT NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_user_photos_user
+                                ON {schema}.user_photos (user_id, photo_id DESC);
                             """
                         )
                         conn.commit()
@@ -158,6 +168,23 @@ class VtonRepository:
                         """
                         CREATE INDEX IF NOT EXISTS idx_fitting_products_fitting
                             ON fitting_products (fitting_id);
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS user_photos (
+                            photo_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            file_path TEXT NOT NULL,
+                            is_deleted INTEGER NOT NULL DEFAULT 0,
+                            created_at TEXT NOT NULL
+                        );
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_user_photos_user
+                            ON user_photos (user_id, photo_id DESC);
                         """
                     )
                     conn.commit()
@@ -478,3 +505,99 @@ class VtonRepository:
             "createdAt": fitting_row["created_at"],
             "updatedAt": fitting_row["updated_at"],
         }
+
+    def save_user_photo(self, user_id: int, file_path: str) -> dict[str, Any]:
+        """사용자가 업로드한 전신 사진 메타데이터를 저장하고 사진 정보 딕셔너리를 반환합니다."""
+        now = datetime.now(timezone.utc).isoformat()
+        if self._use_postgres:
+            schema = self.postgres_schema
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            INSERT INTO {schema}.user_photos (user_id, file_path, is_deleted, created_at)
+                            VALUES (%s, %s, FALSE, %s)
+                            RETURNING photo_id, created_at;
+                            """,
+                            (user_id, file_path, now),
+                        )
+                        row = cur.fetchone()
+                        conn.commit()
+                        return {
+                            "photoId": int(row["photo_id"]),
+                            "userId": user_id,
+                            "filePath": file_path,
+                            "createdAt": str(row["created_at"]),
+                        }
+        else:
+            with self._lock:
+                conn = self._get_sqlite_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO user_photos (user_id, file_path, is_deleted, created_at)
+                        VALUES (?, ?, 0, ?);
+                        """,
+                        (user_id, file_path, now),
+                    )
+                    photo_id = int(cur.lastrowid)
+                    conn.commit()
+                    return {
+                        "photoId": photo_id,
+                        "userId": user_id,
+                        "filePath": file_path,
+                        "createdAt": now,
+                    }
+                finally:
+                    self._close_sqlite_if_transient(conn)
+
+    def get_user_photo(self, photo_id: int) -> dict[str, Any] | None:
+        """photo_id로 활성 상태의 사용자 사진 정보를 조회합니다."""
+        if self._use_postgres:
+            schema = self.postgres_schema
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            SELECT photo_id, user_id, file_path, created_at
+                            FROM {schema}.user_photos
+                            WHERE photo_id = %s AND is_deleted = FALSE;
+                            """,
+                            (photo_id,),
+                        )
+                        row = cur.fetchone()
+                        if not row:
+                            return None
+                        return {
+                            "photoId": int(row["photo_id"]),
+                            "userId": int(row["user_id"]),
+                            "filePath": str(row["file_path"]),
+                            "createdAt": str(row["created_at"]),
+                        }
+        else:
+            with self._lock:
+                conn = self._get_sqlite_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT photo_id, user_id, file_path, created_at
+                        FROM user_photos
+                        WHERE photo_id = ? AND is_deleted = 0;
+                        """,
+                        (photo_id,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    return {
+                        "photoId": int(row["photo_id"]),
+                        "userId": int(row["user_id"]),
+                        "filePath": str(row["file_path"]),
+                        "createdAt": str(row["created_at"]),
+                    }
+                finally:
+                    self._close_sqlite_if_transient(conn)
