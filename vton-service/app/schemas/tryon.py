@@ -134,3 +134,22 @@ class InternalFittingResponse(BaseModel):
         description="피팅에 사용된 상품 정보 목록 (community-service 호환용)",
     )
 
+
+class UserPhotoUploadResponse(BaseModel):
+    photoId: int = Field(
+        description="등록된 사용자 전신 사진 ID",
+        json_schema_extra={"example": 10},
+    )
+    userId: int = Field(
+        description="사진을 등록한 사용자 ID",
+        json_schema_extra={"example": 1},
+    )
+    photoUrl: str = Field(
+        description="등록된 사진 확인 URL",
+        json_schema_extra={"example": "http://api.fitzza.com/api/vton/photos/10"},
+    )
+    createdAt: str = Field(
+        description="사진 등록 일시 (ISO-8601)",
+        json_schema_extra={"example": "2026-10-19T07:35:00+00:00"},
+    )
+

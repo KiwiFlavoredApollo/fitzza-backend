@@ -86,12 +86,23 @@ class Settings:
     storage_dir: str = field(
         default_factory=lambda: os.getenv("VTON_STORAGE_DIR", _default_storage_dir())
     )
+    photos_dir: str = field(
+        default_factory=lambda: os.getenv("VTON_PHOTOS_DIR", "")
+    )
     http_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("HTTP_TIMEOUT_SECONDS", "5.0"))
     )
     public_base_url: str = field(
         default_factory=lambda: os.getenv("VTON_PUBLIC_BASE_URL", "")
     )
+
+    def get_photos_dir(self) -> Path:
+        if self.photos_dir.strip():
+            p = Path(self.photos_dir.strip())
+        else:
+            p = Path(self.storage_dir).parent / "photos"
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
     def get_postgres_dsn(self) -> str | None:
         if self.database_url.strip():

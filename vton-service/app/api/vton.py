@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -19,6 +30,7 @@ from app.schemas.tryon import (
     FittingCreateResponse,
     FittingDetailResponse,
     InternalFittingResponse,
+    UserPhotoUploadResponse,
 )
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
@@ -27,6 +39,7 @@ from app.services.vton_generator import (
     VtonUpstreamError,
     VtonValidationError,
     generate_tryon_image,
+    to_png_bytes,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +97,14 @@ def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
     return f"/api/vton/{fitting_id}/image"
 
 
+def _resolve_photo_url(photo_id: int, request: Request | None) -> str:
+    settings = get_settings()
+    if settings.public_base_url.strip():
+        base = settings.public_base_url.rstrip("/")
+        return f"{base}/api/vton/photos/{photo_id}"
+    return f"/api/vton/photos/{photo_id}"
+
+
 def _run_background_vton(
     fitting_id: int,
     user_id: int,
@@ -130,10 +151,32 @@ def _run_background_vton(
         categories = [p["categoryName"] for p in resolved_products]
         clothing_images = [p["imageBytes"] for p in resolved_products]
 
+        # 1-1. 아바타 이미지 결정 (사용자 사진 ID가 전달된 경우 해당 사진 로드, 없으면 기본 아바타 사용)
+        avatar_bytes: bytes | None = None
+        if photo_id is not None:
+            photo_info = repo.get_user_photo(photo_id)
+            if photo_info and photo_info.get("filePath"):
+                photo_file = Path(photo_info["filePath"])
+                if photo_file.is_file():
+                    try:
+                        avatar_bytes = photo_file.read_bytes()
+                        logger.info(
+                            "사용자 전신 사진 적용 (photoId=%s, path=%s)",
+                            photo_id,
+                            photo_file,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "사용자 전신 사진 파일 로드 실패 (photoId=%s): %s (기본 아바타 사용)",
+                            photo_id,
+                            exc,
+                        )
+
         # 2. OpenAI 이미지 편집 피팅 실행
         output_png = generate_tryon_image(
             categories=categories,
             clothing_images=clothing_images,
+            avatar_bytes=avatar_bytes,
             model=settings.openai_image_model,
             api_key=settings.openai_api_key or None,
             timeout_seconds=settings.openai_timeout_seconds,
@@ -180,6 +223,114 @@ def _run_background_vton(
         )
 
 
+MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
+ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+
+
+@router.post(
+    "/api/vton/photos",
+    response_model=UserPhotoUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="사용자 전신 사진 등록",
+    description=(
+        "사용자의 전신 사진을 업로드하고 고유 photoId를 발급받습니다. "
+        "(최대 15MB, PNG/JPG/WEBP 지원)"
+    ),
+)
+async def upload_user_photo(
+    request: Request,
+    file: UploadFile = File(..., description="사용자 전신 사진 이미지 파일"),
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
+) -> UserPhotoUploadResponse:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
+    # 1. MIME 타입 검증
+    if file.content_type and file.content_type.lower() not in ALLOWED_PHOTO_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="지원하지 않는 이미지 형식입니다. (PNG, JPG, WEBP 지원)",
+        )
+
+    # 2. 파일 바이트 읽기 및 용량 검증
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="업로드된 파일이 비어 있습니다.",
+        )
+
+    if len(content) > MAX_PHOTO_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="사진 파일 크기는 최대 15MB까지 가능합니다.",
+        )
+
+    # 3. 이미지 무결성 검증 및 RGB PNG 변환
+    try:
+        png_bytes = await run_in_threadpool(to_png_bytes, content)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효하지 않은 이미지 파일입니다.",
+        ) from exc
+
+    # 4. 디스크 파일 저장
+    settings = get_settings()
+    photos_dir = settings.get_photos_dir()
+    photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
+    photo_path = photos_dir / photo_filename
+    await run_in_threadpool(photo_path.write_bytes, png_bytes)
+
+    # 5. DB 메타데이터 저장
+    repo = get_repo()
+    photo_record = repo.save_user_photo(
+        user_id=x_user_id,
+        file_path=str(photo_path.resolve()),
+    )
+
+    photo_url = _resolve_photo_url(photo_record["photoId"], request)
+    return UserPhotoUploadResponse(
+        photoId=photo_record["photoId"],
+        userId=photo_record["userId"],
+        photoUrl=photo_url,
+        createdAt=photo_record["createdAt"],
+    )
+
+
+@router.get(
+    "/api/vton/photos/{photoId}",
+    response_class=FileResponse,
+    summary="사용자 전신 사진 조회",
+    description="등록된 사용자 전신 사진 이미지를 반환합니다.",
+    responses={
+        200: {"content": {"image/png": {}}, "description": "사용자 전신 사진 PNG 이미지"},
+        404: {"description": "사진을 찾을 수 없음"},
+    },
+)
+def get_user_photo(
+    photoId: int,
+) -> FileResponse:
+    repo = get_repo()
+    photo_info = repo.get_user_photo(photoId)
+    if not photo_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="등록된 전신 사진 정보를 찾을 수 없습니다.",
+        )
+
+    file_path = Path(photo_info["filePath"])
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사진 이미지 파일을 찾을 수 없습니다.",
+        )
+
+    return FileResponse(file_path, media_type="image/png")
+
 
 @router.post(
     "/api/vton",
@@ -213,6 +364,14 @@ def request_fitting(
         )
 
     repo = get_repo()
+    if req.photoId is not None:
+        photo_info = repo.get_user_photo(req.photoId)
+        if not photo_info or photo_info.get("userId") != x_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="등록된 전신 사진 정보를 찾을 수 없습니다.",
+            )
+
     fitting_id = repo.create_fitting(
         user_id=x_user_id,
         photo_id=req.photoId,
