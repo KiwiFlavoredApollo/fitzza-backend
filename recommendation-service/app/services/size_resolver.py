@@ -3,6 +3,13 @@ import os
 import json
 from typing import Any, Optional
 
+from app.services.size_spec_normalizer import (
+    MUSINSA_CATEGORY_SPEC_FIELDS,
+    get_musinsa_spec_fields,
+    normalize_measurement_spec,
+    MusinsaSizeSpecResolver,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -155,6 +162,12 @@ class SizeCalculator:
         best_match = None
         min_penalty = float('inf')
 
+        fields = get_musinsa_spec_fields(category_type)
+        if not fields:
+            return None
+
+        normalized_baseline = normalize_measurement_spec(baseline_spec, category=category_type)
+
         for product in candidate_products:
             sizes = product.get("sizes")
             if not sizes:
@@ -163,24 +176,13 @@ class SizeCalculator:
             for size_option in sizes:
                 penalty = 0.0
                 valid_fields_count = 0
-                fields = []
 
-                if category_type in ["top", "outer"]:
-                    fields = ["총장", "어깨너비", "가슴단면", "소매길이", "밑단단면", "소매부리단면", "암홀"]
-                elif category_type == "bottom":
-                    fields = ["총장", "허리단면", "엉덩이단면", "허벅지단면", "밑위", "밑단단면"]
-                elif category_type == "shoes":
-                    fields = ["발길이", "발볼", "발목높이", "굽높이"]
-                elif category_type == "hat":
-                    fields = ["머리둘레", "챙길이", "깊이"]
-                else:
-                    continue
-
-                measurements = size_option.get("measurements", {})
+                raw_measurements = size_option.get("measurements", {})
+                measurements = normalize_measurement_spec(raw_measurements, category=category_type)
 
                 for field in fields:
                     meas_val = measurements.get(field)
-                    base_val = baseline_spec.get(field)
+                    base_val = normalized_baseline.get(field)
 
                     if (
                             meas_val is not None and isinstance(meas_val, (int, float)) and meas_val > 0 and
