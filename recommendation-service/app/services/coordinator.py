@@ -167,33 +167,21 @@ class FashionPipelineCoordinator:
                 excluded_categories.append(slot.category)
                 logger.info("슬롯 '%s'의 검색 결과가 0개이므로 코디 조합에서 제외하고 남은 슬롯으로 진행합니다.", slot.category)
 
-        # 모든 카테고리에서 검색 결과가 0개인 경우
-        if not slot_candidates:
+        # 살아남은 카테고리가 1개 이하인 경우 (코디 조합 불가 -> outfits: [] 및 재검색 안내 반환)
+        if len(slot_candidates) <= 1:
+            logger.info(
+                "검색 가능한 카테고리가 %d개뿐이어서 코디 조합을 구성할 수 없습니다. (제외된 카테고리: %s)",
+                len(slot_candidates),
+                excluded_categories,
+            )
             return {
                 "type": "coordination",
                 "query": user_query,
                 "tpo": intent.tpo_summary,
                 "intent": intent,
                 "excluded_categories": excluded_categories,
-                "comment": "요청하신 조건에 맞는 상품을 찾지 못했습니다. 검색 조건을 조금 완화해 다시 시도해주세요.",
-                "outfits": []
-            }
-
-        # 빈 슬롯들을 제외하고 살아남은 슬롯이 딱 1개뿐인 경우 -> 단품 추천 흐름으로 유연하게 전환
-        if len(slot_candidates) == 1:
-            only_category = next(iter(slot_candidates))
-            only_items = slot_candidates[only_category]
-            logger.info("빈 슬롯 제외 후 '%s' 1개 슬롯만 남아 단일 슬롯 추천으로 전환합니다.", only_category)
-
-            comment = self.responder.generate_single_response(user_query, intent.tpo_summary, only_items)
-            return {
-                "type": "single",
-                "query": user_query,
-                "tpo": intent.tpo_summary,
-                "intent": intent,
-                "excluded_categories": excluded_categories,
-                "comment": comment,
-                "results": only_items
+                "comment": "요청하신 조건에 맞는 추천 조합을 찾지 못했습니다. 검색 조건을 조금 완화해 다시 시도해주세요.",
+                "outfits": [],
             }
 
         # 일부 슬롯이 제외된 경우, 살아남은 슬롯들의 slot_budget 합계를 반영해 유효 예산 산출
