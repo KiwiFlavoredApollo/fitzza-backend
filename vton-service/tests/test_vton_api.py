@@ -59,7 +59,7 @@ def setup_test_environment(tmp_path: Path):
 def test_post_vton_requires_x_user_id() -> None:
     client = TestClient(app)
     resp = client.post("/api/vton", json={"productIds": [101]})
-    assert resp.status_code == 422  # Header 누락
+    assert resp.status_code == 401  # Header 누락 시 401 Unauthorized
 
 
 def test_post_vton_enforces_product_limit() -> None:
@@ -369,6 +369,10 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     # 2. 타인이 삭제 요청 시 403 Forbidden
     resp_forbid = client.delete(f"/api/vton/{fitting_id}", headers={"X-User-Id": "999"})
     assert resp_forbid.status_code == 403
+
+    # 2-1. X-User-Id 누락 시 401 Unauthorized
+    resp_no_auth = client.delete(f"/api/vton/{fitting_id}")
+    assert resp_no_auth.status_code == 401
 
     # 3. 본인이 정상 삭제 (204 No Content)
     resp_del = client.delete(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})

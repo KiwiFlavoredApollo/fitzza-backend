@@ -195,7 +195,7 @@ def request_fitting(
     req: FittingCreateRequest,
     background_tasks: BackgroundTasks,
     request: Request,
-    x_user_id: Annotated[int, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")],
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> FittingCreateResponse:
     if not x_user_id or x_user_id <= 0:
@@ -243,7 +243,7 @@ def request_fitting(
 )
 def get_fitting(
     fittingId: int,
-    x_user_id: Annotated[int, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")],
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FittingDetailResponse:
     if not x_user_id or x_user_id <= 0:
         raise HTTPException(
@@ -277,7 +277,7 @@ def get_fitting(
 )
 def delete_fitting(
     fittingId: int,
-    x_user_id: Annotated[int, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")],
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
     if not x_user_id or x_user_id <= 0:
         raise HTTPException(
