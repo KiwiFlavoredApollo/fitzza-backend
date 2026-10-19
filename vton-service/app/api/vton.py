@@ -269,34 +269,75 @@ def get_fitting(
     return FittingDetailResponse(**detail)
 
 
+@router.delete(
+    "/api/vton/{fittingId}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="가상 피팅 기록 삭제 (소프트 삭제)",
+    description="본인의 가상 피팅 기록을 삭제(소프트 삭제)합니다. 삭제된 피팅은 상세 조회 및 이미지 서빙이 차단됩니다.",
+)
+def delete_fitting(
+    fittingId: int,
+    x_user_id: Annotated[int, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")],
+) -> Response:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
+    repo = get_repo()
+    detail = repo.get_fitting_detail(fittingId, include_deleted=True)
+    if not detail or detail.get("isDeleted"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="존재하지 않거나 이미 삭제된 가상 피팅입니다.",
+        )
+
+    if detail["userId"] != x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인의 피팅 결과만 삭제할 수 있습니다.",
+        )
+
+    deleted = repo.delete_fitting(fitting_id=fittingId, user_id=x_user_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="존재하지 않거나 이미 삭제된 가상 피팅입니다.",
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get(
     "/api/vton/{fittingId}/image",
     summary="가상 피팅 결과 PNG 이미지 서빙",
     description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다.",
     responses={
         200: {"content": {"image/png": {}}, "description": "가상 피팅 완성 PNG 이미지"},
-        404: {"description": "이미지를 찾을 수 없거나 아직 생성되지 않음"},
+        404: {"description": "이미지를 찾을 수 없거나 아직 생성되지 않음/삭제됨"},
     },
 )
 def get_fitting_image(fittingId: int) -> FileResponse:
+    # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
+    repo = get_repo()
+    detail = repo.get_fitting_detail(fittingId)
+    if not detail or detail.get("isDeleted"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="존재하지 않거나 삭제된 가상 피팅입니다.",
+        )
+    if detail["status"] != "COMPLETED":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"가상 피팅이 아직 완료되지 않았습니다. 현재 상태: {detail['status']}",
+        )
+
     settings = get_settings()
     storage_dir = Path(settings.storage_dir)
     image_file = storage_dir / f"{fittingId}.png"
 
     if not image_file.is_file():
-        # DB에서 상태 확인
-        repo = get_repo()
-        detail = repo.get_fitting_detail(fittingId)
-        if not detail:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="존재하지 않는 가상 피팅입니다.",
-            )
-        if detail["status"] != "COMPLETED":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"가상 피팅이 아직 완료되지 않았습니다. 현재 상태: {detail['status']}",
-            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="피팅 결과 이미지 파일이 존재하지 않습니다.",

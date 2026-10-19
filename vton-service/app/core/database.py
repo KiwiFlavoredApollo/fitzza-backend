@@ -84,9 +84,12 @@ class VtonRepository:
                                 status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
                                 result_image_url TEXT,
                                 error_message TEXT,
+                                is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                                 created_at TEXT NOT NULL,
                                 updated_at TEXT NOT NULL
                             );\n
+                            ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
                                 ON {schema}.fittings (user_id, fitting_id DESC);
 
@@ -119,11 +122,18 @@ class VtonRepository:
                             status TEXT NOT NULL DEFAULT 'PENDING',
                             result_image_url TEXT,
                             error_message TEXT,
+                            is_deleted INTEGER NOT NULL DEFAULT 0,
                             created_at TEXT NOT NULL,
                             updated_at TEXT NOT NULL
                         );
                         """
                     )
+                    # 기존 SQLite 테이블에 is_deleted 컬럼이 없을 경우 추가
+                    cur.execute("PRAGMA table_info(fittings);")
+                    columns = [row[1] for row in cur.fetchall()]
+                    if "is_deleted" not in columns:
+                        cur.execute("ALTER TABLE fittings ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;")
+
                     cur.execute(
                         """
                         CREATE INDEX IF NOT EXISTS idx_fittings_user_created
@@ -333,7 +343,12 @@ class VtonRepository:
                 finally:
                     self._close_sqlite_if_transient(conn)
 
-    def get_fitting_detail(self, fitting_id: int) -> dict[str, Any] | None:
+    def delete_fitting(self, fitting_id: int, user_id: int) -> bool:
+        """
+        [소프트 삭제] 본인의 가상 피팅 기록을 is_deleted = TRUE로 마킹합니다.
+        성공 시 True, 이미 삭제되었거나 대상이 없으면 False를 반환합니다.
+        """
+        now = datetime.now(timezone.utc).isoformat()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -341,13 +356,59 @@ class VtonRepository:
                     with conn.cursor() as cur:
                         cur.execute(
                             f"""
-                            SELECT fitting_id, user_id, photo_id, status,
-                                   result_image_url, error_message, created_at, updated_at
-                            FROM {schema}.fittings
-                            WHERE fitting_id = %s;
+                            UPDATE {schema}.fittings
+                            SET is_deleted = TRUE,
+                                updated_at = %s
+                            WHERE fitting_id = %s
+                              AND user_id = %s
+                              AND is_deleted = FALSE;
                             """,
-                            (fitting_id,),
+                            (now, fitting_id, user_id),
                         )
+                        rowcount = cur.rowcount
+                        conn.commit()
+                        return rowcount > 0
+        else:
+            with self._lock:
+                conn = self._get_sqlite_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        UPDATE fittings
+                        SET is_deleted = 1,
+                            updated_at = ?
+                        WHERE fitting_id = ?
+                          AND user_id = ?
+                          AND is_deleted = 0;
+                        """,
+                        (now, fitting_id, user_id),
+                    )
+                    rowcount = cur.rowcount
+                    conn.commit()
+                    return rowcount > 0
+                finally:
+                    self._close_sqlite_if_transient(conn)
+
+    def get_fitting_detail(
+        self,
+        fitting_id: int,
+        include_deleted: bool = False,
+    ) -> dict[str, Any] | None:
+        if self._use_postgres:
+            schema = self.postgres_schema
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        query = f"""
+                            SELECT fitting_id, user_id, photo_id, status,
+                                   result_image_url, error_message, is_deleted, created_at, updated_at
+                            FROM {schema}.fittings
+                            WHERE fitting_id = %s
+                        """
+                        if not include_deleted:
+                            query += " AND is_deleted = FALSE"
+                        cur.execute(query + ";", (fitting_id,))
                         fitting_row = cur.fetchone()
                         if not fitting_row:
                             return None
@@ -367,15 +428,15 @@ class VtonRepository:
                 conn = self._get_sqlite_connection()
                 try:
                     cur = conn.cursor()
-                    cur.execute(
-                        """
+                    query = """
                         SELECT fitting_id, user_id, photo_id, status,
-                               result_image_url, error_message, created_at, updated_at
+                               result_image_url, error_message, is_deleted, created_at, updated_at
                         FROM fittings
-                        WHERE fitting_id = ?;
-                        """,
-                        (fitting_id,),
-                    )
+                        WHERE fitting_id = ?
+                    """
+                    if not include_deleted:
+                        query += " AND is_deleted = 0"
+                    cur.execute(query + ";", (fitting_id,))
                     row = cur.fetchone()
                     if not row:
                         return None
@@ -412,6 +473,7 @@ class VtonRepository:
             "status": fitting_row["status"],
             "resultImageUrl": fitting_row["result_image_url"],
             "errorMessage": fitting_row["error_message"],
+            "isDeleted": bool(fitting_row.get("is_deleted", False)),
             "products": products,
             "createdAt": fitting_row["created_at"],
             "updatedAt": fitting_row["updated_at"],
