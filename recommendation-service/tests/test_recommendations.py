@@ -40,6 +40,17 @@ class StubCoordinator:
         if self.mode == "error":
             raise RuntimeError("Simulated LLM failure")
 
+        if self.mode == "empty_coordination":
+            return {
+                "type": "coordination",
+                "query": user_query,
+                "tpo": "데이트룩 코디",
+                "intent": None,
+                "excluded_categories": ["top", "shoes"],
+                "comment": "요청하신 조건에 맞는 추천 조합을 찾지 못했습니다. 검색 조건을 조금 완화해 다시 시도해주세요.",
+                "outfits": [],
+            }
+
         if self.mode == "single":
             return {
                 "type": "single",
@@ -500,3 +511,72 @@ def test_find_option_measurement_normalizes_int_and_returns_none_on_mismatch(
 
     assert client.find_option_measurement(101, 5001) == {"총장": 71.0, "어깨너비": 51.0}
     assert client.find_option_measurement(101, 9999) is None
+
+
+def test_empty_coordination_recommendation_saves_empty_combos() -> None:
+    app.state.coordinator = StubCoordinator(mode="empty_coordination")
+
+    with TestClient(app) as client:
+        post_res = client.post(
+            "/api/v1/recommendations",
+            headers={"X-User-Id": "15"},
+            json={"query": "상의 하의 신발 풀세트 코디 추천해줘"},
+        )
+        assert post_res.status_code == 202
+        request_id = post_res.json()["requestId"]
+
+        detail_res = client.get(
+            f"/api/v1/recommendations/{request_id}",
+            headers={"X-User-Id": "15"},
+        )
+        assert detail_res.status_code == 200
+        detail = detail_res.json()
+        assert detail["status"] == "DONE"
+        assert detail["searchType"] == "COMBO"
+        assert detail["combos"] == []
+        assert "조건에 맞는 추천 조합을 찾지 못했습니다" in detail["message"]
+
+
+def test_coordinator_empty_coordination_fallback_logic(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import MagicMock
+    from app.services.coordinator import FashionPipelineCoordinator
+    from app.services.query_parser import ParsedIntent, SlotQuery
+
+    coordinator = FashionPipelineCoordinator.__new__(FashionPipelineCoordinator)
+    coordinator.parser = MagicMock()
+    coordinator.engine = MagicMock()
+    coordinator.harmonizer = MagicMock()
+    coordinator.responder = MagicMock()
+    coordinator.size_resolver = MagicMock()
+
+    # 1. 3개 슬롯(top, bottom, shoes) 요청 중 top 1개만 검색되고 나머지 2개는 0개인 경우 (살아남은 슬롯 1개 이하)
+    intent = ParsedIntent(
+        search_type="coordination",
+        season_preferences=["봄"],
+        tpo_summary="캐주얼 코디",
+        slots=[
+            SlotQuery(category="top", clip_query_en="shirt", slot_budget=40000),
+            SlotQuery(category="bottom", clip_query_en="slacks", slot_budget=40000),
+            SlotQuery(category="shoes", clip_query_en="sneakers", slot_budget=40000),
+        ],
+    )
+    coordinator.parser.parse.return_value = intent
+
+    def search_side_effect(slot, season_preferences=None, top_k=5):
+        if slot.category == "top":
+            return [{"product_id": 101, "product_name": "상의"}]
+        return []
+
+    coordinator._search_slot_items = MagicMock(side_effect=search_side_effect)
+    coordinator._attach_size_info = MagicMock(side_effect=lambda items, slot, user_id: items)
+
+    result = coordinator.run("상의 하의 신발 코디해줘", user_id="1")
+    assert result["type"] == "coordination"
+    assert result["outfits"] == []
+    assert set(result["excluded_categories"]) == {"bottom", "shoes"}
+    assert "조건에 맞는 추천 조합을 찾지 못했습니다" in result["comment"]
+    # harmonizer나 responder가 불필요하게 호출되지 않아야 함
+    coordinator.harmonizer.select_best_outfits.assert_not_called()
+    coordinator.responder.generate_coordination_response.assert_not_called()
+    coordinator.responder.generate_single_response.assert_not_called()
+
