@@ -225,7 +225,7 @@ class SizeCalculator:
                             or normalized_baseline.get("발길이")
                         )
                         if user_shoe:
-                            m = re.search(r"\d+", str(size_option.get("size", "")))
+                            m = re.search(r"\d+(?:\.\d+)?", str(size_option.get("size", "")))
                             if m:
                                 try:
                                     opt_shoe = float(m.group())
