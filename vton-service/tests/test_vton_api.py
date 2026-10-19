@@ -59,7 +59,7 @@ def setup_test_environment(tmp_path: Path):
 def test_post_vton_requires_x_user_id() -> None:
     client = TestClient(app)
     resp = client.post("/api/vton", json={"productIds": [101]})
-    assert resp.status_code == 422  # Header 누락
+    assert resp.status_code == 401  # Header 누락 시 401 Unauthorized
 
 
 def test_post_vton_enforces_product_limit() -> None:
@@ -341,3 +341,51 @@ def test_internal_fitting_endpoint_for_community() -> None:
         headers={"X-Service-Token": "invalid-token"},
     )
     assert resp_unauth.status_code == 401
+
+
+def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
+    test_storage = tmp_path / "fittings"
+    test_storage.mkdir(parents=True, exist_ok=True)
+    settings = Settings(
+        db_path=":memory:",
+        storage_dir=str(test_storage),
+    )
+    reset_settings_for_tests(settings)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+    client = TestClient(app)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
+    repo.mark_completed(fitting_id, f"/api/vton/{fitting_id}/image")
+    img_bytes = _create_sample_png()
+    (test_storage / f"{fitting_id}.png").write_bytes(img_bytes)
+
+    # 1. 삭제 전 정상 조회 가능
+    resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp.status_code == 200
+    resp_img = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_img.status_code == 200
+
+    # 2. 타인이 삭제 요청 시 403 Forbidden
+    resp_forbid = client.delete(f"/api/vton/{fitting_id}", headers={"X-User-Id": "999"})
+    assert resp_forbid.status_code == 403
+
+    # 2-1. X-User-Id 누락 시 401 Unauthorized
+    resp_no_auth = client.delete(f"/api/vton/{fitting_id}")
+    assert resp_no_auth.status_code == 401
+
+    # 3. 본인이 정상 삭제 (204 No Content)
+    resp_del = client.delete(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp_del.status_code == 204
+
+    # 4. 삭제 후 상세 조회 차단 (404 Not Found)
+    resp_get_after = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp_get_after.status_code == 404
+
+    # 5. 삭제 후 이미지 서빙 차단 (404 Not Found)
+    resp_img_after = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_img_after.status_code == 404
+
+    # 6. 이미 삭제된 피팅 재삭제 시도 시 404 Not Found
+    resp_del_again = client.delete(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp_del_again.status_code == 404

@@ -208,6 +208,8 @@ def generate_tryon_image(
     avatar_path: str | Path | None = None,
     api_key: str | None = None,
     model: str | None = None,
+    timeout_seconds: float | None = None,
+    max_retries: int | None = None,
     openai_client: Any = None,
 ) -> bytes:
     """
@@ -245,6 +247,16 @@ def generate_tryon_image(
         raise VtonConfigurationError("OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
 
     resolved_model = model or os.getenv("OPENAI_IMAGE_MODEL", DEFAULT_MODEL)
+    resolved_timeout = (
+        float(timeout_seconds)
+        if timeout_seconds is not None
+        else float(os.getenv("OPENAI_TIMEOUT_SECONDS", "120"))
+    )
+    resolved_retries = (
+        int(max_retries)
+        if max_retries is not None
+        else int(os.getenv("OPENAI_MAX_RETRIES", "1"))
+    )
 
     image_inputs: list[tuple[str, bytes, str]] = [
         ("avatar.png", avatar_png, "image/png"),
@@ -256,8 +268,8 @@ def generate_tryon_image(
 
     client = openai_client or OpenAI(
         api_key=resolved_api_key,
-        timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "120")),
-        max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "1")),
+        timeout=resolved_timeout,
+        max_retries=resolved_retries,
     )
 
     try:

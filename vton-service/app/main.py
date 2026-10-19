@@ -10,6 +10,7 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, HttpUrl
 
 import logging
+import os
 from starlette.concurrency import run_in_threadpool
 from PIL import Image
 
@@ -26,6 +27,7 @@ from app.services.vton_generator import (
     generate_tryon_image,
 )
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 파일당 최대 15MB
