@@ -104,12 +104,12 @@ def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
     return f"/api/vton/{fitting_id}/image"
 
 
-def _resolve_photo_url(photo_id: int, request: Request | None) -> str:
+def _resolve_user_image_url(fitting_id: int, request: Request | None) -> str:
     settings = get_settings()
     if settings.public_base_url.strip():
         base = settings.public_base_url.rstrip("/")
-        return f"{base}/api/vton/photos/{photo_id}"
-    return f"/api/vton/photos/{photo_id}"
+        return f"{base}/api/vton/{fitting_id}/user-image"
+    return f"/api/vton/{fitting_id}/user-image"
 
 
 def _run_background_vton(
@@ -281,7 +281,7 @@ def list_user_fittings(
 
     items: list[FittingSummaryResponse] = []
     for item in raw_items:
-        user_img_url = _resolve_photo_url(item["photoId"], request) if item.get("photoId") else None
+        user_img_url = _resolve_user_image_url(item["fittingId"], request) if item.get("photoId") else None
         items.append(
             FittingSummaryResponse(
                 fittingId=item["fittingId"],
@@ -308,6 +308,54 @@ def list_user_fittings(
         "백그라운드에서 AI 이미지 합성을 수행한 후 완료 알림을 발송합니다. "
         "JSON 요청 또는 multipart/form-data(userImage 파일 첨부) 모두 지원합니다."
     ),
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "description": "JSON 본문(상품 ID 목록) 또는 multipart/form-data(상품 ID 목록 + 사용자 얼굴 이미지)",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["productIds"],
+                        "properties": {
+                            "photoId": {
+                                "type": "integer",
+                                "nullable": True,
+                                "description": "사용자 사진 ID (선택)",
+                                "example": None,
+                            },
+                            "productIds": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "minItems": 1,
+                                "maxItems": 5,
+                                "description": "피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
+                                "example": [101, 102],
+                            },
+                        },
+                    }
+                },
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["productIds"],
+                        "properties": {
+                            "productIds": {
+                                "type": "string",
+                                "description": "피팅할 상품 ID 목록 (예: '[101, 102]' 또는 '101,102')",
+                                "example": "[101, 102]",
+                            },
+                            "userImage": {
+                                "type": "string",
+                                "format": "binary",
+                                "description": "사용자 얼굴/상반신 이미지 파일 (PNG, JPEG, WebP 지원)",
+                            },
+                        },
+                    }
+                },
+            },
+        }
+    },
 )
 async def request_fitting(
     request: Request,
@@ -472,7 +520,7 @@ def get_fitting(
             detail="본인의 피팅 결과만 조회할 수 있습니다.",
         )
 
-    user_img_url = _resolve_photo_url(detail["photoId"], None) if detail.get("photoId") else None
+    user_img_url = _resolve_user_image_url(detail["fittingId"], None) if detail.get("photoId") else None
     return FittingDetailResponse(
         fittingId=detail["fittingId"],
         userId=detail["userId"],
@@ -564,6 +612,52 @@ def get_fitting_image(fittingId: int) -> FileResponse:
         path=str(image_file),
         media_type="image/png",
         headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+    )
+
+
+@router.get(
+    "/api/vton/{fittingId}/user-image",
+    summary="사용자 얼굴/상반신 이미지 파일 서빙 (로컬 개발용)",
+    description="가상 피팅 요청 시 첨부했던 사용자 얼굴/상반신 원본 이미지를 브라우저나 앱에서 확인할 수 있도록 스트리밍합니다.",
+    responses={
+        200: {"content": {"image/png": {}}, "description": "사용자 원본 이미지"},
+        404: {"description": "사용자 이미지를 첨부하지 않았거나 이미지를 찾을 수 없음"},
+    },
+)
+def get_fitting_user_image(fittingId: int) -> FileResponse:
+    repo = get_repo()
+    detail = repo.get_fitting_detail(fittingId)
+    if not detail or detail.get("isDeleted"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="존재하지 않거나 삭제된 가상 피팅입니다.",
+        )
+
+    photo_id = detail.get("photoId")
+    if not photo_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 피팅에는 사용자가 등록한 이미지가 없습니다 (기본 아바타 사용).",
+        )
+
+    photo_info = repo.get_user_photo(photo_id)
+    if not photo_info or not photo_info.get("filePath"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사용자 사진 정보를 찾을 수 없습니다.",
+        )
+
+    photo_file = Path(photo_info["filePath"])
+    if not photo_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="사용자 사진 파일이 서버에 존재하지 않습니다.",
+        )
+
+    return FileResponse(
+        path=str(photo_file),
+        media_type="image/png",
+        headers={"Content-Disposition": f'inline; filename="user-{photo_id}.png"'},
     )
 
 

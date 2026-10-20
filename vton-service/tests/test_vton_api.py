@@ -536,6 +536,45 @@ def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
         assert resp_ok.status_code == 202
 
 
+def test_get_fitting_user_image_flow(tmp_path: Path) -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    test_photos = tmp_path / "photos"
+    test_photos.mkdir(parents=True, exist_ok=True)
+    sample_file = test_photos / "sample_face.png"
+    sample_bytes = _create_sample_png()
+    sample_file.write_bytes(sample_bytes)
+
+    # 1. 사진 레코드 및 피팅 생성
+    photo_record = repo.save_user_photo(user_id=7, file_path=str(sample_file))
+    photo_id = photo_record["photoId"]
+    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101])
+
+    # 2. GET /api/vton/{fittingId} 상세 조회 시 userImageUrl이 올바른 경로인지 확인
+    resp_detail = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp_detail.status_code == 200
+    detail_data = resp_detail.json()
+    assert detail_data["userImageUrl"].endswith(f"/api/vton/{fitting_id}/user-image")
+
+    # 3. GET /api/vton/{fittingId}/user-image로 실제 이미지 파일 스트리밍 확인
+    resp_img = client.get(f"/api/vton/{fitting_id}/user-image")
+    assert resp_img.status_code == 200
+    assert resp_img.headers["content-type"] == "image/png"
+    assert resp_img.content == sample_bytes
+
+    # 4. 사진 없이 생성된 피팅(photoId=None)의 경우 404 Not Found
+    fitting_no_photo = repo.create_fitting(user_id=7, photo_id=None, product_ids=[102])
+    resp_no_img = client.get(f"/api/vton/{fitting_no_photo}/user-image")
+    assert resp_no_img.status_code == 404
+    assert "등록한 이미지가 없습니다" in resp_no_img.json()["message"]
+
+    # 5. 존재하지 않는 fittingId 요청 시 404 Not Found
+    resp_none = client.get("/api/vton/999999/user-image")
+    assert resp_none.status_code == 404
+
+
 def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
     test_storage = tmp_path / "fittings"
     test_storage.mkdir(parents=True, exist_ok=True)
