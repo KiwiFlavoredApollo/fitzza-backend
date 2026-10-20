@@ -4,3 +4,9 @@ spring:
   datasource:
     hikari:
       schema: product_service
+  jpa:
+    properties:
+      hibernate:
+        default_schema: product_service
+        hbm2ddl:
+          create_namespaces: true
