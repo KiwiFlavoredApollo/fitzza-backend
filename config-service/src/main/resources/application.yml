@@ -9,6 +9,13 @@ spring:
   cloud:
     config:
       server:
+        overrides:
+          fitzza.tokens.community: ${COMMUNITY_SERVICE_TOKEN}
+          fitzza.tokens.order: ${ORDER_SERVICE_TOKEN}
+          fitzza.tokens.review: ${REVIEW_SERVICE_TOKEN}
+          fitzza.tokens.recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
+          fitzza.tokens.product: ${PRODUCT_SERVICE_TOKEN:}
+          fitzza.tokens.vton: ${VTON_SERVICE_TOKEN:}
         native:
           search-locations: classpath:/config
 

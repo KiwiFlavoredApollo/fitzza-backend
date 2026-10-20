@@ -4,12 +4,7 @@ spring:
   config:
     import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
 
-# 이 서비스의 서비스 전용 API(/notifications/events)를 호출하는 서비스별 토큰. 서비스마다 다른 32바이트 이상 값을 쓴다.
 fitzza:
-  service-tokens:
-    community: ${COMMUNITY_SERVICE_TOKEN}
-    recommendation: ${RECOMMENDATION_SERVICE_TOKEN:}
-    vton: ${VTON_SERVICE_TOKEN:}
   # Firebase 서비스 계정 키(JSON 또는 그 base64 값). 비워 두면 푸시를 보내지 않고 로그만 남긴다.
   fcm:
     credentials: ${FIREBASE_CREDENTIALS:}

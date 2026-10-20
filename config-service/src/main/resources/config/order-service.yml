@@ -10,3 +10,9 @@ spring:
         default_schema: order_service
         hbm2ddl:
           create_namespaces: true
+
+fitzza:
+  service-token: ${fitzza.tokens.order}
+  service-tokens:
+    community: ${fitzza.tokens.community}
+    review: ${fitzza.tokens.review}
