@@ -5,6 +5,7 @@
 | `user_service_seed.sql` | `user_service` | 테스트 사용자 1001~1020 |
 | `product_service_seed.sql` | `product_service` | 무신사 `4695999` 상품 1건 (`product_id` = 무신사 번호) |
 | `product_service_wishlist_seed.sql` | `product_service` | user `1001` + product `4695999` 찜 1건 |
+| `order_service_seed.sql` | `order_service` | user `1001`~`1005` 주문 6건(완료 5, 취소 1)·주문 항목 7개 — 리뷰·사이즈 설문 테스트용 |
 
 ## Apply order
 
@@ -13,10 +14,12 @@ set -a && source .env && set +a
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/user_service_seed.sql
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_seed.sql
 docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_wishlist_seed.sql
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/order_service_seed.sql
 ```
 
 - 상품: `GET /api/v1/products/4695999`
 - 찜: `seed01@fitzza.test` / `Fitzza1234` signin 후 `GET /api/v1/wishlists`
+- 주문·리뷰·설문: `seed01@fitzza.test`로 signin 후 주문 항목 `1001`, `1002`로 `POST /api/v1/reviews`·`POST /api/v1/surveys` (seed05의 `1007`은 취소 주문이라 거부돼야 함)
 
 `product_service_seed.sql`은 productId=무신사 번호 스키마 기준이다. Java musinsa JSON 시드와 별개 픽스처.
 
