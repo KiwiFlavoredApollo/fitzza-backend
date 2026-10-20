@@ -10,6 +10,7 @@ import java.util.List;
 // WORLDCUP: snapshot에 우승 상품(productId·brandName·productName·price·imageUrl), items는 빈 목록.
 // COMBO: snapshot에 총 가격(price)·첫 상품 이미지(imageUrl)·조화도 요약(summary), items에 코디 상품들.
 // FITTING: snapshot에 결과 이미지(imageUrl), items에 입어 본 상품들.
+// PRODUCT: snapshot에 찜한 상품(productId·brandName·productName·price·imageUrl), items는 빈 목록.
 public record SharedResponse(SharedType type, Long id, Snapshot snapshot, List<Item> items) {
 
     public static SharedResponse of(Post post) {

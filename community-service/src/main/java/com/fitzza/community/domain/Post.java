@@ -66,7 +66,7 @@ public class Post {
     @Embedded
     private SharedSnapshot sharedSnapshot;
 
-    // 공유한 코디·피팅 결과에 들어 있던 상품들(공유 당시 순서대로). 월드컵 공유와 일반 글은 비어 있다.
+    // 공유한 코디·피팅 결과에 들어 있던 상품들(공유 당시 순서대로). 월드컵·상품 공유와 일반 글은 비어 있다.
     @ElementCollection
     @CollectionTable(name = "post_shared_items", joinColumns = @JoinColumn(name = "post_id"))
     @OrderColumn(name = "item_order")

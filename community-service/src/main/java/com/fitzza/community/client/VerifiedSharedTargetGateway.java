@@ -24,15 +24,22 @@ public class VerifiedSharedTargetGateway implements SharedTargetGateway {
 
     private static final Logger log = LoggerFactory.getLogger(VerifiedSharedTargetGateway.class);
 
+    private static final String HIDDEN_STATUS = "HIDDEN";
+
     private final WorldcupResults worldcupResults;
     private final ComboResults comboResults;
     private final FittingResults fittingResults;
+    private final ProductCatalog productCatalog;
 
     public VerifiedSharedTargetGateway(
-            WorldcupResults worldcupResults, ComboResults comboResults, FittingResults fittingResults) {
+            WorldcupResults worldcupResults,
+            ComboResults comboResults,
+            FittingResults fittingResults,
+            ProductCatalog productCatalog) {
         this.worldcupResults = worldcupResults;
         this.comboResults = comboResults;
         this.fittingResults = fittingResults;
+        this.productCatalog = productCatalog;
     }
 
     @Override
@@ -41,6 +48,7 @@ public class VerifiedSharedTargetGateway implements SharedTargetGateway {
             case WORLDCUP -> resolveWorldcup(userId, sharedId);
             case COMBO -> resolveCombo(userId, sharedId);
             case FITTING -> resolveFitting(userId, sharedId);
+            case PRODUCT -> resolveProduct(userId, sharedId);
         };
     }
 
@@ -88,6 +96,31 @@ public class VerifiedSharedTargetGateway implements SharedTargetGateway {
         List<ResultProduct> products = fitting.products() == null ? List.of() : fitting.products();
         SharedSnapshot snapshot = new SharedSnapshot(null, null, null, null, fitting.resultImageUrl(), null);
         return new SharedTarget(snapshot, toItems(products));
+    }
+
+    // 내가 찜한 상품만 공유할 수 있다. 숨긴 상품은 없는 상품으로 본다. 상품 하나라 스냅샷만 채운다.
+    private SharedTarget resolveProduct(Long userId, long productId) {
+        ProductCatalog.ProductSummary product;
+        try {
+            if (!productCatalog.isWishlisted(userId, productId)) {
+                throw new CommunityApiException(ErrorCode.NOT_WISHLISTED_ITEM);
+            }
+            product = productCatalog.findProduct(productId).orElse(null);
+        } catch (ResourceAccessException | HttpServerErrorException exception) {
+            log.warn("상품 서비스에서 공유 대상을 확인하지 못해 공유 글 작성을 거부합니다: {}", exception.getMessage());
+            throw new CommunityApiException(ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
+        }
+        if (product == null || HIDDEN_STATUS.equals(product.status())) {
+            throw new CommunityApiException(ErrorCode.SHARED_TARGET_NOT_FOUND);
+        }
+        return new SharedTarget(
+                new SharedSnapshot(
+                        product.productId(),
+                        product.brandName(),
+                        product.productName(),
+                        product.price(),
+                        product.imageUrl()),
+                List.of());
     }
 
     private static <T> T lookUp(String serviceName, Supplier<Optional<T>> lookup) {

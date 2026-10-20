@@ -102,9 +102,10 @@ public class PostController {
                     + "itemType=PRODUCT, itemId=상품 ID(숫자)로 보내며, 이미지·상품명·가격은 상품 서비스 값으로 저장한다. "
                     + "AI 추천 코디는 source=AI_RECOMMEND, itemType=COMBO, itemId=코디 ID로 보내며 추천 서비스에서 본인이 받은 "
                     + "코디인지 확인한다. AI 추천 단품(itemType=PRODUCT)은 상품이 있는지만 확인한다. "
-                    + "공유 글은 sharedType(WORLDCUP·COMBO·FITTING)과 sharedId(월드컵 이력·추천 코디·가상 피팅 ID)를 함께 보낸다"
+                    + "공유 글은 sharedType(WORLDCUP·COMBO·FITTING·PRODUCT)과 sharedId(월드컵 이력·추천 코디·가상 피팅·찜한 상품 ID)를 "
+                    + "함께 보낸다"
                     + "(투표 글은 공유 불가). 본인 결과인지 제공 서비스에서 확인한 뒤 공유 당시 모습을 스냅샷으로 저장한다. "
-                    + "가상 피팅은 완료된 결과만 공유할 수 있다.",
+                    + "가상 피팅은 완료된 결과만, 상품은 내가 찜한 상품만 공유할 수 있다.",
             security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
     @ApiResponses({
         @ApiResponse(responseCode = "201", description = "작성 성공"),
@@ -125,7 +126,7 @@ public class PostController {
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "404",
-                description = "SHARED_TARGET_NOT_FOUND: 없는 월드컵·코디·피팅 결과",
+                description = "SHARED_TARGET_NOT_FOUND: 없는 월드컵·코디·피팅 결과나 상품",
                 content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
         @ApiResponse(
                 responseCode = "409",

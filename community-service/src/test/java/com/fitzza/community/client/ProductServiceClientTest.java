@@ -59,7 +59,7 @@ class ProductServiceClientTest {
                         MediaType.APPLICATION_JSON));
 
         assertThat(client.findProduct(55L))
-                .contains(new ProductSummary(55L, "오버핏 셔츠", 39000, "https://cdn.example.com/55.png", "ON_SALE"));
+                .contains(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, "https://cdn.example.com/55.png", "ON_SALE"));
         server.verify();
     }
 
