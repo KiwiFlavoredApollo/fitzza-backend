@@ -88,6 +88,11 @@ class VtonRepository:
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );\n
+                            ALTER TABLE {schema}.fittings
+                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
+                                ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
+                                ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
@@ -113,6 +118,9 @@ class VtonRepository:
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
+                            ALTER TABLE {schema}.user_photos
+                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
                             CREATE INDEX IF NOT EXISTS idx_user_photos_user
                                 ON {schema}.user_photos (user_id, photo_id DESC);
                             """
@@ -206,6 +214,8 @@ class VtonRepository:
             return ""
         try:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
             return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         except ValueError:
             return s

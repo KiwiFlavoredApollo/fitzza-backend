@@ -1,10 +1,11 @@
 import logging
 import os
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response, status
+from fastapi import APIRouter, FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
@@ -63,10 +64,10 @@ async def handle_validation_error(
     )
 
 
-@app.exception_handler(HTTPException)
+@app.exception_handler(StarletteHTTPException)
 async def handle_http_exception(
     _request: Request,
-    exc: HTTPException,
+    exc: StarletteHTTPException,
 ) -> JSONResponse:
     code = "HTTP_ERROR"
     if exc.status_code == 400:
@@ -77,6 +78,8 @@ async def handle_http_exception(
         code = "FORBIDDEN"
     elif exc.status_code == 404:
         code = "NOT_FOUND"
+    elif exc.status_code == 405:
+        code = "METHOD_NOT_ALLOWED"
     elif exc.status_code == 500:
         code = "INTERNAL_SERVER_ERROR"
     elif exc.status_code == 502:
@@ -90,6 +93,7 @@ async def handle_http_exception(
             "code": code,
             "message": str(exc.detail) if isinstance(exc.detail, str) else "오류가 발생했습니다.",
         },
+        headers=getattr(exc, "headers", None),
     )
 
 

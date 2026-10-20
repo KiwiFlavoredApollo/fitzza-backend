@@ -124,6 +124,22 @@ class RecommendationRepository:
                                 size_feedback VARCHAR(16) NOT NULL,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
+
+                            ALTER TABLE {schema}.recommendation_requests
+                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+                            ALTER TABLE {schema}.recommendation_combos
+                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+                            ALTER TABLE {schema}.user_size_preferences
+                                ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
+                                ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+                            ALTER TABLE {schema}.size_feedback_logs
+                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
                             """
                         )
                     conn.commit()
@@ -205,6 +221,8 @@ class RecommendationRepository:
             return ""
         try:
             dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
             return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         except ValueError:
             return s

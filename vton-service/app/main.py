@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, FastAPI, File, Form, Request, Response, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import logging
 import os
@@ -158,10 +159,10 @@ async def handle_vton_upstream_error(
     )
 
 
-@app.exception_handler(HTTPException)
+@app.exception_handler(StarletteHTTPException)
 async def handle_http_exception(
     _request: Request,
-    exc: HTTPException,
+    exc: StarletteHTTPException,
 ) -> JSONResponse:
     code = "HTTP_ERROR"
     if exc.status_code == 400:
@@ -172,6 +173,8 @@ async def handle_http_exception(
         code = "FORBIDDEN"
     elif exc.status_code == 404:
         code = "NOT_FOUND"
+    elif exc.status_code == 405:
+        code = "METHOD_NOT_ALLOWED"
     elif exc.status_code == 500:
         code = "INTERNAL_SERVER_ERROR"
     elif exc.status_code == 502:
@@ -185,6 +188,7 @@ async def handle_http_exception(
             "code": code,
             "message": str(exc.detail) if isinstance(exc.detail, str) else "오류가 발생했습니다.",
         },
+        headers=getattr(exc, "headers", None),
     )
 
 
