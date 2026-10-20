@@ -69,7 +69,8 @@ def test_post_vton_enforces_product_limit() -> None:
         json={"productIds": [1, 2, 3, 4, 5, 6]},
         headers={"X-User-Id": "1"},
     )
-    assert resp.status_code == 422  # max_length=5 초과
+    assert resp.status_code == 400  # RequestValidationError 핸들러로 400 반환
+    assert resp.json()["code"] == "INVALID_REQUEST"
 
 
 def test_post_vton_returns_202_accepted() -> None:
@@ -439,7 +440,7 @@ def test_user_photo_upload_validations() -> None:
         headers={"X-User-Id": "7"},
     )
     assert resp_bad_ext.status_code == 400
-    assert "지원하지 않는 이미지 형식" in resp_bad_ext.json()["detail"]
+    assert "지원하지 않는 이미지 형식" in resp_bad_ext.json()["message"]
 
     # 3. 빈 파일 업로드 시 400 Bad Request
     resp_empty = client.post(
@@ -448,7 +449,7 @@ def test_user_photo_upload_validations() -> None:
         headers={"X-User-Id": "7"},
     )
     assert resp_empty.status_code == 400
-    assert "비어 있습니다" in resp_empty.json()["detail"]
+    assert "비어 있습니다" in resp_empty.json()["message"]
 
     # 4. 손상된/유효하지 않은 이미지 데이터 시 400 Bad Request
     resp_corrupt = client.post(
@@ -457,7 +458,7 @@ def test_user_photo_upload_validations() -> None:
         headers={"X-User-Id": "7"},
     )
     assert resp_corrupt.status_code == 400
-    assert "유효하지 않은 이미지" in resp_corrupt.json()["detail"]
+    assert "유효하지 않은 이미지" in resp_corrupt.json()["message"]
 
     # 5. 최대 용량(15MB) 초과 시 400 Bad Request
     with patch("app.api.vton.MAX_PHOTO_SIZE_BYTES", 100):
@@ -467,14 +468,14 @@ def test_user_photo_upload_validations() -> None:
             headers={"X-User-Id": "7"},
         )
         assert resp_too_large.status_code == 400
-        assert "15MB" in resp_too_large.json()["detail"]
+        assert "15MB" in resp_too_large.json()["message"]
 
 
 def test_get_user_photo_not_found() -> None:
     client = TestClient(app)
     resp = client.get("/api/vton/photos/999999", headers={"X-User-Id": "7"})
     assert resp.status_code == 404
-    assert "찾을 수 없습니다" in resp.json()["detail"]
+    assert "찾을 수 없습니다" in resp.json()["message"]
 
 
 def test_post_vton_with_photo_id_ownership_validation() -> None:
@@ -608,5 +609,25 @@ def test_background_vton_fails_when_user_photo_file_missing() -> None:
         assert detail is not None
         assert detail["status"] == "FAILED"
         mock_notif_client.send_fitting_failed.assert_called_once()
+
+
+def test_clothing_transfer_exceeds_max_images() -> None:
+    client = TestClient(app)
+    img_bytes = _create_sample_png()
+    files = [
+        ("clothing_images", (f"item_{i}.png", img_bytes, "image/png"))
+        for i in range(6)
+    ]
+    resp = client.post(
+        "/api/vton/clothing-transfer",
+        data={"categories_json": '["상의"]'},
+        files=files,
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["status"] == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "최대 5개" in body["message"]
+
 
 

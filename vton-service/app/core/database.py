@@ -85,9 +85,35 @@ class VtonRepository:
                                 result_image_url TEXT,
                                 error_message TEXT,
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                                created_at TEXT NOT NULL,
-                                updated_at TEXT NOT NULL
-                            );\n
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                            );
+                            DO $$
+                            BEGIN
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'fittings'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.fittings
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'fittings'
+                                      AND column_name = 'updated_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.fittings
+                                        ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
+                                        ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+                            END $$;
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
@@ -111,8 +137,23 @@ class VtonRepository:
                                 user_id BIGINT NOT NULL,
                                 file_path TEXT NOT NULL,
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                                created_at TEXT NOT NULL
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
+
+                            DO $$
+                            BEGIN
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'user_photos'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.user_photos
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+                            END $$;
                             CREATE INDEX IF NOT EXISTS idx_user_photos_user
                                 ON {schema}.user_photos (user_id, photo_id DESC);
                             """
@@ -191,13 +232,38 @@ class VtonRepository:
                 finally:
                     self._close_sqlite_if_transient(conn)
 
+    @staticmethod
+    def _format_utc_timestamp(val: Any) -> str:
+        if val is None:
+            return ""
+        if isinstance(val, datetime):
+            if val.tzinfo is None:
+                val = val.replace(tzinfo=timezone.utc)
+            else:
+                val = val.astimezone(timezone.utc)
+            return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+        s = str(val).strip()
+        if not s:
+            return ""
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            return s
+
+    @staticmethod
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def create_fitting(
         self,
         user_id: int,
         photo_id: int | None,
         product_ids: list[int],
     ) -> int:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_iso()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -293,7 +359,7 @@ class VtonRepository:
         fitting_id: int,
         result_image_url: str,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_iso()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -334,7 +400,7 @@ class VtonRepository:
         fitting_id: int,
         error_message: str,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_iso()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -375,7 +441,7 @@ class VtonRepository:
         [소프트 삭제] 본인의 가상 피팅 기록을 is_deleted = TRUE로 마킹합니다.
         성공 시 True, 이미 삭제되었거나 대상이 없으면 False를 반환합니다.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_iso()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -502,13 +568,13 @@ class VtonRepository:
             "errorMessage": fitting_row["error_message"],
             "isDeleted": bool(fitting_row.get("is_deleted", False)),
             "products": products,
-            "createdAt": fitting_row["created_at"],
-            "updatedAt": fitting_row["updated_at"],
+            "createdAt": self._format_utc_timestamp(fitting_row["created_at"]),
+            "updatedAt": self._format_utc_timestamp(fitting_row["updated_at"]),
         }
 
     def save_user_photo(self, user_id: int, file_path: str) -> dict[str, Any]:
         """사용자가 업로드한 전신 사진 메타데이터를 저장하고 사진 정보 딕셔너리를 반환합니다."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_iso()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -528,7 +594,7 @@ class VtonRepository:
                             "photoId": int(row["photo_id"]),
                             "userId": user_id,
                             "filePath": file_path,
-                            "createdAt": str(row["created_at"]),
+                            "createdAt": self._format_utc_timestamp(row["created_at"]),
                         }
         else:
             with self._lock:
@@ -548,7 +614,7 @@ class VtonRepository:
                         "photoId": photo_id,
                         "userId": user_id,
                         "filePath": file_path,
-                        "createdAt": now,
+                        "createdAt": self._format_utc_timestamp(now),
                     }
                 finally:
                     self._close_sqlite_if_transient(conn)
@@ -575,7 +641,7 @@ class VtonRepository:
                             "photoId": int(row["photo_id"]),
                             "userId": int(row["user_id"]),
                             "filePath": str(row["file_path"]),
-                            "createdAt": str(row["created_at"]),
+                            "createdAt": self._format_utc_timestamp(row["created_at"]),
                         }
         else:
             with self._lock:
@@ -597,7 +663,7 @@ class VtonRepository:
                         "photoId": int(row["photo_id"]),
                         "userId": int(row["user_id"]),
                         "filePath": str(row["file_path"]),
-                        "createdAt": str(row["created_at"]),
+                        "createdAt": self._format_utc_timestamp(row["created_at"]),
                     }
                 finally:
                     self._close_sqlite_if_transient(conn)
