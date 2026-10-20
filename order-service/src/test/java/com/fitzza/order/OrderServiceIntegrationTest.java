@@ -86,9 +86,18 @@ class OrderServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/carts/{cartId}'].delete.parameters[?(@.name=='X-User-Id')]", hasSize(1)))
                 .andExpect(jsonPath("$.paths['/api/carts'].get.parameters[?(@.name=='X-Service-Token')]", hasSize(1)))
                 .andExpect(jsonPath("$.components.securitySchemes.serviceToken.name").value("X-Service-Token"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.paths['/api/orders'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/orders'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/orders/{orderId}']").exists());
+
+        mockMvc.perform(get("/v3/api-docs/public"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.paths['/api/carts'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/api/orders'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/order-items']").doesNotExist());
     }
 
     @Test
