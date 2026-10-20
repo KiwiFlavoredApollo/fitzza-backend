@@ -9,6 +9,7 @@ import java.time.Instant;
 public record WishlistItemResponse(
         @Schema(description = "찜 ID", example = "1") Long wishlistId,
         @Schema(description = "상품 ID", example = "1") Long itemId,
+        @Schema(description = "브랜드명", example = "Fitzza") String brandName,
         @Schema(description = "상품명", example = "오버핏 코튼 셔츠") String name,
         @Schema(description = "가격(원)", example = "39000") Integer price,
         @Schema(description = "대표 이미지 URL") String imageUrl,
@@ -19,6 +20,7 @@ public record WishlistItemResponse(
         return new WishlistItemResponse(
                 wishlist.getWishlistId(),
                 Long.valueOf(wishlist.getItemId()),
+                product == null || product.getBrand() == null ? null : product.getBrand().getBrandName(),
                 product == null ? null : product.getProductName(),
                 product == null ? null : product.getPrice(),
                 product == null ? null : product.getImageUrl(),

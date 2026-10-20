@@ -250,6 +250,7 @@ class ProductServiceIntegrationTest {
         mockMvc.perform(get("/api/wishlists").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].brandName").value("Fitzza"))
                 .andExpect(jsonPath("$.content[0].name").value("셔츠"))
                 .andExpect(jsonPath("$.content[0].price").value(30000))
                 .andExpect(jsonPath("$.content[0].categoryL1").value("TOP"))
