@@ -65,9 +65,10 @@ class FittingDetailResponse(BaseModel):
         description="피팅 요청 사용자 ID",
         json_schema_extra={"example": 7},
     )
-    photoId: int | None = Field(
+    userImageUrl: str | None = Field(
         default=None,
-        description="사용자 전신 사진 ID",
+        description="사용자 원본 얼굴/전신 사진 URL (요청 시 업로드한 경우)",
+        json_schema_extra={"example": "http://api.fitzza.com/api/vton/user-images/10.png"},
     )
     status: Literal["PENDING", "COMPLETED", "FAILED"] = Field(
         description="피팅 진행 상태 (PENDING, COMPLETED, FAILED)",
@@ -93,6 +94,55 @@ class FittingDetailResponse(BaseModel):
     updatedAt: str = Field(
         description="수정 일시 (ISO-8601)",
         json_schema_extra={"example": "2026-10-18T17:31:00+00:00"},
+    )
+
+
+class FittingSummaryResponse(BaseModel):
+    fittingId: int = Field(
+        description="가상 피팅 고유 ID",
+        json_schema_extra={"example": 1},
+    )
+    userId: int = Field(
+        description="피팅 요청 사용자 ID",
+        json_schema_extra={"example": 7},
+    )
+    status: Literal["PENDING", "COMPLETED", "FAILED"] = Field(
+        description="피팅 진행 상태",
+        json_schema_extra={"example": "COMPLETED"},
+    )
+    resultImageUrl: str | None = Field(
+        default=None,
+        description="피팅 완성 이미지 URL",
+        json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/image"},
+    )
+    userImageUrl: str | None = Field(
+        default=None,
+        description="피팅에 사용된 사용자 얼굴 이미지 URL",
+    )
+    productCount: int = Field(
+        default=0,
+        description="착용한 상품 개수",
+        json_schema_extra={"example": 3},
+    )
+    products: list[FittingProductResponse] = Field(
+        default_factory=list,
+        description="착용 상품 목록 요약",
+    )
+    createdAt: str = Field(
+        description="생성 일시 (ISO-8601)",
+        json_schema_extra={"example": "2026-10-20T10:00:00Z"},
+    )
+
+
+class FittingListResponse(BaseModel):
+    items: list[FittingSummaryResponse] = Field(
+        default_factory=list,
+        description="사용자 가상 피팅 목록",
+    )
+    totalCount: int = Field(
+        default=0,
+        description="전체 피팅 건수",
+        json_schema_extra={"example": 5},
     )
 
 
@@ -135,18 +185,18 @@ class InternalFittingResponse(BaseModel):
     )
 
 
-class UserPhotoUploadResponse(BaseModel):
-    photoId: int = Field(
-        description="등록된 사용자 전신 사진 ID",
+class UserImageUploadResponse(BaseModel):
+    userImageId: int = Field(
+        description="등록된 사용자 사진 ID",
         json_schema_extra={"example": 10},
     )
     userId: int = Field(
         description="사진을 등록한 사용자 ID",
         json_schema_extra={"example": 1},
     )
-    photoUrl: str = Field(
+    userImageUrl: str = Field(
         description="등록된 사진 확인 URL",
-        json_schema_extra={"example": "http://api.fitzza.com/api/vton/photos/10"},
+        json_schema_extra={"example": "http://api.fitzza.com/api/vton/user-images/10.png"},
     )
     createdAt: str = Field(
         description="사진 등록 일시 (ISO-8601)",

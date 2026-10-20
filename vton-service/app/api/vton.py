@@ -7,18 +7,23 @@ import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
+import json
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     File,
+    Form,
     Header,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
     status,
 )
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from app.clients.notification_client import NotificationServiceClient
@@ -29,8 +34,9 @@ from app.schemas.tryon import (
     FittingCreateRequest,
     FittingCreateResponse,
     FittingDetailResponse,
+    FittingListResponse,
+    FittingSummaryResponse,
     InternalFittingResponse,
-    UserPhotoUploadResponse,
 )
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
@@ -39,6 +45,7 @@ from app.services.vton_generator import (
     VtonUpstreamError,
     VtonValidationError,
     generate_tryon_image,
+    load_sample_clothing_png,
     to_png_bytes,
 )
 
@@ -145,43 +152,62 @@ def _run_background_vton(
             used_categories.add(cat)
             resolved_products.append(item)
 
+        # 1-1. 필수 카테고리(하의) 누락 시 기본 베이직 하의 샘플 이미지 자동 보완
+        if "하의" not in used_categories:
+            try:
+                sample_bottom_bytes = load_sample_clothing_png("하의")
+                fallback_bottom_item = {
+                    "productId": 0,
+                    "productName": "기본 베이직 팬츠",
+                    "price": 0,
+                    "imageUrl": "",
+                    "categoryName": "하의",
+                    "imageBytes": sample_bottom_bytes,
+                }
+                resolved_products.append(fallback_bottom_item)
+                used_categories.add("하의")
+                logger.info("하의 누락 감지 -> 기본 베이직 하의 이미지 자동 폴백 적용 (fittingId=%s)", fitting_id)
+            except Exception as e:
+                logger.warning("기본 하의 샘플 로드 실패: %s", e)
+
         # 상품 DB 영속화
         repo.save_fitting_products(fitting_id, resolved_products)
 
         categories = [p["categoryName"] for p in resolved_products]
         clothing_images = [p["imageBytes"] for p in resolved_products]
 
-        # 1-1. 아바타 이미지 결정 (사용자 사진 ID가 전달된 경우 해당 사진 로드, 없으면 기본 아바타 사용)
-        avatar_bytes: bytes | None = None
+        # 1-2. 사용자 얼굴 이미지 로드 (전달된 photo_id가 있는 경우)
+        user_face_bytes: bytes | None = None
         if photo_id is not None:
             photo_info = repo.get_user_photo(photo_id)
             if not photo_info or not photo_info.get("filePath"):
-                raise VtonValidationError(f"지정된 사용자 전신 사진(photoId={photo_id}) 정보를 찾을 수 없습니다.")
+                raise VtonValidationError(f"지정된 사용자 이미지(photoId={photo_id}) 정보를 찾을 수 없습니다.")
 
             photo_file = Path(photo_info["filePath"])
             if not photo_file.is_file():
-                raise VtonValidationError(f"지정된 사용자 전신 사진 파일(photoId={photo_id})을 찾을 수 없습니다.")
+                raise VtonValidationError(f"지정된 사용자 이미지 파일(photoId={photo_id})을 찾을 수 없습니다.")
 
             try:
-                avatar_bytes = photo_file.read_bytes()
+                user_face_bytes = photo_file.read_bytes()
                 logger.info(
-                    "사용자 전신 사진 적용 (photoId=%s, path=%s)",
+                    "사용자 얼굴 사진 적용 (photoId=%s, path=%s)",
                     photo_id,
                     photo_file,
                 )
             except Exception as exc:
                 logger.error(
-                    "사용자 전신 사진 파일 로드 실패 (photoId=%s): %s",
+                    "사용자 얼굴 사진 파일 로드 실패 (photoId=%s): %s",
                     photo_id,
                     exc,
                 )
-                raise VtonValidationError(f"사용자 전신 사진(photoId={photo_id}) 파일을 읽는 데 실패했습니다.") from exc
+                raise VtonValidationError(f"사용자 이미지(photoId={photo_id}) 파일을 읽는 데 실패했습니다.") from exc
 
-        # 2. OpenAI 이미지 편집 피팅 실행
+        # 2. OpenAI 이미지 편집 피팅 실행 (아바타 몸 + 사용자 얼굴 + 의류)
         output_png = generate_tryon_image(
             categories=categories,
             clothing_images=clothing_images,
-            avatar_bytes=avatar_bytes,
+            avatar_bytes=None,  # 기본 아바타 몸(avatar.png) 사용
+            user_face_bytes=user_face_bytes,
             model=settings.openai_image_model,
             api_key=settings.openai_api_key or None,
             timeout_seconds=settings.openai_timeout_seconds,
@@ -232,95 +258,18 @@ MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
 ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
 
-@router.post(
-    "/api/vton/photos",
-    response_model=UserPhotoUploadResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="사용자 전신 사진 등록",
-    description=(
-        "사용자의 전신 사진을 업로드하고 고유 photoId를 발급받습니다. "
-        "(최대 15MB, PNG/JPG/WEBP 지원)"
-    ),
-)
-async def upload_user_photo(
-    request: Request,
-    file: UploadFile = File(..., description="사용자 전신 사진 이미지 파일"),
-    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
-) -> UserPhotoUploadResponse:
-    if not x_user_id or x_user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="로그인이 필요한 서비스입니다.",
-        )
-
-    # 1. MIME 타입 검증
-    if file.content_type and file.content_type.lower() not in ALLOWED_PHOTO_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="지원하지 않는 이미지 형식입니다. (PNG, JPG, WEBP 지원)",
-        )
-
-    # 2. 파일 바이트 읽기 및 용량 검증 (메모리 고갈 방지를 위해 최대 용량 + 1바이트까지만 제한 읽기)
-    content = await file.read(MAX_PHOTO_SIZE_BYTES + 1)
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="업로드된 파일이 비어 있습니다.",
-        )
-
-    if len(content) > MAX_PHOTO_SIZE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="사진 파일 크기는 최대 15MB까지 가능합니다.",
-        )
-
-    # 3. 이미지 무결성 검증 및 RGB PNG 변환
-    try:
-        png_bytes = await run_in_threadpool(to_png_bytes, content)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="유효하지 않은 이미지 파일입니다.",
-        ) from exc
-
-    # 4. 디스크 파일 저장
-    settings = get_settings()
-    photos_dir = settings.get_photos_dir()
-    photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
-    photo_path = photos_dir / photo_filename
-    await run_in_threadpool(photo_path.write_bytes, png_bytes)
-
-    # 5. DB 메타데이터 저장
-    repo = get_repo()
-    photo_record = repo.save_user_photo(
-        user_id=x_user_id,
-        file_path=str(photo_path.resolve()),
-    )
-
-    photo_url = _resolve_photo_url(photo_record["photoId"], request)
-    return UserPhotoUploadResponse(
-        photoId=photo_record["photoId"],
-        userId=photo_record["userId"],
-        photoUrl=photo_url,
-        createdAt=photo_record["createdAt"],
-    )
-
-
 @router.get(
-    "/api/vton/photos/{photoId}",
-    response_class=FileResponse,
-    summary="사용자 전신 사진 조회",
-    description="등록된 사용자 본인의 전신 사진 이미지를 반환합니다.",
-    responses={
-        200: {"content": {"image/png": {}}, "description": "사용자 전신 사진 PNG 이미지"},
-        401: {"description": "인증 필요"},
-        404: {"description": "사진을 찾을 수 없음"},
-    },
+    "/api/vton",
+    response_model=FittingListResponse,
+    summary="사용자 가상 피팅 결과 목록 조회",
+    description="로그인한 사용자의 활성 가상 피팅 결과 목록을 최신순으로 조회합니다.",
 )
-def get_user_photo(
-    photoId: int,
+def list_user_fittings(
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=100, description="조회 건수")] = 20,
+    offset: Annotated[int, Query(ge=0, description="시작 위치")] = 0,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
-) -> FileResponse:
+) -> FittingListResponse:
     if not x_user_id or x_user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -328,21 +277,25 @@ def get_user_photo(
         )
 
     repo = get_repo()
-    photo_info = repo.get_user_photo(photoId)
-    if not photo_info or photo_info.get("userId") != x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="등록된 전신 사진 정보를 찾을 수 없습니다.",
+    raw_items, total_count = repo.get_user_fittings(user_id=x_user_id, limit=limit, offset=offset)
+
+    items: list[FittingSummaryResponse] = []
+    for item in raw_items:
+        user_img_url = _resolve_photo_url(item["photoId"], request) if item.get("photoId") else None
+        items.append(
+            FittingSummaryResponse(
+                fittingId=item["fittingId"],
+                userId=item["userId"],
+                status=item["status"],
+                resultImageUrl=item["resultImageUrl"] if item["status"] == "COMPLETED" else None,
+                userImageUrl=user_img_url,
+                productCount=item.get("productCount", len(item.get("products", []))),
+                products=item.get("products", []),
+                createdAt=item["createdAt"],
+            )
         )
 
-    file_path = Path(photo_info["filePath"])
-    if not file_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="사진 이미지 파일을 찾을 수 없습니다.",
-        )
-
-    return FileResponse(file_path, media_type="image/png")
+    return FittingListResponse(items=items, totalCount=total_count)
 
 
 @router.post(
@@ -351,14 +304,14 @@ def get_user_photo(
     status_code=status.HTTP_202_ACCEPTED,
     summary="가상 피팅 생성 요청 (비동기)",
     description=(
-        "상품 ID 목록을 받아 가상 피팅 작업을 즉시 큐잉(202 Accepted)하고, "
-        "백그라운드에서 AI 이미지 합성을 수행한 후 완료 알림을 발송합니다."
+        "상품 ID 목록과 선택적인 사용자 얼굴 이미지(userImage)를 받아 가상 피팅 작업을 즉시 큐잉(202 Accepted)하고, "
+        "백그라운드에서 AI 이미지 합성을 수행한 후 완료 알림을 발송합니다. "
+        "JSON 요청 또는 multipart/form-data(userImage 파일 첨부) 모두 지원합니다."
     ),
 )
-def request_fitting(
-    req: FittingCreateRequest,
-    background_tasks: BackgroundTasks,
+async def request_fitting(
     request: Request,
+    background_tasks: BackgroundTasks,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
     x_request_id: Annotated[str | None, Header(alias="X-Request-Id")] = None,
 ) -> FittingCreateResponse:
@@ -368,8 +321,89 @@ def request_fitting(
             detail="로그인이 필요한 서비스입니다.",
         )
 
+    content_type = request.headers.get("content-type", "").lower()
+    product_ids: list[int] = []
+    photo_id: int | None = None
+
+    # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds 동시 수신)
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        raw_product_ids = form.get("productIds")
+        if not raw_product_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="productIds가 누락되었습니다.",
+            )
+        try:
+            if isinstance(raw_product_ids, str):
+                cleaned_pids = raw_product_ids.strip()
+                if cleaned_pids.startswith("["):
+                    product_ids = [int(x) for x in json.loads(cleaned_pids)]
+                else:
+                    product_ids = [int(x.strip()) for x in cleaned_pids.split(",") if x.strip()]
+            else:
+                product_ids = [int(x) for x in form.getlist("productIds")]
+        except (ValueError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="productIds는 정수 배열 또는 쉼표 구분 문자열이어야 합니다.",
+            ) from exc
+
+        # userImage 파일이 첨부된 경우 저장
+        user_image_file = form.get("userImage")
+        if user_image_file and hasattr(user_image_file, "read"):
+            content = await user_image_file.read(MAX_PHOTO_SIZE_BYTES + 1)
+            if content:
+                if len(content) > MAX_PHOTO_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="사용자 사진 파일 크기는 최대 15MB까지 가능합니다.",
+                    )
+                try:
+                    png_bytes = await run_in_threadpool(to_png_bytes, content)
+                except Exception as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="유효하지 않은 이미지 파일입니다.",
+                    ) from exc
+
+                settings = get_settings()
+                photos_dir = settings.get_photos_dir()
+                photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
+                photo_path = photos_dir / photo_filename
+                await run_in_threadpool(photo_path.write_bytes, png_bytes)
+
+                repo = get_repo()
+                photo_record = repo.save_user_photo(
+                    user_id=x_user_id,
+                    file_path=str(photo_path.resolve()),
+                )
+                photo_id = photo_record["photoId"]
+    else:
+        # 2. JSON 요청 처리 (기존 스키마 호환)
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="유효하지 않은 JSON 본문입니다.",
+            ) from exc
+
+        try:
+            req = FittingCreateRequest(**body)
+            product_ids = req.productIds
+            photo_id = req.photoId
+        except ValidationError as exc:
+            raise RequestValidationError(exc.errors()) from exc
+
+    if not product_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="최소 하나 이상의 상품 ID를 전달해야 합니다.",
+        )
+
     # 중복 상품 제거
-    unique_product_ids = list(dict.fromkeys(req.productIds))
+    unique_product_ids = list(dict.fromkeys(product_ids))
     if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -377,17 +411,17 @@ def request_fitting(
         )
 
     repo = get_repo()
-    if req.photoId is not None:
-        photo_info = repo.get_user_photo(req.photoId)
+    if photo_id is not None:
+        photo_info = repo.get_user_photo(photo_id)
         if not photo_info or photo_info.get("userId") != x_user_id:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="등록된 전신 사진 정보를 찾을 수 없습니다.",
+                detail="등록된 사용자 사진 정보를 찾을 수 없습니다.",
             )
 
     fitting_id = repo.create_fitting(
         user_id=x_user_id,
-        photo_id=req.photoId,
+        photo_id=photo_id,
         product_ids=unique_product_ids,
     )
 
@@ -398,7 +432,7 @@ def request_fitting(
         _run_background_vton,
         fitting_id=fitting_id,
         user_id=x_user_id,
-        photo_id=req.photoId,
+        photo_id=photo_id,
         product_ids=unique_product_ids,
         result_image_url=result_image_url,
         request_id_header=x_request_id,
@@ -438,7 +472,18 @@ def get_fitting(
             detail="본인의 피팅 결과만 조회할 수 있습니다.",
         )
 
-    return FittingDetailResponse(**detail)
+    user_img_url = _resolve_photo_url(detail["photoId"], None) if detail.get("photoId") else None
+    return FittingDetailResponse(
+        fittingId=detail["fittingId"],
+        userId=detail["userId"],
+        userImageUrl=user_img_url,
+        status=detail["status"],
+        resultImageUrl=detail["resultImageUrl"] if detail["status"] == "COMPLETED" else None,
+        errorMessage=detail["errorMessage"],
+        products=detail["products"],
+        createdAt=detail["createdAt"],
+        updatedAt=detail["updatedAt"],
+    )
 
 
 @router.delete(
