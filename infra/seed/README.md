@@ -11,15 +11,17 @@
 
 ```bash
 set -a && source .env && set +a
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/user_service_seed.sql
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_seed.sql
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_wishlist_seed.sql
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/order_service_seed.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/user_service_seed.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_seed.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/product_service_wishlist_seed.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" < infra/seed/order_service_seed.sql
 ```
 
 - 상품: `GET /api/v1/products/4695999`
 - 찜: `seed01@fitzza.test` / `Fitzza1234` signin 후 `GET /api/v1/wishlists`
-- 주문·리뷰·설문: `seed01@fitzza.test`로 signin 후 주문 항목 `1001`, `1002`로 `POST /api/v1/reviews`·`POST /api/v1/surveys` (seed05의 `1007`은 취소 주문이라 거부돼야 함)
+- 주문·리뷰·설문: `seed01@fitzza.test`로 signin 후 주문 항목 `1001`, `1002`로 `POST /api/v1/reviews`·`POST /api/v1/surveys`
+- 취소 주문 거부: `seed05@fitzza.test`로 signin 후 주문 항목 `1007`로 요청하면 `ORDER_NOT_COMPLETED`(다른 계정으로 요청하면 소유권 오류 `NOT_ORDER_OWNER`가 먼저 난다)
+- `-v ON_ERROR_STOP=1`: SQL 오류가 나면 거기서 멈추고 실패로 끝나게 한다(없으면 오류가 나도 명령이 성공한 것처럼 끝날 수 있다)
 
 `product_service_seed.sql`은 productId=무신사 번호 스키마 기준이다. Java musinsa JSON 시드와 별개 픽스처.
 

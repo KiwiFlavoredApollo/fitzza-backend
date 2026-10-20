@@ -12,10 +12,13 @@
 -- 리뷰·설문은 주문 항목 하나에 한 번씩만 쓸 수 있다.
 --
 -- 실행 순서: user_service_seed.sql → product_service_seed.sql → 이 파일 (order-service를 한 번 띄워 테이블이 생긴 뒤)
---   docker compose exec -T postgres psql -U fitzza -d fitzza < infra/seed/order_service_seed.sql
+--   docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U fitzza -d fitzza < infra/seed/order_service_seed.sql
 -- 여러 번 실행해도 된다. 이미 있는 주문 ID·주문 번호는 건너뛰고, 기존 데이터는 바꾸지 않는다.
 
 BEGIN;
+
+-- 시드를 넣고 시퀀스를 옮기는 동안 실제 주문 저장이 끼어들지 않게 두 테이블의 쓰기를 막는다(읽기는 된다).
+LOCK TABLE order_service.orders, order_service.order_item IN EXCLUSIVE MODE;
 
 INSERT INTO order_service.orders (
   order_id, order_num, user_id, total_price, order_status,
@@ -46,11 +49,14 @@ JOIN order_service.orders o
   ON o.order_id = i.order_id AND o.order_num = 'SEED-ORDER-' || i.order_id
 ON CONFLICT DO NOTHING;
 
--- ID를 직접 넣었으므로, 이후 실제 주문이 시드 ID와 겹치지 않게 시퀀스를 가장 큰 값 뒤로 옮긴다.
-SELECT setval(pg_get_serial_sequence('order_service.orders', 'order_id'),
-              (SELECT max(order_id) FROM order_service.orders));
-SELECT setval(pg_get_serial_sequence('order_service.order_item', 'order_item_id'),
-              (SELECT max(order_item_id) FROM order_service.order_item));
+-- ID를 직접 넣었으므로, 이후 실제 주문이 시드 ID와 겹치지 않게 시퀀스를 가장 큰 ID 뒤로 옮긴다.
+-- 시퀀스가 이미 더 앞서 있으면(롤백된 주문 등) 그대로 둔다. 뒤로 되돌리면 이미 쓴 번호를 다시 줄 수 있다.
+SELECT setval(q.seq, GREATEST((SELECT max(order_id) FROM order_service.orders), COALESCE(s.last_value, 0)))
+FROM (SELECT pg_get_serial_sequence('order_service.orders', 'order_id') AS seq) q
+LEFT JOIN pg_sequences s ON format('%I.%I', s.schemaname, s.sequencename) = q.seq;
+SELECT setval(q.seq, GREATEST((SELECT max(order_item_id) FROM order_service.order_item), COALESCE(s.last_value, 0)))
+FROM (SELECT pg_get_serial_sequence('order_service.order_item', 'order_item_id') AS seq) q
+LEFT JOIN pg_sequences s ON format('%I.%I', s.schemaname, s.sequencename) = q.seq;
 
 COMMIT;
 
