@@ -11,3 +11,6 @@ spring:
     properties:
       hibernate:
         default_schema: user_service
+        # 스키마가 없는 DB(RDS 등)에서도 서비스가 뜰 때 자기 스키마를 만든다. 로컬은 init.sql이 이미 만든다.
+        hbm2ddl:
+          create_namespaces: true
