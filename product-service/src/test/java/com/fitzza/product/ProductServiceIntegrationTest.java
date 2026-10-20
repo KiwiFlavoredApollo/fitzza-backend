@@ -89,6 +89,8 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/products'].get.parameters[?(@.name=='X-User-Id')]").isNotEmpty())
                 .andExpect(jsonPath("$.paths['/products'].get.parameters[?(@.name=='X-Service-Token')]").isNotEmpty())
                 .andExpect(jsonPath("$.components.securitySchemes.serviceToken.name").value("X-Service-Token"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 .andExpect(jsonPath("$.paths['/internal/products']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/internal/v1/products']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/products'].post").doesNotExist())
@@ -102,6 +104,12 @@ class ProductServiceIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/worldcups/history']").exists())
                 .andExpect(jsonPath("$.paths['/worldcups/{worldcupHistoryId}']").exists())
                 .andExpect(jsonPath("$.paths['/internal/worldcups/{worldcupHistoryId}']").doesNotExist());
+
+        mockMvc.perform(get("/v3/api-docs/public"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.paths['/api/wishlists'].get.security[0].bearerAuth").exists())
+                .andExpect(jsonPath("$.paths['/wishlists/check']").doesNotExist());
     }
 
     @Test
