@@ -5,9 +5,6 @@ spring:
     hikari:
       schema: product_service
   jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: update
     properties:
       hibernate:
         default_schema: product_service
