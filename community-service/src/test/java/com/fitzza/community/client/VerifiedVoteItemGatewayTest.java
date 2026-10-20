@@ -106,16 +106,6 @@ class VerifiedVoteItemGatewayTest {
     }
 
     @Test
-    void uploadsKeepTheRequestImageWithoutAnyLookup() {
-        VoteItemSnapshot upload =
-                gateway.resolve(USER_ID, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, REQUEST_IMAGE);
-
-        assertThat(upload).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
-        assertThat(catalog.calls).isZero();
-        verifyNoInteractions(combos);
-    }
-
-    @Test
     void myRecommendedComboUsesItsFirstImageAndTotalPrice() {
         when(combos.findCombo(31L, USER_ID)).thenReturn(Optional.of(new ComboResult(
                 true,
@@ -167,12 +157,9 @@ class VerifiedVoteItemGatewayTest {
     }
 
     @Test
-    void aRecommendationNeedsAnIdAndCannotBeAnImage() {
+    void aRecommendationNeedsAnId() {
         assertRejectedWith(
                 () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, REQUEST_IMAGE),
-                ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(
-                () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.IMAGE, 5L, REQUEST_IMAGE),
                 ErrorCode.INVALID_VOTE_OPTIONS);
         verifyNoInteractions(combos);
     }

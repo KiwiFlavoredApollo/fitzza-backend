@@ -115,8 +115,8 @@ class CommentSupportServiceTest {
     }
 
     private static VoteOption option(Long id, int order) {
-        VoteOption option = VoteOption.of(POST_ID, order, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null,
-                "https://cdn.example.com/" + id + ".png", null, null);
+        VoteOption option = VoteOption.of(POST_ID, order, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, String.valueOf(id),
+                "https://cdn.example.com/" + id + ".png", "상품 " + id, 39000);
         ReflectionTestUtils.setField(option, "id", id);
         return option;
     }

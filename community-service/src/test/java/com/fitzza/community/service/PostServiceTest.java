@@ -108,8 +108,8 @@ class PostServiceTest {
     void createOfAVotePostIsHandedToTheVoteService() {
         PostCreateRequest request = new PostCreateRequest(
                 "뭐가 나을까요", "골라주세요", PostCategory.FASHION, null, null, PostType.VOTE, List.of(
-                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
-                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL)));
+                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, OPTION_IMAGE_URL),
+                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, OPTION_IMAGE_URL)));
         when(voteService.createVotePost(AUTHOR_ID, request)).thenReturn(new PostCreatedResponse(POST_ID));
 
         assertThat(postService.create(AUTHOR_ID, request).postId()).isEqualTo(POST_ID);
@@ -289,7 +289,7 @@ class PostServiceTest {
         Post votePost = Post.createVote(AUTHOR_ID, "제목", "내용", PostCategory.COORDI_QUESTION, Instant.now());
         ReflectionTestUtils.setField(votePost, "id", POST_ID);
         VoteOption option = VoteOption.of(
-                POST_ID, 1, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL, null, null);
+                POST_ID, 1, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "55", IMAGE_URL, "셔츠", 39000);
         ReflectionTestUtils.setField(option, "id", 100L);
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(votePost));
@@ -350,8 +350,8 @@ class PostServiceTest {
         Post post = votePost(POST_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
         List<VoteOptionRequest> options = List.of(
-                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
-                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL));
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, OPTION_IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, OPTION_IMAGE_URL));
         PostUpdateRequest request = new PostUpdateRequest();
         request.setTitle("바뀐 투표");
         request.setOptions(options);

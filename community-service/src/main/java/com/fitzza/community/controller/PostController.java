@@ -98,7 +98,7 @@ public class PostController {
             summary = "게시글 작성(일반·투표)",
             description = "제목 100자, 내용 5000자 이하. 글은 텍스트만 받고 이미지 첨부는 없다. postType을 보내지 않으면 일반 글이다. "
                     + "투표 글은 postType=VOTE와 options(2~4개)를 함께 보낸다. 마감 시각은 서버가 작성 시각 + 6시간으로 정한다. "
-                    + "직접 올린 사진은 source=UPLOAD, itemType=IMAGE로 보내고 itemId는 비운다. 찜한 상품은 source=WISHLIST, "
+                    + "선택지는 찜한 상품이나 내가 받은 AI 추천만 고를 수 있다. 찜한 상품은 source=WISHLIST, "
                     + "itemType=PRODUCT, itemId=상품 ID(숫자)로 보내며, 이미지·상품명·가격은 상품 서비스 값으로 저장한다. "
                     + "AI 추천 코디는 source=AI_RECOMMEND, itemType=COMBO, itemId=코디 ID로 보내며 추천 서비스에서 본인이 받은 "
                     + "코디인지 확인한다. AI 추천 단품(itemType=PRODUCT)은 상품이 있는지만 확인한다. "

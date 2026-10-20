@@ -4,9 +4,7 @@ import com.fitzza.community.client.VoteItemGateway;
 import com.fitzza.community.client.VoteItemGateway.VoteItemSnapshot;
 import com.fitzza.community.domain.Post;
 import com.fitzza.community.domain.Vote;
-import com.fitzza.community.domain.VoteItemType;
 import com.fitzza.community.domain.VoteOption;
-import com.fitzza.community.domain.VoteOptionSource;
 import com.fitzza.community.dto.PostCreateRequest;
 import com.fitzza.community.dto.PostCreatedResponse;
 import com.fitzza.community.dto.VoteCastResponse;
@@ -174,7 +172,7 @@ public class VoteService {
         }
     }
 
-    // 직접 올린 사진은 대상 ID가 없고, 상품·코디는 대상 ID가 있어야 한다. 같은 상품·코디를 두 번 넣을 수 없다.
+    // 선택지는 모두 상품·코디라 대상 ID가 있어야 한다. 같은 상품·코디를 두 번 넣을 수 없다.
     private void requireConsistentOptions(List<VoteOptionRequest> options) {
         if (options == null || options.size() < VoteOption.MIN_OPTIONS || options.size() > VoteOption.MAX_OPTIONS) {
             throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
@@ -188,13 +186,8 @@ public class VoteService {
                     || option.imageUrl().isBlank()) {
                 throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
             }
-            boolean uploaded = option.source() == VoteOptionSource.UPLOAD;
-            boolean image = option.itemType() == VoteItemType.IMAGE;
             Long itemId = option.itemId();
-            if (uploaded != image || (image && itemId != null) || (!image && itemId == null)) {
-                throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
-            }
-            if (!image && !seenItems.add(option.itemType() + ":" + itemId)) {
+            if (itemId == null || !seenItems.add(option.itemType() + ":" + itemId)) {
                 throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
             }
         }

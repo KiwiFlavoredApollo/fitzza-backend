@@ -10,7 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
-// 같은 상품·코디를 한 투표에 두 번 넣지 못하게 한다. 직접 올린 사진은 item_id가 NULL이라 제약에 걸리지 않는다.
+// 같은 상품·코디를 한 투표에 두 번 넣지 못하게 한다.
 @Entity
 @Table(
         name = "vote_options",

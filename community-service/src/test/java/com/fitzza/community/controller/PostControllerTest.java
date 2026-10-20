@@ -50,7 +50,8 @@ class PostControllerTest {
     private static final String TWO_OPTIONS = "["
             + "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55,"
             + "\"imageUrl\":\"https://cdn.example.com/a.png\"},"
-            + "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/b.png\"}"
+            + "{\"source\":\"AI_RECOMMEND\",\"itemType\":\"COMBO\",\"itemId\":31,"
+            + "\"imageUrl\":\"https://cdn.example.com/b.png\"}"
             + "]";
 
     private final PostService postService = mock(PostService.class);
@@ -227,21 +228,27 @@ class PostControllerTest {
         assertThat(captor.getValue().options()).hasSize(2);
         assertThat(captor.getValue().options().get(0).source()).isEqualTo(VoteOptionSource.WISHLIST);
         assertThat(captor.getValue().options().get(0).itemId()).isEqualTo(55L);
-        assertThat(captor.getValue().options().get(1).itemType()).isEqualTo(VoteItemType.IMAGE);
-        assertThat(captor.getValue().options().get(1).itemId()).isNull();
+        assertThat(captor.getValue().options().get(1).itemType()).isEqualTo(VoteItemType.COMBO);
+        assertThat(captor.getValue().options().get(1).itemId()).isEqualTo(31L);
     }
 
     @Test
     void createRejectsOptionsThatDoNotMatchThePostType() throws Exception {
-        String oneOption = "[{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\","
+        String oneOption = "[{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55,"
                 + "\"imageUrl\":\"https://cdn.example.com/b.png\"}]";
-        String missingImage = "[{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\"},"
+        String missingImage = "[{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55},"
+                + "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":56,"
+                + "\"imageUrl\":\"https://cdn.example.com/b.png\"}]";
+        // 사용자가 직접 올린 사진(UPLOAD·IMAGE)은 더 이상 받지 않는다.
+        String uploaded = "[{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\","
+                + "\"imageUrl\":\"https://cdn.example.com/a.png\"},"
                 + "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/b.png\"}]";
         String normal = "\"title\":\"제목\",\"content\":\"내용\",\"category\":\"DAILY\"";
 
         for (String body : List.of(
                 votePostBody(oneOption),
                 votePostBody(missingImage),
+                votePostBody(uploaded),
                 "{" + normal + ",\"postType\":\"VOTE\"}",
                 "{" + normal + ",\"options\":" + TWO_OPTIONS + "}",
                 "{" + normal + ",\"postType\":\"NORMAL\",\"options\":" + TWO_OPTIONS + "}",
@@ -310,7 +317,8 @@ class PostControllerTest {
 
     @Test
     void updatePassesVoteOptionsAndChecksTheirCount() throws Exception {
-        String option = "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/a.png\"}";
+        String option = "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55,"
+                + "\"imageUrl\":\"https://cdn.example.com/a.png\"}";
         mockMvc.perform(patch(POSTS + "/3")
                         .header(USER_ID_HEADER, "7")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -345,7 +353,8 @@ class PostControllerTest {
         doThrow(new CommunityApiException(ErrorCode.VOTE_OPTIONS_LOCKED))
                 .when(postService)
                 .update(eq(7L), eq(3L), any(PostUpdateRequest.class));
-        String option = "{\"source\":\"UPLOAD\",\"itemType\":\"IMAGE\",\"imageUrl\":\"https://cdn.example.com/a.png\"}";
+        String option = "{\"source\":\"WISHLIST\",\"itemType\":\"PRODUCT\",\"itemId\":55,"
+                + "\"imageUrl\":\"https://cdn.example.com/a.png\"}";
 
         mockMvc.perform(patch(POSTS + "/3")
                         .header(USER_ID_HEADER, "7")

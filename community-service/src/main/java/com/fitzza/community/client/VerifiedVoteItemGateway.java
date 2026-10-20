@@ -15,7 +15,6 @@ import org.springframework.web.client.ResourceAccessException;
 // 찜 출처는 상품 서비스에서 본인이 찜한 상품인지 확인하고, 이미지·상품명·가격을 상품 서비스 값으로 채운다.
 // AI 추천 코디는 추천 서비스에서 본인이 받은 코디인지 확인하고, 첫 상품 이미지와 총 가격을 채운다.
 // AI 추천 단품은 받은 추천인지 확인할 API가 없어 상품이 있는지만 확인하고 상품 서비스 값으로 채운다.
-// 직접 올린 사진은 요청에 온 이미지 주소를 그대로 쓴다.
 @Component
 public class VerifiedVoteItemGateway implements VoteItemGateway {
 
@@ -34,7 +33,6 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
     public VoteItemSnapshot resolve(
             Long userId, VoteOptionSource source, VoteItemType itemType, Long itemId, String imageUrl) {
         return switch (source) {
-            case UPLOAD -> new VoteItemSnapshot(imageUrl, null, null);
             case WISHLIST -> resolveWishlisted(userId, itemType, itemId, imageUrl);
             case AI_RECOMMEND -> resolveRecommended(userId, itemType, itemId, imageUrl);
         };
@@ -66,7 +64,6 @@ public class VerifiedVoteItemGateway implements VoteItemGateway {
         return switch (itemType) {
             case COMBO -> resolveRecommendedCombo(userId, itemId, imageUrl);
             case PRODUCT -> resolveRecommendedProduct(itemId, imageUrl);
-            case IMAGE -> throw new CommunityApiException(ErrorCode.INVALID_VOTE_OPTIONS);
         };
     }
 

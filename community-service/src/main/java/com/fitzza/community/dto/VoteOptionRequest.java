@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
-// 직접 올린 사진(UPLOAD·IMAGE)은 itemId 없이 보낸다. 상품·코디는 숫자 ID를 보낸다.
+// 선택지는 찜한 상품이나 내가 받은 AI 추천만 고를 수 있고, 상품·코디의 숫자 ID를 itemId로 보낸다. 사용자가 직접 올린 사진은 받지 않는다.
 public record VoteOptionRequest(
         @NotNull(message = "선택지 출처를 골라주세요.") VoteOptionSource source,
         @NotNull(message = "선택지 종류를 골라주세요.") VoteItemType itemType,

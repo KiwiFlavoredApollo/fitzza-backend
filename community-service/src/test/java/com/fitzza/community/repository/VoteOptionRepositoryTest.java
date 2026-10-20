@@ -53,15 +53,6 @@ class VoteOptionRepositoryTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
-    // 직접 올린 사진은 item_id가 비어 있어 같은 투표에 여러 장 넣을 수 있다.
-    @Test
-    void severalUploadedPhotosFitInOneVote() {
-        voteOptionRepository.saveAndFlush(upload(POST_ID, 1));
-        voteOptionRepository.saveAndFlush(upload(POST_ID, 2));
-
-        assertThat(voteOptionRepository.findByPostIdOrderByDisplayOrderAsc(POST_ID)).hasSize(2);
-    }
-
     // 선택지를 통째로 바꿀 때 같은 표시 순서·같은 상품을 다시 넣어도 고유 제약에 걸리지 않아야 한다.
     @Test
     void optionsOfAPostCanBeDeletedAndWrittenAgain() {
@@ -93,16 +84,18 @@ class VoteOptionRepositoryTest {
 
     private static VoteOption option(Long postId, int displayOrder, String imageUrl) {
         return VoteOption.of(
-                postId, displayOrder, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, imageUrl, null, null);
+                postId,
+                displayOrder,
+                VoteOptionSource.WISHLIST,
+                VoteItemType.PRODUCT,
+                String.valueOf(displayOrder),
+                imageUrl,
+                "셔츠",
+                39000);
     }
 
     private static VoteOption product(Long postId, int displayOrder, String itemId) {
         return VoteOption.of(
                 postId, displayOrder, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, itemId, IMAGE_URL, "셔츠", 39000);
-    }
-
-    private static VoteOption upload(Long postId, int displayOrder) {
-        return VoteOption.of(
-                postId, displayOrder, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL, null, null);
     }
 }
