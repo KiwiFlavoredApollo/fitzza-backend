@@ -15,7 +15,6 @@ x-java-environment: &java-environment
   AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
   AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
   AWS_ENDPOINT_URL: http://localstack:4566
-  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
 
 x-domain-dependencies: &domain-dependencies
   config-service:
@@ -86,6 +85,9 @@ services:
       dockerfile: Dockerfile.java
       args: { MODULE: config-service }
     environment:
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
+      JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
@@ -113,8 +115,6 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: user-service } }
     environment:
       <<: *java-environment
-      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
-      JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
       REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
     depends_on: *domain-dependencies
     healthcheck:

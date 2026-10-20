@@ -117,8 +117,6 @@ springdoc:
         url: /api-docs/notification-service
       - name: review-service
         url: /api-docs/review-service
-jwt:
-  secret: ${JWT_SECRET}
 eureka:
   client:
     service-url:

@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -15,6 +16,9 @@ import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+    "JWT_SECRET=test-only-shared-jwt-secret-at-least-32-bytes",
+    "JWT_EXPIRATION_SECONDS=600",
+    "JWT_REFRESH_EXPIRATION_SECONDS=86400",
     "COMMUNITY_SERVICE_TOKEN=test-community-token-for-config-server",
     "ORDER_SERVICE_TOKEN=test-order-token-for-config-server",
     "REVIEW_SERVICE_TOKEN=test-review-token-for-config-server",
@@ -52,6 +56,23 @@ class ServiceTokenConfigurationTest {
 
         assertThat(client.getProperty("fitzza.service-tokens.recommendation")).isEmpty();
         assertThat(client.getProperty("fitzza.service-tokens.vton")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"user-service", "gateway-service"})
+    void clientResolvesSharedJwtSecretWithoutLocalEnvironmentVariable(String application) {
+        StandardEnvironment client = fetchConfiguration(application);
+
+        assertThat(client.getProperty("jwt.secret"))
+                .isEqualTo("test-only-shared-jwt-secret-at-least-32-bytes");
+    }
+
+    @Test
+    void clientResolvesJwtExpirationOverridesWithoutLocalEnvironmentVariables() {
+        StandardEnvironment client = fetchConfiguration("user-service");
+
+        assertThat(client.getProperty("jwt.expiration-seconds", Integer.class)).isEqualTo(600);
+        assertThat(client.getProperty("jwt.refresh-expiration-seconds", Integer.class)).isEqualTo(86400);
     }
 
     private StandardEnvironment fetchConfiguration(String application) {
