@@ -6,7 +6,7 @@ import com.fitzza.product.product.entity.Gender;
 import com.fitzza.product.product.entity.ProductStatus;
 import com.fitzza.product.product.entity.Season;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -41,8 +41,8 @@ public record ProductDetailResponse(
         @Schema(description = "사이즈 안내와 사이즈별 실측값. 정보가 없으면 null") SizeGuideResponse sizeGuide,
         @Schema(description = "옵션 목록") List<ProductDetailOptionResponse> options,
         @Schema(description = "판매 상태") ProductStatus status,
-        @Schema(description = "등록 일시") LocalDateTime createdAt,
-        @Schema(description = "수정 일시") LocalDateTime updatedAt,
+        @Schema(description = "등록 일시") Instant createdAt,
+        @Schema(description = "수정 일시") Instant updatedAt,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         @Schema(description = "요청 사용자의 찜 여부. 로그인하지 않으면 응답에 포함하지 않는다.") Boolean wished) {
 }

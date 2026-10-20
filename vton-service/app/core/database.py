@@ -68,6 +68,38 @@ class VtonRepository:
         if conn is not self._persistent_conn:
             conn.close()
 
+    @staticmethod
+    def _now_utc() -> datetime:
+        return datetime.now(timezone.utc)
+
+    def _now_for_db(self):
+        now = self._now_utc()
+        if self._use_postgres:
+            return now
+        return now.isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def _to_api_utc(value) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        text = str(value).strip()
+        if not text:
+            return None
+        if text.endswith("+00:00"):
+            return text[:-6] + "Z"
+        if text.endswith("Z") or "+" in text[10:]:
+            return text
+        try:
+            dt = datetime.fromisoformat(text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        except ValueError:
+            return text
+
     def _init_schema(self) -> None:
         if self._use_postgres:
             schema = self.postgres_schema
@@ -85,9 +117,9 @@ class VtonRepository:
                                 result_image_url TEXT,
                                 error_message TEXT,
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                                created_at TEXT NOT NULL,
-                                updated_at TEXT NOT NULL
-                            );\n
+                                created_at TIMESTAMPTZ NOT NULL,
+                                updated_at TIMESTAMPTZ NOT NULL
+                            );
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
@@ -111,12 +143,24 @@ class VtonRepository:
                                 user_id BIGINT NOT NULL,
                                 file_path TEXT NOT NULL,
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
-                                created_at TEXT NOT NULL
+                                created_at TIMESTAMPTZ NOT NULL
                             );
                             CREATE INDEX IF NOT EXISTS idx_user_photos_user
                                 ON {schema}.user_photos (user_id, photo_id DESC);
                             """
                         )
+                        for table, column in (
+                            ("fittings", "created_at"),
+                            ("fittings", "updated_at"),
+                            ("user_photos", "created_at"),
+                        ):
+                            cur.execute(
+                                f"""
+                                ALTER TABLE {schema}.{table}
+                                ALTER COLUMN {column} TYPE TIMESTAMPTZ
+                                USING {column}::timestamptz
+                                """
+                            )
                         conn.commit()
         else:
             with self._lock:
@@ -197,7 +241,7 @@ class VtonRepository:
         photo_id: int | None,
         product_ids: list[int],
     ) -> int:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_for_db()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -293,7 +337,7 @@ class VtonRepository:
         fitting_id: int,
         result_image_url: str,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_for_db()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -334,7 +378,7 @@ class VtonRepository:
         fitting_id: int,
         error_message: str,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_for_db()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -375,7 +419,7 @@ class VtonRepository:
         [소프트 삭제] 본인의 가상 피팅 기록을 is_deleted = TRUE로 마킹합니다.
         성공 시 True, 이미 삭제되었거나 대상이 없으면 False를 반환합니다.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_for_db()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -502,13 +546,13 @@ class VtonRepository:
             "errorMessage": fitting_row["error_message"],
             "isDeleted": bool(fitting_row.get("is_deleted", False)),
             "products": products,
-            "createdAt": fitting_row["created_at"],
-            "updatedAt": fitting_row["updated_at"],
+            "createdAt": self._to_api_utc(fitting_row["created_at"]),
+            "updatedAt": self._to_api_utc(fitting_row["updated_at"]),
         }
 
     def save_user_photo(self, user_id: int, file_path: str) -> dict[str, Any]:
         """사용자가 업로드한 전신 사진 메타데이터를 저장하고 사진 정보 딕셔너리를 반환합니다."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._now_for_db()
         if self._use_postgres:
             schema = self.postgres_schema
             with self._lock:
@@ -528,7 +572,7 @@ class VtonRepository:
                             "photoId": int(row["photo_id"]),
                             "userId": user_id,
                             "filePath": file_path,
-                            "createdAt": str(row["created_at"]),
+                            "createdAt": self._to_api_utc(row["created_at"]),
                         }
         else:
             with self._lock:
@@ -548,7 +592,7 @@ class VtonRepository:
                         "photoId": photo_id,
                         "userId": user_id,
                         "filePath": file_path,
-                        "createdAt": now,
+                        "createdAt": self._to_api_utc(now),
                     }
                 finally:
                     self._close_sqlite_if_transient(conn)
@@ -575,7 +619,7 @@ class VtonRepository:
                             "photoId": int(row["photo_id"]),
                             "userId": int(row["user_id"]),
                             "filePath": str(row["file_path"]),
-                            "createdAt": str(row["created_at"]),
+                            "createdAt": self._to_api_utc(row["created_at"]),
                         }
         else:
             with self._lock:
@@ -597,7 +641,7 @@ class VtonRepository:
                         "photoId": int(row["photo_id"]),
                         "userId": int(row["user_id"]),
                         "filePath": str(row["file_path"]),
-                        "createdAt": str(row["created_at"]),
+                        "createdAt": self._to_api_utc(row["created_at"]),
                     }
                 finally:
                     self._close_sqlite_if_transient(conn)

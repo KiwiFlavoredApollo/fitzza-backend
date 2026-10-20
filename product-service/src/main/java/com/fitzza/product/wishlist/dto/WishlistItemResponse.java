@@ -3,7 +3,7 @@ package com.fitzza.product.wishlist.dto;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.wishlist.entity.WishlistEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Schema(description = "찜 목록 항목")
 public record WishlistItemResponse(
@@ -13,7 +13,7 @@ public record WishlistItemResponse(
         @Schema(description = "가격(원)", example = "39000") Integer price,
         @Schema(description = "대표 이미지 URL") String imageUrl,
         @Schema(description = "대분류 카테고리 코드", example = "001") String categoryL1,
-        @Schema(description = "찜한 일시") LocalDateTime createdAt) {
+        @Schema(description = "찜한 일시") Instant createdAt) {
 
     public static WishlistItemResponse of(WishlistEntity wishlist, ProductEntity product) {
         return new WishlistItemResponse(

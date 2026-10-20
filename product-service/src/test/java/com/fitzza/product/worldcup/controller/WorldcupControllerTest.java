@@ -18,7 +18,7 @@ import com.fitzza.product.worldcup.dto.WorldcupCreateRequest;
 import com.fitzza.product.worldcup.dto.WorldcupInternalResponse;
 import com.fitzza.product.worldcup.dto.WorldcupResultResponse;
 import com.fitzza.product.worldcup.service.WorldcupService;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -43,7 +43,7 @@ class WorldcupControllerTest {
     @Test
     void saveWorldcupReturnsCreated() throws Exception {
         when(worldcupService.saveWorldcup(eq(1L), any(WorldcupCreateRequest.class)))
-                .thenReturn(new WorldcupResultResponse(10L, WINNER, LocalDateTime.of(2026, 10, 7, 12, 0)));
+                .thenReturn(new WorldcupResultResponse(10L, WINNER, Instant.parse("2026-10-07T12:00:00Z")));
 
         mockMvc.perform(post("/api/worldcups")
                         .header(ApiHeaders.USER_ID, "1")
