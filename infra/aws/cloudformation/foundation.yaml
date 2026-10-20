@@ -120,7 +120,9 @@ Mappings:
     ReviewService: { Name: review-service }
     NotificationService: { Name: notification-service }
     RecommendationService: { Name: recommendation-service }
-    VirtualTryOnService: { Name: vton-service }
+    # Preserve the existing repository and its immutable image history during the rename.
+    VirtualTryOnService: { Name: virtual-tryon-service }
+    VtonService: { Name: vton-service }
     Crawler: { Name: crawler }
     FashionClip: { Name: fashion-clip }
 
@@ -1221,6 +1223,7 @@ Resources:
       - NotificationService
       - RecommendationService
       - VirtualTryOnService
+      - VtonService
       - Crawler
       - FashionClip
     - '${RepositoryIdentifier}Repository':
