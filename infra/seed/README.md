@@ -20,5 +20,6 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < inf
 
 `product_service_seed.sql`은 `product_id`=무신사 번호, `option_id`=DB IDENTITY(`source_option_id`에 무신사 옵션 번호) 기준이다. Java musinsa JSON 시드와 별개 픽스처.
 
-재실행 시 `product_service_seed.sql` cleanup은 `product_id=4695999` 범위만 지운다.
-다만 해당 상품의 wishlist·worldcup_history는 사용자 구분 없이 함께 삭제되므로, QA DB에서는 이 상품 관련 찜/월드컵 기록이 초기화된다.
+재실행 시 이미지·실측·wishlist·worldcup은 `product_id=4695999` 범위로 갱신하고,
+기존 `source_option_id`의 `option_id`는 보존한다(장바구니·주문에 묶인 옵션 ID 유지).
+wishlist·worldcup_history는 해당 상품 기준 사용자 구분 없이 삭제되므로 QA에서는 이 상품 관련 기록이 초기화된다.

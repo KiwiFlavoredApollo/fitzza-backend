@@ -3,23 +3,21 @@
 -- 전제: product_id=무신사 번호, option_id=DB IDENTITY(무신사 옵션 번호는 source_option_id).
 -- 실행 순서: product-service 기동으로 테이블 생성 후
 --   docker compose exec -T postgres psql -U fitzza -d fitzza < infra/seed/product_service_seed.sql
--- 재실행 가능: product_id=4695999 관련 행만 먼저 지운다.
--- 주의: 아래 wishlist/worldcup_history DELETE는 해당 상품에 대한 모든 사용자 데이터를 지운다.
+-- 재실행: 상품·이미지·실측은 갱신하고, 기존 source_option_id의 option_id는 보존한다.
+-- 주의: wishlist/worldcup_history DELETE는 해당 상품에 대한 모든 사용자 데이터를 지운다.
 
 BEGIN;
 
--- cleanup product_id=4695999 (다른 상품 옵션은 건드리지 않음)
+-- cleanup (옵션 행은 지우지 않아 option_id를 보존한다)
 DELETE FROM product_service.option_measurement
 WHERE option_id IN (
   SELECT option_id FROM product_service.product_option
   WHERE product_id = 4695999
 );
-DELETE FROM product_service.product_option WHERE product_id = 4695999;
 DELETE FROM product_service.product_image WHERE product_id = 4695999;
 DELETE FROM product_service.product_size_guide WHERE product_id = 4695999;
 DELETE FROM product_service.wishlist WHERE item_type = 'PRODUCT' AND item_id = '4695999';
 DELETE FROM product_service.worldcup_history WHERE winner_product_id = 4695999;
-DELETE FROM product_service.product WHERE product_id = 4695999;
 
 INSERT INTO product_service.category (category_code, category_name, parent_code, depth) VALUES
   ('001', '상의', NULL, 1)
@@ -49,7 +47,26 @@ INSERT INTO product_service.product (
   27890, 39900, 30, 'SUMMER',
   '{"핏": ["루즈"], "촉감": ["보통"], "신축성": ["보통"], "비침": ["보통"], "두께": ["보통"], "계절": ["봄", "여름", "가을"]}'::jsonb, 'https://image.msscdn.net/images/goods_img/20250103/4695999/4695999_17510204984958_500.jpg', 'ON_SALE',
   NOW(), NOW()
-);
+)
+ON CONFLICT (product_id) DO UPDATE SET
+  brand_id = EXCLUDED.brand_id,
+  source = EXCLUDED.source,
+  source_url = EXCLUDED.source_url,
+  product_name = EXCLUDED.product_name,
+  product_name_en = EXCLUDED.product_name_en,
+  style_no = EXCLUDED.style_no,
+  gender = EXCLUDED.gender,
+  category_1 = EXCLUDED.category_1,
+  category_2 = EXCLUDED.category_2,
+  subcategory = EXCLUDED.subcategory,
+  price = EXCLUDED.price,
+  normal_price = EXCLUDED.normal_price,
+  discount_rate = EXCLUDED.discount_rate,
+  season = EXCLUDED.season,
+  features = EXCLUDED.features,
+  image_url = EXCLUDED.image_url,
+  status = EXCLUDED.status,
+  updated_at = EXCLUDED.updated_at;
 
 INSERT INTO product_service.product_size_guide (product_id, type_name, unit, description, guide_image_url) VALUES (
   4695999, '셔츠', 'cm', '측정 방법에 따라 약 2cm 정도의 오차가 있을 수 있습니다.', 'https://image.musinsa.com/images/size_type/detail_img/2026090711285100000081122.png'
@@ -63,7 +80,7 @@ INSERT INTO product_service.product_image (product_id, image_url, sequence) VALU
 INSERT INTO product_service.product_image (product_id, image_url, sequence) VALUES (4695999, 'https://image.msscdn.net/images/prd_img/20250103/4695999/detail_4695999_17453041759966_500.jpg', 5);
 INSERT INTO product_service.product_image (product_id, image_url, sequence) VALUES (4695999, 'https://image.msscdn.net/images/prd_img/20250103/4695999/detail_4695999_17453041770919_500.jpg', 6);
 
--- option_id는 IDENTITY 자동발급. 무신사 옵션 번호는 source_option_id에만 넣는다.
+-- 기존 source_option_id는 option_id 유지. 신규만 IDENTITY 발급.
 INSERT INTO product_service.product_option (
   product_id, source_option_id, managed_code, color, size, additional_price, image_url
 ) VALUES
@@ -71,7 +88,14 @@ INSERT INTO product_service.product_option (
   (4695999, 21092423, 'M', NULL, 'M', 0, NULL),
   (4695999, 21092424, 'L', NULL, 'L', 0, NULL),
   (4695999, 21092425, 'XL', NULL, 'XL', 0, NULL),
-  (4695999, 21092426, '2XL', NULL, '2XL', 0, NULL);
+  (4695999, 21092426, '2XL', NULL, '2XL', 0, NULL)
+ON CONFLICT (source_option_id) DO UPDATE SET
+  product_id = EXCLUDED.product_id,
+  managed_code = EXCLUDED.managed_code,
+  color = EXCLUDED.color,
+  size = EXCLUDED.size,
+  additional_price = EXCLUDED.additional_price,
+  image_url = EXCLUDED.image_url;
 
 INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec)
 SELECT o.option_id, v.size_label, v.sequence, v.measurement_spec::jsonb
