@@ -54,6 +54,8 @@ Qdrant deployment, collection, persistence, and snapshot recovery procedures are
 
 ## Redis updates
 
+The Redis PVC explicitly uses the existing `fitzza-gp3-retain` StorageClass. The cluster has no default StorageClass, so omitting it leaves a new PVC pending. Applying the Redis manifest provisions a separate 5 GiB EBS volume; this local configuration change does not create one. The class retains volumes after PVC deletion, so review retained Redis volumes during teardown.
+
 Redis uses one replica with a `Recreate` update strategy and a shared `ReadWriteOnce` data volume. During an update, the existing Pod terminates before its replacement starts, so Redis is unavailable until the replacement is ready. Schedule Redis updates in a maintenance window and account for failures in Redis-dependent requests during this interruption.
 
 After applying the update, wait for `kubectl -n fitzza rollout status deployment/redis --timeout=300s` to succeed and verify the application health endpoints before routing production traffic again.
