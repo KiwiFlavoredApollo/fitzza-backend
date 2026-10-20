@@ -611,3 +611,23 @@ def test_background_vton_fails_when_user_photo_file_missing() -> None:
         mock_notif_client.send_fitting_failed.assert_called_once()
 
 
+def test_clothing_transfer_exceeds_max_images() -> None:
+    client = TestClient(app)
+    img_bytes = _create_sample_png()
+    files = [
+        ("clothing_images", (f"item_{i}.png", img_bytes, "image/png"))
+        for i in range(6)
+    ]
+    resp = client.post(
+        "/api/vton/clothing-transfer",
+        data={"categories_json": '["상의"]'},
+        files=files,
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["status"] == 400
+    assert body["code"] == "BAD_REQUEST"
+    assert "최대 5개" in body["message"]
+
+
+

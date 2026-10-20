@@ -125,21 +125,56 @@ class RecommendationRepository:
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
 
-                            ALTER TABLE {schema}.recommendation_requests
-                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
-                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                            DO $$
+                            BEGIN
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'recommendation_requests'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.recommendation_requests
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
 
-                            ALTER TABLE {schema}.recommendation_combos
-                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
-                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'recommendation_combos'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.recommendation_combos
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
 
-                            ALTER TABLE {schema}.user_size_preferences
-                                ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
-                                ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'user_size_preferences'
+                                      AND column_name = 'updated_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.user_size_preferences
+                                        ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
+                                        ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
 
-                            ALTER TABLE {schema}.size_feedback_logs
-                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
-                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'size_feedback_logs'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.size_feedback_logs
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+                            END $$;
                             """
                         )
                     conn.commit()

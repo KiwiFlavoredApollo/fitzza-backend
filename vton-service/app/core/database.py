@@ -87,12 +87,33 @@ class VtonRepository:
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                            );\n
-                            ALTER TABLE {schema}.fittings
-                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
-                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP,
-                                ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
-                                ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                            );
+                            DO $$
+                            BEGIN
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'fittings'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.fittings
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'fittings'
+                                      AND column_name = 'updated_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.fittings
+                                        ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at::timestamptz,
+                                        ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+                            END $$;
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
@@ -118,9 +139,21 @@ class VtonRepository:
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
-                            ALTER TABLE {schema}.user_photos
-                                ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
-                                ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+
+                            DO $$
+                            BEGIN
+                                IF EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'user_photos'
+                                      AND column_name = 'created_at'
+                                      AND data_type IN ('text', 'character varying')
+                                ) THEN
+                                    ALTER TABLE {schema}.user_photos
+                                        ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
+                                        ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+                                END IF;
+                            END $$;
                             CREATE INDEX IF NOT EXISTS idx_user_photos_user
                                 ON {schema}.user_photos (user_id, photo_id DESC);
                             """
