@@ -82,7 +82,7 @@ class RecommendationRepository:
                                 tpo_summary TEXT,
                                 items_json TEXT NOT NULL DEFAULT '[]',
                                 message TEXT,
-                                created_at TIMESTAMPTZ NOT NULL
+                                created_at TEXT NOT NULL
                             );
 
                             CREATE INDEX IF NOT EXISTS idx_rec_requests_user_created
@@ -111,7 +111,7 @@ class RecommendationRepository:
                                 fit_type VARCHAR(50) NOT NULL DEFAULT '',
                                 preference_spec_json TEXT NOT NULL,
                                 sample_count INTEGER NOT NULL DEFAULT 1,
-                                updated_at TIMESTAMPTZ NOT NULL,
+                                updated_at TEXT NOT NULL,
                                 PRIMARY KEY (user_id, subcategory)
                             );
 
@@ -121,23 +121,10 @@ class RecommendationRepository:
                                 product_id BIGINT NOT NULL,
                                 option_id BIGINT NOT NULL,
                                 size_feedback VARCHAR(16) NOT NULL,
-                                created_at TIMESTAMPTZ NOT NULL
+                                created_at TEXT NOT NULL
                             );
                             """
                         )
-                        # 기존 TEXT 컬럼을 TIMESTAMPTZ로 승격 (이미 TIMESTAMPTZ면 동일 유지)
-                        for table, column in (
-                            ("recommendation_requests", "created_at"),
-                            ("user_size_preferences", "updated_at"),
-                            ("size_feedback_logs", "created_at"),
-                        ):
-                            cur.execute(
-                                f"""
-                                ALTER TABLE {schema}.{table}
-                                ALTER COLUMN {column} TYPE TIMESTAMPTZ
-                                USING {column}::timestamptz
-                                """
-                            )
                     conn.commit()
             return
 
@@ -203,41 +190,11 @@ class RecommendationRepository:
                 self._close_sqlite_if_transient(conn)
 
     @staticmethod
-    def _now_utc() -> datetime:
-        return datetime.now(timezone.utc)
-
-    def _now_for_db(self) -> datetime | str:
-        now = self._now_utc()
-        if self._use_postgres:
-            return now
-        return now.isoformat().replace("+00:00", "Z")
-
-    @staticmethod
-    def _to_api_utc(value: Any) -> str | None:
-        """API 응답 시간을 UTC Z 표기로 통일한다."""
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        text = str(value).strip()
-        if not text:
-            return None
-        if text.endswith("+00:00"):
-            return text[:-6] + "Z"
-        if text.endswith("Z") or "+" in text[10:] or text.endswith("-00:00"):
-            return text
-        # timezone 없는 ISO는 UTC로 간주
-        try:
-            dt = datetime.fromisoformat(text)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-        except ValueError:
-            return text
+    def _now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()
 
     def create_request(self, user_id: int, query_text: str) -> int:
-        now = self._now_for_db()
+        now = self._now_iso()
         if self._use_postgres:
             with self._lock:
                 with self._get_pg_connection() as conn:
@@ -578,7 +535,7 @@ class RecommendationRepository:
             "items": json.loads(row["items_json"] or "[]"),
             "combos": combos,
             "message": row["message"],
-            "createdAt": self._to_api_utc(row["created_at"]),
+            "createdAt": row["created_at"],
         }
 
     def list_user_requests(
@@ -656,7 +613,7 @@ class RecommendationRepository:
                 "requestId": int(r["request_id"]),
                 "queryText": r["query_text"],
                 "tpoSummary": r["tpo_summary"],
-                "createdAt": RecommendationRepository._to_api_utc(r["created_at"]),
+                "createdAt": r["created_at"],
             }
             for r in rows
         ]
@@ -730,7 +687,7 @@ class RecommendationRepository:
         fit_type: str | None = None,
         purchased_spec: dict[str, float] | None = None,
     ) -> None:
-        now = self._now_for_db()
+        now = self._now_iso()
         offset = 0.0
         if size_feedback == "SMALL":
             offset = 1.5
