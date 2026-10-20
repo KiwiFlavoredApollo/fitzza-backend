@@ -82,7 +82,7 @@ class RecommendationRepository:
                                 tpo_summary TEXT,
                                 items_json TEXT NOT NULL DEFAULT '[]',
                                 message TEXT,
-                                created_at TEXT NOT NULL
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
 
                             CREATE INDEX IF NOT EXISTS idx_rec_requests_user_created
@@ -99,7 +99,8 @@ class RecommendationRepository:
                                 harmony_score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
                                 feedback_summary TEXT NOT NULL DEFAULT '',
                                 budget_exceeded INTEGER NOT NULL DEFAULT 0,
-                                items_json TEXT NOT NULL DEFAULT '[]'
+                                items_json TEXT NOT NULL DEFAULT '[]',
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
 
                             CREATE INDEX IF NOT EXISTS idx_rec_combos_request
@@ -111,7 +112,7 @@ class RecommendationRepository:
                                 fit_type VARCHAR(50) NOT NULL DEFAULT '',
                                 preference_spec_json TEXT NOT NULL,
                                 sample_count INTEGER NOT NULL DEFAULT 1,
-                                updated_at TEXT NOT NULL,
+                                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                 PRIMARY KEY (user_id, subcategory)
                             );
 
@@ -121,7 +122,7 @@ class RecommendationRepository:
                                 product_id BIGINT NOT NULL,
                                 option_id BIGINT NOT NULL,
                                 size_feedback VARCHAR(16) NOT NULL,
-                                created_at TEXT NOT NULL
+                                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
                             """
                         )
@@ -190,8 +191,27 @@ class RecommendationRepository:
                 self._close_sqlite_if_transient(conn)
 
     @staticmethod
+    def _format_utc_timestamp(val: Any) -> str:
+        if val is None:
+            return ""
+        if isinstance(val, datetime):
+            if val.tzinfo is None:
+                val = val.replace(tzinfo=timezone.utc)
+            else:
+                val = val.astimezone(timezone.utc)
+            return val.strftime("%Y-%m-%dT%H:%M:%SZ")
+        s = str(val).strip()
+        if not s:
+            return ""
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError:
+            return s
+
+    @staticmethod
     def _now_iso() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def create_request(self, user_id: int, query_text: str) -> int:
         now = self._now_iso()
@@ -535,7 +555,7 @@ class RecommendationRepository:
             "items": json.loads(row["items_json"] or "[]"),
             "combos": combos,
             "message": row["message"],
-            "createdAt": row["created_at"],
+            "createdAt": RecommendationRepository._format_utc_timestamp(row["created_at"]),
         }
 
     def list_user_requests(
@@ -613,7 +633,7 @@ class RecommendationRepository:
                 "requestId": int(r["request_id"]),
                 "queryText": r["query_text"],
                 "tpoSummary": r["tpo_summary"],
-                "createdAt": r["created_at"],
+                "createdAt": RecommendationRepository._format_utc_timestamp(r["created_at"]),
             }
             for r in rows
         ]

@@ -150,6 +150,22 @@ class UserPhotoUploadResponse(BaseModel):
     )
     createdAt: str = Field(
         description="사진 등록 일시 (ISO-8601)",
-        json_schema_extra={"example": "2026-10-19T07:35:00+00:00"},
+        json_schema_extra={"example": "2026-10-19T07:35:00Z"},
     )
+
+
+class ErrorResponse(BaseModel):
+    status: int = Field(
+        description="HTTP 상태 코드",
+        json_schema_extra={"example": 400},
+    )
+    code: str = Field(
+        description="오류 식별 코드",
+        json_schema_extra={"example": "INVALID_REQUEST"},
+    )
+    message: str = Field(
+        description="오류 상세 안내 메시지",
+        json_schema_extra={"example": "요청 값이 올바르지 않습니다."},
+    )
+
 

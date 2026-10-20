@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
-from uuid import UUID, uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
-from pydantic import BaseModel, HttpUrl
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 import logging
 import os
@@ -95,15 +96,112 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 
-class TryOnRequest(BaseModel):
-    user_id: UUID
-    person_image_url: HttpUrl
-    product_image_url: HttpUrl
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(
+    _request: Request,
+    _exc: RequestValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "status": status.HTTP_400_BAD_REQUEST,
+            "code": "INVALID_REQUEST",
+            "message": "요청 값이 올바르지 않습니다.",
+        },
+    )
 
 
-class TryOnJob(BaseModel):
-    job_id: UUID
-    state: Literal["QUEUED"] = "QUEUED"
+@app.exception_handler(VtonValidationError)
+async def handle_vton_validation_error(
+    _request: Request,
+    exc: VtonValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "status": status.HTTP_400_BAD_REQUEST,
+            "code": "INVALID_REQUEST",
+            "message": str(exc),
+        },
+    )
+
+
+@app.exception_handler(VtonConfigurationError)
+async def handle_vton_config_error(
+    _request: Request,
+    exc: VtonConfigurationError,
+) -> JSONResponse:
+    logger.error("VTON 서버 설정 오류: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "code": "CONFIGURATION_ERROR",
+            "message": "가상 피팅 서비스 환경 설정 오류가 발생했습니다. 관리자에게 문의하세요.",
+        },
+    )
+
+
+@app.exception_handler(VtonUpstreamError)
+async def handle_vton_upstream_error(
+    _request: Request,
+    exc: VtonUpstreamError,
+) -> JSONResponse:
+    logger.error("VTON OpenAI API 호출 오류: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={
+            "status": status.HTTP_502_BAD_GATEWAY,
+            "code": "UPSTREAM_ERROR",
+            "message": "AI 이미지 생성 서버와의 통신에 실패했습니다.",
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def handle_http_exception(
+    _request: Request,
+    exc: HTTPException,
+) -> JSONResponse:
+    code = "HTTP_ERROR"
+    if exc.status_code == 400:
+        code = "BAD_REQUEST"
+    elif exc.status_code == 401:
+        code = "UNAUTHORIZED"
+    elif exc.status_code == 403:
+        code = "FORBIDDEN"
+    elif exc.status_code == 404:
+        code = "NOT_FOUND"
+    elif exc.status_code == 500:
+        code = "INTERNAL_SERVER_ERROR"
+    elif exc.status_code == 502:
+        code = "BAD_GATEWAY"
+    elif exc.status_code == 503:
+        code = "SERVICE_UNAVAILABLE"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": exc.status_code,
+            "code": code,
+            "message": str(exc.detail) if isinstance(exc.detail, str) else "오류가 발생했습니다.",
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_exception(
+    _request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    logger.error("VTON 예기치 않은 오류 발생: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "가상 피팅 처리 중 일시적인 오류가 발생했습니다.",
+        },
+    )
 
 
 class HealthResponse(BaseModel):
@@ -121,12 +219,6 @@ def health(request: Request, response: Response) -> HealthResponse:
         status="UP" if ready else "NOT_READY",
         readiness="UP" if ready else "DOWN",
     )
-
-
-@app.post("/api/vton/jobs", response_model=TryOnJob, status_code=status.HTTP_202_ACCEPTED)
-def create_job(_: TryOnRequest) -> TryOnJob:
-    """비동기 가상 피팅 작업 큐잉 (추후 SQS 및 DB 연동용)."""
-    return TryOnJob(job_id=uuid4())
 
 
 @app.post(

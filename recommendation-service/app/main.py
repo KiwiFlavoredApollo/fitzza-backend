@@ -1,7 +1,7 @@
 import logging
 import os
 
-from fastapi import APIRouter, FastAPI, Request, Response, status
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -44,7 +44,7 @@ async def handle_recommendation_api_error(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
-        content={"code": exc.code, "message": exc.message},
+        content={"status": exc.status_code, "code": exc.code, "message": exc.message},
     )
 
 
@@ -55,7 +55,57 @@ async def handle_validation_error(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
-        content={"code": "INVALID_REQUEST", "message": "요청 값이 올바르지 않습니다."},
+        content={
+            "status": status.HTTP_400_BAD_REQUEST,
+            "code": "INVALID_REQUEST",
+            "message": "요청 값이 올바르지 않습니다.",
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def handle_http_exception(
+    _request: Request,
+    exc: HTTPException,
+) -> JSONResponse:
+    code = "HTTP_ERROR"
+    if exc.status_code == 400:
+        code = "BAD_REQUEST"
+    elif exc.status_code == 401:
+        code = "UNAUTHORIZED"
+    elif exc.status_code == 403:
+        code = "FORBIDDEN"
+    elif exc.status_code == 404:
+        code = "NOT_FOUND"
+    elif exc.status_code == 500:
+        code = "INTERNAL_SERVER_ERROR"
+    elif exc.status_code == 502:
+        code = "BAD_GATEWAY"
+    elif exc.status_code == 503:
+        code = "SERVICE_UNAVAILABLE"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "status": exc.status_code,
+            "code": code,
+            "message": str(exc.detail) if isinstance(exc.detail, str) else "오류가 발생했습니다.",
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def handle_unexpected_exception(
+    _request: Request,
+    exc: Exception,
+) -> JSONResponse:
+    logging.getLogger(__name__).error("예기치 않은 오류 발생: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "status": status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "서버 내부 오류가 발생했습니다.",
+        },
     )
 
 
