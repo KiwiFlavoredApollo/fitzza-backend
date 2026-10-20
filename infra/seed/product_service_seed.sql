@@ -1,6 +1,6 @@
 -- product-service 로컬·QA 테스트용 상품 시드
 -- 원본: final_products 상의/4695999.json (무신사 product_id = DB/API product_id)
--- 전제: productId=무신사 번호 스키마(source_product_id 컬럼 없음).
+-- 전제: product_id=무신사 번호, option_id=DB IDENTITY(무신사 옵션 번호는 source_option_id).
 -- 실행 순서: product-service 기동으로 테이블 생성 후
 --   docker compose exec -T postgres psql -U fitzza -d fitzza < infra/seed/product_service_seed.sql
 -- 재실행 가능: product_id=4695999 관련 행만 먼저 지운다.
@@ -63,50 +63,30 @@ INSERT INTO product_service.product_image (product_id, image_url, sequence) VALU
 INSERT INTO product_service.product_image (product_id, image_url, sequence) VALUES (4695999, 'https://image.msscdn.net/images/prd_img/20250103/4695999/detail_4695999_17453041759966_500.jpg', 5);
 INSERT INTO product_service.product_image (product_id, image_url, sequence) VALUES (4695999, 'https://image.msscdn.net/images/prd_img/20250103/4695999/detail_4695999_17453041770919_500.jpg', 6);
 
+-- option_id는 IDENTITY 자동발급. 무신사 옵션 번호는 source_option_id에만 넣는다.
 INSERT INTO product_service.product_option (
-  option_id, product_id, source_option_id, managed_code, color, size, additional_price, image_url
-) OVERRIDING SYSTEM VALUE VALUES (
-  21092422, 4695999, 21092422, 'S', NULL, 'S', 0, NULL
-);
-INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec) VALUES (
-  21092422, 'S', 0, '{"총장": 75.0, "어깨너비": 49.8, "가슴단면": 58.0, "소매길이": 59.5, "밑단단면": 56.0, "소매부리단면": 11.0, "암홀": 21.2}'::jsonb
-);
-INSERT INTO product_service.product_option (
-  option_id, product_id, source_option_id, managed_code, color, size, additional_price, image_url
-) OVERRIDING SYSTEM VALUE VALUES (
-  21092423, 4695999, 21092423, 'M', NULL, 'M', 0, NULL
-);
-INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec) VALUES (
-  21092423, 'M', 1, '{"총장": 76.5, "어깨너비": 51.4, "가슴단면": 60.5, "소매길이": 60.5, "밑단단면": 58.5, "소매부리단면": 11.5, "암홀": 22.0}'::jsonb
-);
-INSERT INTO product_service.product_option (
-  option_id, product_id, source_option_id, managed_code, color, size, additional_price, image_url
-) OVERRIDING SYSTEM VALUE VALUES (
-  21092424, 4695999, 21092424, 'L', NULL, 'L', 0, NULL
-);
-INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec) VALUES (
-  21092424, 'L', 2, '{"총장": 78.0, "어깨너비": 53.0, "가슴단면": 63.0, "소매길이": 61.5, "밑단단면": 61.0, "소매부리단면": 12.0, "암홀": 22.8}'::jsonb
-);
-INSERT INTO product_service.product_option (
-  option_id, product_id, source_option_id, managed_code, color, size, additional_price, image_url
-) OVERRIDING SYSTEM VALUE VALUES (
-  21092425, 4695999, 21092425, 'XL', NULL, 'XL', 0, NULL
-);
-INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec) VALUES (
-  21092425, 'XL', 3, '{"총장": 79.5, "어깨너비": 54.6, "가슴단면": 65.5, "소매길이": 62.5, "밑단단면": 63.5, "소매부리단면": 12.5, "암홀": 23.6}'::jsonb
-);
-INSERT INTO product_service.product_option (
-  option_id, product_id, source_option_id, managed_code, color, size, additional_price, image_url
-) OVERRIDING SYSTEM VALUE VALUES (
-  21092426, 4695999, 21092426, '2XL', NULL, '2XL', 0, NULL
-);
-INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec) VALUES (
-  21092426, '2XL', 4, '{"총장": 80.5, "어깨너비": 56.2, "가슴단면": 68.0, "소매길이": 63.0, "밑단단면": 66.0, "소매부리단면": 13.0, "암홀": 24.4}'::jsonb
-);
+  product_id, source_option_id, managed_code, color, size, additional_price, image_url
+) VALUES
+  (4695999, 21092422, 'S', NULL, 'S', 0, NULL),
+  (4695999, 21092423, 'M', NULL, 'M', 0, NULL),
+  (4695999, 21092424, 'L', NULL, 'L', 0, NULL),
+  (4695999, 21092425, 'XL', NULL, 'XL', 0, NULL),
+  (4695999, 21092426, '2XL', NULL, '2XL', 0, NULL);
 
-SELECT setval(pg_get_serial_sequence('product_service.product_option', 'option_id'),
-              (SELECT COALESCE(max(option_id), 1) FROM product_service.product_option));
+INSERT INTO product_service.option_measurement (option_id, size_label, sequence, measurement_spec)
+SELECT o.option_id, v.size_label, v.sequence, v.measurement_spec::jsonb
+FROM (VALUES
+  (21092422, 'S', 0, '{"총장": 75.0, "어깨너비": 49.8, "가슴단면": 58.0, "소매길이": 59.5, "밑단단면": 56.0, "소매부리단면": 11.0, "암홀": 21.2}'),
+  (21092423, 'M', 1, '{"총장": 76.5, "어깨너비": 51.4, "가슴단면": 60.5, "소매길이": 60.5, "밑단단면": 58.5, "소매부리단면": 11.5, "암홀": 22.0}'),
+  (21092424, 'L', 2, '{"총장": 78.0, "어깨너비": 53.0, "가슴단면": 63.0, "소매길이": 61.5, "밑단단면": 61.0, "소매부리단면": 12.0, "암홀": 22.8}'),
+  (21092425, 'XL', 3, '{"총장": 79.5, "어깨너비": 54.6, "가슴단면": 65.5, "소매길이": 62.5, "밑단단면": 63.5, "소매부리단면": 12.5, "암홀": 23.6}'),
+  (21092426, '2XL', 4, '{"총장": 80.5, "어깨너비": 56.2, "가슴단면": 68.0, "소매길이": 63.0, "밑단단면": 66.0, "소매부리단면": 13.0, "암홀": 24.4}')
+) AS v(source_option_id, size_label, sequence, measurement_spec)
+JOIN product_service.product_option o
+  ON o.product_id = 4695999 AND o.source_option_id = v.source_option_id;
 
 COMMIT;
 
--- 확인: SELECT product_id, product_name, price FROM product_service.product WHERE product_id = 4695999;
+-- 확인:
+-- SELECT product_id, product_name, price FROM product_service.product WHERE product_id = 4695999;
+-- SELECT option_id, source_option_id, size FROM product_service.product_option WHERE product_id = 4695999;
