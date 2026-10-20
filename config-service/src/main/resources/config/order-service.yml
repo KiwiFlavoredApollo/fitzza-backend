@@ -4,3 +4,12 @@ spring:
   datasource:
     hikari:
       schema: order_service
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        default_schema: order_service
+        hbm2ddl:
+          create_namespaces: true
