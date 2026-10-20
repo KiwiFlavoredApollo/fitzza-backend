@@ -71,7 +71,7 @@ class CommentSupportServiceTest {
         deleted.delete();
         when(commentRepository.findById(1L)).thenReturn(Optional.of(comment(1L, "예뻐요")));
         when(commentRepository.findById(2L)).thenReturn(Optional.of(deleted));
-        Post normal = Post.createNormal(7L, "제목", "내용", PostCategory.DAILY, null);
+        Post normal = Post.createNormal(7L, "제목", "내용", PostCategory.DAILY);
         ReflectionTestUtils.setField(normal, "id", POST_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(normal));
 

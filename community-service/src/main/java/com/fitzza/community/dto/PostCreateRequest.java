@@ -14,7 +14,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
-// postType을 보내지 않으면 일반 글이다. 투표 글은 postType=VOTE와 선택지(options) 2~4개를 함께 보낸다.
+// 글은 텍스트만 받는다(사용자가 직접 올리는 이미지는 없다). postType을 보내지 않으면 일반 글이다. 투표 글은 postType=VOTE와 선택지(options) 2~4개를 함께 보낸다.
 // 공유 글이면 sharedType(WORLDCUP·COMBO·FITTING)과 sharedId(월드컵 이력·추천 코디·가상 피팅 ID)를 함께 보낸다. 투표 글은 공유할 수 없다.
 public record PostCreateRequest(
         @NotBlank(message = "제목을 입력해주세요.")
@@ -24,7 +24,6 @@ public record PostCreateRequest(
                 @Size(max = Post.CONTENT_MAX_LENGTH, message = "내용은 5000자 이하로 입력해주세요.")
                 String content,
         @NotNull(message = "분류를 선택해주세요.") PostCategory category,
-        @Size(max = Post.IMAGE_URL_MAX_LENGTH, message = "이미지 주소가 너무 깁니다.") String imageUrl,
         SharedType sharedType,
         @Positive(message = "공유 대상을 확인해주세요.") Long sharedId,
         PostType postType,

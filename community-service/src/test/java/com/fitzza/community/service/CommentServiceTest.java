@@ -428,7 +428,7 @@ class CommentServiceTest {
     }
 
     private static Post post(Long postId, Long authorId) {
-        Post post = Post.createNormal(authorId, "제목", "내용", PostCategory.DAILY, null);
+        Post post = Post.createNormal(authorId, "제목", "내용", PostCategory.DAILY);
         ReflectionTestUtils.setField(post, "id", postId);
         return post;
     }

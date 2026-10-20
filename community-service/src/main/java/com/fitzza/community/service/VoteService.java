@@ -70,8 +70,7 @@ public class VoteService {
         List<VoteItemSnapshot> snapshots = resolveSnapshots(userId, requested);
 
         Post post = postRepository.save(
-                Post.createVote(userId, request.title(), request.content(), request.category(), request.imageUrl(),
-                        Instant.now()));
+                Post.createVote(userId, request.title(), request.content(), request.category(), Instant.now()));
         voteOptionRepository.saveAll(toOptions(post.getId(), requested, snapshots));
         return new PostCreatedResponse(post.getId());
     }

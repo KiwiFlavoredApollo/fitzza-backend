@@ -14,7 +14,6 @@ public record PostDetailResponse(
         PostCategory category,
         PostType postType,
         AuthorResponse author,
-        String imageUrl,
         SharedResponse shared,
         long likeCount,
         boolean liked,

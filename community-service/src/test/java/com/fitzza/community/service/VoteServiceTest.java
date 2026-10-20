@@ -88,7 +88,6 @@ class VoteServiceTest {
         assertThat(post.getValue().getVoteEndAt())
                 .isBetween(before.plus(Post.VOTE_DURATION), Instant.now().plus(Post.VOTE_DURATION));
         assertThat(post.getValue().getPostType()).isEqualTo(PostType.VOTE);
-        assertThat(post.getValue().getImageUrl()).isEqualTo("https://cdn.example.com/cover.png");
         assertThat(post.getValue().getUserId()).isEqualTo(AUTHOR_ID);
 
         @SuppressWarnings("unchecked")
@@ -320,8 +319,7 @@ class VoteServiceTest {
 
     private static PostCreateRequest request(VoteOptionRequest... options) {
         return new PostCreateRequest(
-                "뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, "https://cdn.example.com/cover.png",
-                null, null, PostType.VOTE, List.of(options));
+                "뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, null, null, PostType.VOTE, List.of(options));
     }
 
     private static Post openVotePost() {
@@ -339,7 +337,7 @@ class VoteServiceTest {
     }
 
     private static Post normalPost() {
-        Post post = Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY, null);
+        Post post = Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY);
         ReflectionTestUtils.setField(post, "id", POST_ID);
         return post;
     }

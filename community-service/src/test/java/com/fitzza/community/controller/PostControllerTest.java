@@ -174,7 +174,6 @@ class PostControllerTest {
         verify(postService).create(eq(7L), captor.capture());
         assertThat(captor.getValue().title()).isEqualTo("오늘의 코디");
         assertThat(captor.getValue().category()).isEqualTo(PostCategory.DAILY);
-        assertThat(captor.getValue().imageUrl()).isNull();
     }
 
     @Test
@@ -296,31 +295,6 @@ class PostControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
         verifyNoInteractions(postService);
-    }
-
-    @Test
-    void updateTellsApartAnOmittedImageFromAnImageSetToNull() throws Exception {
-        mockMvc.perform(patch(POSTS + "/3")
-                        .header(USER_ID_HEADER, "7")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"새 제목\"}"))
-                .andExpect(status().isOk());
-        mockMvc.perform(patch(POSTS + "/4")
-                        .header(USER_ID_HEADER, "7")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"imageUrl\":null}"))
-                .andExpect(status().isOk());
-
-        ArgumentCaptor<PostUpdateRequest> omitted = ArgumentCaptor.forClass(PostUpdateRequest.class);
-        verify(postService).update(eq(7L), eq(3L), omitted.capture());
-        assertThat(omitted.getValue().getTitle()).isEqualTo("새 제목");
-        assertThat(omitted.getValue().isImageUrlSent()).isFalse();
-
-        ArgumentCaptor<PostUpdateRequest> cleared = ArgumentCaptor.forClass(PostUpdateRequest.class);
-        verify(postService).update(eq(7L), eq(4L), cleared.capture());
-        assertThat(cleared.getValue().getTitle()).isNull();
-        assertThat(cleared.getValue().isImageUrlSent()).isTrue();
-        assertThat(cleared.getValue().getImageUrl()).isNull();
     }
 
     @Test
@@ -456,7 +430,6 @@ class PostControllerTest {
                 PostCategory.DAILY,
                 PostType.NORMAL,
                 new AuthorResponse(7L, "fitzza"),
-                null,
                 null,
                 4,
                 liked,

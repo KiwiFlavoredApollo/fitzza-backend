@@ -28,7 +28,6 @@ public class Post {
 
     public static final int TITLE_MAX_LENGTH = 100;
     public static final int CONTENT_MAX_LENGTH = 5000;
-    public static final int IMAGE_URL_MAX_LENGTH = 500;
     public static final Duration VOTE_DURATION = Duration.ofHours(6);
 
     @Id
@@ -52,9 +51,6 @@ public class Post {
 
     @Column(name = "content", nullable = false, columnDefinition = "text")
     private String content;
-
-    @Column(name = "image_url", length = IMAGE_URL_MAX_LENGTH)
-    private String imageUrl;
 
     @Column(name = "view_count", nullable = false)
     private long viewCount;
@@ -114,28 +110,21 @@ public class Post {
     protected Post() {
     }
 
-    private Post(Long userId, String title, String content, PostCategory category, String imageUrl) {
+    private Post(Long userId, String title, String content, PostCategory category) {
         this.userId = userId;
         this.postType = PostType.NORMAL;
         this.title = title.trim();
         this.content = content.trim();
         this.category = category;
-        this.imageUrl = blankToNull(imageUrl);
     }
 
-    public static Post createNormal(
-            Long userId, String title, String content, PostCategory category, String imageUrl) {
-        return new Post(userId, title, content, category, imageUrl);
+    public static Post createNormal(Long userId, String title, String content, PostCategory category) {
+        return new Post(userId, title, content, category);
     }
 
     // 마감 시각은 서버가 정한다. 클라이언트가 보낸 값은 받지 않는다.
     public static Post createVote(Long userId, String title, String content, PostCategory category, Instant now) {
-        return createVote(userId, title, content, category, null, now);
-    }
-
-    public static Post createVote(
-            Long userId, String title, String content, PostCategory category, String imageUrl, Instant now) {
-        Post post = new Post(userId, title, content, category, imageUrl);
+        Post post = new Post(userId, title, content, category);
         post.postType = PostType.VOTE;
         post.voteEndAt = now.plus(VOTE_DURATION);
         return post;
@@ -200,11 +189,6 @@ public class Post {
 
     public void changeCategory(PostCategory category) {
         this.category = category;
-    }
-
-    // null이나 빈 문자열이 오면 첨부 이미지를 뗀다.
-    public void changeImageUrl(String imageUrl) {
-        this.imageUrl = blankToNull(imageUrl);
     }
 
     // 댓글과 알림이 글을 계속 가리킬 수 있도록 행은 남기고 삭제 시각만 기록한다.
@@ -272,10 +256,6 @@ public class Post {
         return content;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
-    }
-
     public long getViewCount() {
         return viewCount;
     }
@@ -286,12 +266,5 @@ public class Post {
 
     public Instant getUpdatedAt() {
         return updatedAt;
-    }
-
-    private static String blankToNull(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
     }
 }
