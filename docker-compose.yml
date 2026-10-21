@@ -119,6 +119,8 @@ services:
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
       JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
       REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
+      USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     healthcheck:
       <<: *app-healthcheck
@@ -160,6 +162,8 @@ services:
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai}
       JEV_SUPPORT_THRESHOLD: ${JEV_SUPPORT_THRESHOLD:-0.6}
+      COMMUNITY_SERVICE_DB_USER: ${COMMUNITY_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      COMMUNITY_SERVICE_DB_PASSWORD: ${COMMUNITY_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8084"]
     healthcheck:
@@ -172,6 +176,8 @@ services:
       <<: *java-environment
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
       RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
+      REVIEW_SERVICE_DB_USER: ${REVIEW_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      REVIEW_SERVICE_DB_PASSWORD: ${REVIEW_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
@@ -186,6 +192,8 @@ services:
       RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
       FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+      NOTIFICATION_SERVICE_DB_USER: ${NOTIFICATION_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8086"]
     healthcheck:
