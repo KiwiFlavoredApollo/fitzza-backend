@@ -558,20 +558,28 @@ def test_get_fitting_user_image_flow(tmp_path: Path) -> None:
     detail_data = resp_detail.json()
     assert detail_data["userImageUrl"].endswith(f"/api/vton/{fitting_id}/user-image")
 
-    # 3. GET /api/vton/{fittingId}/user-image로 실제 이미지 파일 스트리밍 확인
-    resp_img = client.get(f"/api/vton/{fitting_id}/user-image")
+    # 3. 인증 헤더 누락 시 401 Unauthorized
+    resp_no_auth = client.get(f"/api/vton/{fitting_id}/user-image")
+    assert resp_no_auth.status_code == 401
+
+    # 4. 타인(사용자 99) 조회 시 403 Forbidden (IDOR 방어)
+    resp_other = client.get(f"/api/vton/{fitting_id}/user-image", headers={"X-User-Id": "99"})
+    assert resp_other.status_code == 403
+
+    # 5. 본인(사용자 7)의 GET /api/vton/{fittingId}/user-image로 실제 이미지 파일 스트리밍 확인 (200 OK)
+    resp_img = client.get(f"/api/vton/{fitting_id}/user-image", headers={"X-User-Id": "7"})
     assert resp_img.status_code == 200
     assert resp_img.headers["content-type"] == "image/png"
     assert resp_img.content == sample_bytes
 
-    # 4. 사진 없이 생성된 피팅(photoId=None)의 경우 404 Not Found
+    # 6. 사진 없이 생성된 피팅(photoId=None)의 경우 404 Not Found
     fitting_no_photo = repo.create_fitting(user_id=7, photo_id=None, product_ids=[102])
-    resp_no_img = client.get(f"/api/vton/{fitting_no_photo}/user-image")
+    resp_no_img = client.get(f"/api/vton/{fitting_no_photo}/user-image", headers={"X-User-Id": "7"})
     assert resp_no_img.status_code == 404
     assert "등록한 이미지가 없습니다" in resp_no_img.json()["message"]
 
-    # 5. 존재하지 않는 fittingId 요청 시 404 Not Found
-    resp_none = client.get("/api/vton/999999/user-image")
+    # 7. 존재하지 않는 fittingId 요청 시 404 Not Found
+    resp_none = client.get("/api/vton/999999/user-image", headers={"X-User-Id": "7"})
     assert resp_none.status_code == 404
 
 

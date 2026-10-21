@@ -624,13 +624,29 @@ def get_fitting_image(fittingId: int) -> FileResponse:
         404: {"description": "사용자 이미지를 첨부하지 않았거나 이미지를 찾을 수 없음"},
     },
 )
-def get_fitting_user_image(fittingId: int) -> FileResponse:
+def get_fitting_user_image(
+    fittingId: int,
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
+) -> FileResponse:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
     repo = get_repo()
     detail = repo.get_fitting_detail(fittingId)
     if not detail or detail.get("isDeleted"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="존재하지 않거나 삭제된 가상 피팅입니다.",
+        )
+
+    # 본인 피팅인지 검증 (타인 얼굴 사진 열람 차단 / IDOR 방어)
+    if detail["userId"] != x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인의 피팅 이미지만 조회할 수 있습니다.",
         )
 
     photo_id = detail.get("photoId")
