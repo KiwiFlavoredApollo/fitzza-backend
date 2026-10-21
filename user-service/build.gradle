@@ -12,6 +12,9 @@ dependencies {
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+    // 테이블은 Flyway 마이그레이션(src/main/resources/db/migration)이 만들고 바꾼다.
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
 
     // 저장소 테스트는 PostgreSQL 호환 모드의 H2로 실제 SQL을 실행한다.
