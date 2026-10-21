@@ -11,7 +11,7 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - Dedicated security groups for the public ALB and private RDS/managed Redis access
 - One private, encrypted PostgreSQL 17.6 `db.t4g.micro` instance with a Secrets Manager-managed master password
 - One EKS 1.36 Standard cluster
-- One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
+- One ARM64 `t4g.large` managed node group with `min=0`, `desired=0`, `max=1` for pilot workload capacity; the size increase was approved on 2026-10-21 while the usage plan is being revised.
 - The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
@@ -105,13 +105,35 @@ The build artifact `image-publish-report.json` lists, for every service, whether
 
 ### Enable the deploy stage
 
+The production overlay allows up to 600 seconds for application startup because concurrent Java cold starts on the single pilot worker exceeded the base 120-second window. Readiness and liveness checks remain unchanged; a startup timeout is still a deployment failure. Application Deployments set `progressDeadlineSeconds: 900`, and `scripts/deploy_eks.py` waits up to 900 seconds per rollout, so image pull and scheduling time on top of a full startup window does not end the rollout early.
+
+Application updates use `maxSurge=0`, `maxUnavailable=1` because the single worker has no CPU request headroom for extra application Pods. Each service can be unavailable during replacement; this pilot configuration is not zero-downtime or highly available.
+
 Follow [the pilot deployment runbook](PILOT_DEPLOYMENT.md) for the Secret budget correction and the 10/20 validation sequence before the 10/21 pilot.
 
-Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The deploy stage intentionally stops if the `fitzza-app-secrets` Secret does not exist.
+Before enabling CD, an operator must provision the namespace, application Secret, service account, Redis/PVC, Qdrant/PVC, StorageClass and Qdrant NetworkPolicy, then apply `infra/k8s/bootstrap/delivery-rbac.yaml`. These operator-owned resources are excluded from `infra/k8s/overlays/delivery`; in particular CD never reapplies Qdrant's immutable volume claim template.
+
+Set foundation parameter `DeliveryArtifactBucketName` to the delivery stack's `ArtifactBucketName` output. The S3 Gateway Endpoint otherwise allows only project data and ECR layers, so the VPC deploy worker cannot download or upload pipeline artifacts. This optional rule permits only that exact bucket for principals in this account; IAM must separately authorize each action.
+
+The deploy access entry maps only to Kubernetes group `fitzza-delivery`, bound to a Role in namespace `fitzza`. It cannot read Secrets, mutate PVCs/StatefulSets, create RBAC or manage cluster resources. The role can modify application workloads, which inherently use the pre-provisioned application credentials; do not attach privileged workload service accounts in this namespace.
+
+Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
 
 ### Rollback
 
-Images are immutable and tagged with the 12-character Git commit SHA. To roll back, rerun the pipeline for the desired commit with `--source-revisions`; unchanged images are reused, so the run only retags. Verify every Deployment and StatefulSet rollout before restoring traffic.
+Images are immutable and tagged with the 12-character Git commit SHA. For a failed application update, an authorized operator can inspect `kubectl -n fitzza rollout history deployment/<service>` and run `kubectl -n fitzza rollout undo deployment/<service> --to-revision=<verified-good-revision>`. Confirm the restored image, rollout, external health and relevant API before restoring traffic. Preserve known-good image digests before a release; ECR retention does not guarantee an old tag still exists.
+
+For image-only recovery, prefer `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image> --field-manager=fitzza-codebuild`. A full `rollout undo` can take image-field ownership away from server-side CD. After such a recovery, explicitly hand the next reviewed image back with `set image --field-manager=fitzza-codebuild` before resuming CD. Never resolve this by forcing conflicts on all resources or on Qdrant storage.
+
+### Pilot evidence (2026-10-21)
+
+- Pipeline execution `a33f217f-ea25-4d12-a101-832f8c346079`: Source/Build/Deploy succeeded for source `c4fd7ddc34996846b1d1d80d5bed58c7ca51aed8`; successful deploy build `76f70d28-4dcc-4c09-a502-a9d12f791fa8`.
+- Initial deploy retries exposed an artifact endpoint denial and the manual rollback image ownership conflict; both were corrected without cluster-admin access or forcing storage fields. The successful BuildOutput was reused for deploy retries.
+- All 11 application images use tag `c4fd7ddc3499`; Redis and Qdrant remain operator-owned. External health and product read returned HTTP 200; API CORS accepted the configured localhost origin.
+- Gateway invalid-image injection produced ErrImagePull and external HTTP 503. Restoring the verified revision recovered HTTP 200. Qdrant PVC identity and collection/point counts (2/2) were unchanged before/after recovery and CD.
+- This verifies a manually triggered exact-commit pipeline and Gateway image recovery, not database migration rollback or automatic failure recovery. The reviewed changes must still merge into develop before its push trigger can use the new delivery contract.
+
+Do not rerun an old source revision whose deployspec predates the namespace-only delivery overlay: that older deployment contract may require prohibited cluster permissions. Use the current reviewed deployment tooling with known-good images instead. Rolling back an image does not reverse database migrations, Secret rotation or data changes. No automatic rollback is configured; a failed deployment stops the pipeline and requires this explicit recovery procedure.
 
 ## Cost controls
 
@@ -180,7 +202,7 @@ aws eks update-kubeconfig `
 
 aws eks update-nodegroup-config `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64-c `
+  --nodegroup-name fitzza-prod-arm64-c-large `
   --scaling-config minSize=0,maxSize=1,desiredSize=1 `
   --profile fitzza `
   --region ap-northeast-2
@@ -203,7 +225,7 @@ aws lambda invoke `
 
 aws eks describe-nodegroup `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64-c `
+  --nodegroup-name fitzza-prod-arm64-c-large `
   --query 'nodegroup.scalingConfig' `
   --profile fitzza `
   --region ap-northeast-2

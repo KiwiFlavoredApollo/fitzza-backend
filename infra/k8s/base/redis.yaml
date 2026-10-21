@@ -3,6 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: redis-data
 spec:
+  storageClassName: fitzza-gp3-retain
   accessModes: [ReadWriteOnce]
   resources:
     requests:

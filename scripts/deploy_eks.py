@@ -1,11 +1,11 @@
-"""Apply the rendered production manifests in dependency order. Requires a live cluster."""
+"""Apply the delivery overlay; cluster, Secret and data resources are operator-owned."""
 
 import argparse
 import subprocess
 
 
-# Leave a minute for process overhead beyond kubectl's 600-second rollout wait.
-KUBECTL_TIMEOUT_SECONDS = 660
+# The rollout wait matches the prod progressDeadlineSeconds; leave a minute for process overhead.
+KUBECTL_TIMEOUT_SECONDS = 960
 
 APPLICATIONS = (
     "user-service", "product-service", "order-service", "community-service",
@@ -25,9 +25,9 @@ def deploy(manifest: str) -> None:
         kubectl(*args)
 
     def wait(resource: str) -> None:
-        kubectl("-n", "fitzza", "rollout", "status", resource, "--timeout=600s")
+        kubectl("-n", "fitzza", "rollout", "status", resource, "--timeout=900s")
 
-    # Services, configuration, storage and data workloads must exist before app Pods.
+    # The delivery overlay excludes operator-owned storage, data workloads and RBAC.
     apply("fitzza.io/workload!=application")
     apply("app.kubernetes.io/name in (config-service,discovery-service)")
     for resource in ("deployment/config-service", "deployment/discovery-service",
