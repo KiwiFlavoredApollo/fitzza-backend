@@ -676,7 +676,7 @@ Resources:
     Type: AWS::EKS::Nodegroup
     Metadata:
       com.aws.cloudformation.Context:
-        why: one ARM64 on-demand worker during approved hours; starts at zero to avoid accidental spend
+        why: one larger ARM64 worker for pilot application and system Pod capacity; starts at zero to avoid accidental spend
         must:
           - maxSize stays 1 for the approved estimate
           - desiredSize returns to 0 outside weekday 09:00-18:00 operating windows and on blocked dates
@@ -689,11 +689,11 @@ Resources:
       AmiType: AL2023_ARM_64_STANDARD
       CapacityType: ON_DEMAND
       ClusterName: !Ref EksCluster
-      InstanceTypes: [t4g.medium]
+      InstanceTypes: [t4g.large]
       Labels:
         fitzza.io/capacity: general
-      # A new name is required because changing managed-node-group subnets triggers replacement.
-      NodegroupName: !Sub '${ProjectName}-${Environment}-arm64-c'
+      # Instance-type replacement needs a distinct name; retain AZ-c for existing EBS volumes.
+      NodegroupName: !Sub '${ProjectName}-${Environment}-arm64-c-large'
       NodeRole: !GetAtt EksNodeRole.Arn
       NodeRepairConfig:
         Enabled: true

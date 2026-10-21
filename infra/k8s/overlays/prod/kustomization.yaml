@@ -9,6 +9,20 @@ labels:
 patches:
   - target:
       kind: Deployment
+      labelSelector: fitzza.io/workload=application
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/startupProbe/failureThreshold
+        value: 120
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+  - target:
+      kind: Deployment
       name: config-service
     patch: |-
       - op: add

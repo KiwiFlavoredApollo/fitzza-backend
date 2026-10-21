@@ -11,7 +11,7 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - Dedicated security groups for the public ALB and private RDS/managed Redis access
 - One private, encrypted PostgreSQL 17.6 `db.t4g.micro` instance with a Secrets Manager-managed master password
 - One EKS 1.36 Standard cluster
-- One ARM64 `t4g.medium` managed node group with `min=0`, `desired=0`, `max=1`
+- One ARM64 `t4g.large` managed node group with `min=0`, `desired=0`, `max=1` for pilot workload capacity; the size increase was approved on 2026-10-21 while the usage plan is being revised.
 - The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
@@ -105,6 +105,10 @@ The build artifact `image-publish-report.json` lists, for every service, whether
 
 ### Enable the deploy stage
 
+The production overlay allows up to 600 seconds for application startup because concurrent Java cold starts on the single pilot worker exceeded the base 120-second window. Readiness and liveness checks remain unchanged; a startup timeout is still a deployment failure.
+
+Application updates use `maxSurge=0`, `maxUnavailable=1` because the single worker has no CPU request headroom for extra application Pods. Each service can be unavailable during replacement; this pilot configuration is not zero-downtime or highly available.
+
 Follow [the pilot deployment runbook](PILOT_DEPLOYMENT.md) for the Secret budget correction and the 10/20 validation sequence before the 10/21 pilot.
 
 Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The deploy stage intentionally stops if the `fitzza-app-secrets` Secret does not exist.
@@ -180,7 +184,7 @@ aws eks update-kubeconfig `
 
 aws eks update-nodegroup-config `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64-c `
+  --nodegroup-name fitzza-prod-arm64-c-large `
   --scaling-config minSize=0,maxSize=1,desiredSize=1 `
   --profile fitzza `
   --region ap-northeast-2
