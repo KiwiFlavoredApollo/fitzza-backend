@@ -116,6 +116,25 @@ class Settings:
     cloudfront_domain: str = field(
         default_factory=lambda: os.getenv("CLOUDFRONT_DOMAIN", "")
     )
+    queue_backend: str = field(
+        default_factory=lambda: os.getenv("VTON_QUEUE_BACKEND", os.getenv("QUEUE_BACKEND", "memory")).strip().lower()
+    )
+    aws_sqs_queue_url: str = field(
+        default_factory=lambda: os.getenv("AWS_SQS_QUEUE_URL", "")
+    )
+    aws_sqs_dlq_url: str = field(
+        default_factory=lambda: os.getenv("AWS_SQS_DLQ_URL", "")
+    )
+    sqs_visibility_timeout: int = field(
+        default_factory=lambda: int(os.getenv("SQS_VISIBILITY_TIMEOUT", "300"))
+    )
+    sqs_wait_time_seconds: int = field(
+        default_factory=lambda: int(os.getenv("SQS_WAIT_TIME_SECONDS", "20"))
+    )
+    sqs_max_number_of_messages: int = field(
+        default_factory=lambda: int(os.getenv("SQS_MAX_NUMBER_OF_MESSAGES", "1"))
+    )
+
 
 
     def get_photos_dir(self) -> Path:
