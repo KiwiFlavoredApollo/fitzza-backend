@@ -123,7 +123,46 @@ Resolve the foundation outputs and the EKS cluster security group, fill `deliver
 
 Images are immutable and tagged with the 12-character Git commit SHA. For a failed application update, an authorized operator can inspect `kubectl -n fitzza rollout history deployment/<service>` and run `kubectl -n fitzza rollout undo deployment/<service> --to-revision=<verified-good-revision>`. Confirm the restored image, rollout, external health and relevant API before restoring traffic. Preserve known-good image digests before a release; ECR retention does not guarantee an old tag still exists.
 
-For image-only recovery, prefer `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image> --field-manager=fitzza-codebuild`. A full `rollout undo` can take image-field ownership away from server-side CD. After such a recovery, explicitly hand the next reviewed image back with `set image --field-manager=fitzza-codebuild` before resuming CD. Never resolve this by forcing conflicts on all resources or on Qdrant storage.
+For emergency image-only recovery, an operator may run `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image>` or a full `rollout undo`. Both are update operations: even with `--field-manager=fitzza-codebuild`, the API server records the image field under a separate `fitzza-codebuild`/`Update` owner (`kubectl-rollout` for undo). The next CD apply with a different image then fails with an image-field conflict. Before resuming CD, remove that update owner from the recovered Deployment. This removes ownership records only: field values stay and Pods do not restart. Remove the whole entry even when it also owns other template fields (for example after `rollout undo`), so that CD becomes the only owner of every field it applies; removing only the image path would leave later conflicts on those fields. The block patches only when exactly one main-resource `apps/v1` Update entry owns the image, and the patch is rejected if the Deployment or that entry changed after the listing:
+
+```powershell
+$svc = "<service>"
+$deploy = kubectl -n fitzza get deployment $svc --show-managed-fields -o json | ConvertFrom-Json
+$mf = @($deploy.metadata.managedFields)
+$owners = 0..($mf.Count - 1) | ForEach-Object { [pscustomobject]@{ index = $_; manager = $mf[$_].manager; operation = $mf[$_].operation; apiVersion = $mf[$_].apiVersion; subresource = $mf[$_].subresource; ownsImage = (($mf[$_].fieldsV1 | ConvertTo-Json -Depth 50 -Compress) -match '"f:image"') } }
+$owners | Format-Table -AutoSize
+$target = @($owners | Where-Object { $_.operation -eq "Update" -and $_.ownsImage -and $_.apiVersion -eq "apps/v1" -and -not $_.subresource })
+if ($target.Count -eq 1) {
+  $i = $target[0].index
+  $patch = @(
+    @{ op = "test"; path = "/metadata/resourceVersion"; value = $deploy.metadata.resourceVersion },
+    @{ op = "test"; path = "/metadata/managedFields/$i/manager"; value = $target[0].manager },
+    @{ op = "test"; path = "/metadata/managedFields/$i/operation"; value = "Update" },
+    @{ op = "test"; path = "/metadata/managedFields/$i/apiVersion"; value = "apps/v1" },
+    @{ op = "remove"; path = "/metadata/managedFields/$i" }
+  )
+  ConvertTo-Json -InputObject $patch -Compress | Set-Content -Path "$env:TEMP\managedfields-patch.json" -Encoding ascii
+  kubectl -n fitzza patch deployment $svc --type=json --patch-file "$env:TEMP\managedfields-patch.json"
+} elseif ($target.Count -eq 0) {
+  Write-Host "No Update owner of the image remains."
+} else {
+  Write-Warning "Several Update entries own the image; inspect them before patching."
+}
+```
+
+Run the block again; it should report that no Update owner of the image remains and list `fitzza-codebuild`/`Apply` as the image owner. If a Deploy already failed on this conflict, retry only that action:
+
+```powershell
+$id, $status, $revision = (aws codepipeline list-pipeline-executions --pipeline-name fitzza-prod-delivery --max-results 1 --profile fitzza --region ap-northeast-2 --query "pipelineExecutionSummaries[0].[pipelineExecutionId,status,sourceRevisions[0].revisionId]" --output text) -split "\s+"
+"$id $status $revision"
+if ($status -eq "Failed") {
+  aws codepipeline retry-stage-execution --pipeline-name fitzza-prod-delivery --stage-name Deploy --pipeline-execution-id $id --retry-mode FAILED_ACTIONS --profile fitzza --region ap-northeast-2
+} else {
+  Write-Warning "The latest execution is $status; never retry an older run over a newer deployment."
+}
+```
+
+Confirm that the printed revision is the one you intend to deploy. Do not use `set image --field-manager=fitzza-codebuild` to hand ownership back. Never resolve this by forcing conflicts on all resources or on Qdrant storage; a forced apply of a partial manifest also removes fields that only CD owned.
 
 ### Pilot evidence (2026-10-21)
 
@@ -131,7 +170,9 @@ For image-only recovery, prefer `kubectl -n fitzza set image deployment/<service
 - Initial deploy retries exposed an artifact endpoint denial and the manual rollback image ownership conflict; both were corrected without cluster-admin access or forcing storage fields. The successful BuildOutput was reused for deploy retries.
 - All 11 application images use tag `c4fd7ddc3499`; Redis and Qdrant remain operator-owned. External health and product read returned HTTP 200; API CORS accepted the configured localhost origin.
 - Gateway invalid-image injection produced ErrImagePull and external HTTP 503. Restoring the verified revision recovered HTTP 200. Qdrant PVC identity and collection/point counts (2/2) were unchanged before/after recovery and CD.
-- This verifies a manually triggered exact-commit pipeline and Gateway image recovery, not database migration rollback or automatic failure recovery. The reviewed changes must still merge into develop before its push trigger can use the new delivery contract.
+- This verifies a manually triggered exact-commit pipeline and Gateway image recovery, not database migration rollback or automatic failure recovery.
+- Develop integration: PR #138 merged as `c850ab334ea32e7c6150b1a158b9e8c788c7b95e`. That push did not start an execution, so it was run manually (`1d229338-b7a3-4925-befb-253aaa53c44f`). Its first deploy (`4aed51e0-0be5-46a9-8cf9-a11ac9fda31c`) failed on the Gateway image field still owned by `fitzza-codebuild`/`Update` from the earlier `set image`; removing only that owner and retrying the Deploy action succeeded (`8d945ac2-4c88-4186-9bed-296a584fcd37`).
+- The next develop push, `cfabd98f41413b0a65e7ad864e0eb2bf8718f0db`, started execution `dfded4ff-0be3-4e01-b262-a27058e7ec2c` through the `WebhookV2` trigger and succeeded end to end. All 11 images use `cfabd98f4141`, the Qdrant PVC identity is unchanged, and external health, product read and API CORS checks passed.
 
 Do not rerun an old source revision whose deployspec predates the namespace-only delivery overlay: that older deployment contract may require prohibited cluster permissions. Use the current reviewed deployment tooling with known-good images instead. Rolling back an image does not reverse database migrations, Secret rotation or data changes. No automatic rollback is configured; a failed deployment stops the pipeline and requires this explicit recovery procedure.
 
