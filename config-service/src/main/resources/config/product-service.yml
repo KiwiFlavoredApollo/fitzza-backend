@@ -4,15 +4,7 @@ spring:
   datasource:
     hikari:
       schema: product_service
-  flyway:
-    enabled: true
-    schemas: product_service
-    default-schema: product_service
-    create-schemas: true
-    baseline-on-migrate: true
   jpa:
-    hibernate:
-      ddl-auto: validate
     properties:
       hibernate:
         default_schema: product_service

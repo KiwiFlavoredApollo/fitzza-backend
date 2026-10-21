@@ -16,11 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 
-@DataJpaTest(properties = {
-        "spring.cloud.config.enabled=false",
-        "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
-})
+@DataJpaTest(properties = "spring.cloud.config.enabled=false")
 class OrderRepositoryTest {
 
     private static final Long USER_ID = 1L;
