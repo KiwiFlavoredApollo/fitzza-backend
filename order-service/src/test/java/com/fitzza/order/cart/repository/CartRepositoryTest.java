@@ -11,7 +11,11 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 
-@DataJpaTest(properties = "spring.cloud.config.enabled=false")
+@DataJpaTest(properties = {
+        "spring.cloud.config.enabled=false",
+        "spring.flyway.enabled=false",
+        "spring.jpa.hibernate.ddl-auto=create-drop"
+})
 class CartRepositoryTest {
 
     private static final Long USER_ID = 1L;
