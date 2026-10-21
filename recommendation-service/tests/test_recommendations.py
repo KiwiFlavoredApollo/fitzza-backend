@@ -182,12 +182,16 @@ def configure_test_state() -> None:
         community_service_token=COMMUNITY_TOKEN,
         product_service_token=PRODUCT_TOKEN,
         review_service_token=REVIEW_TOKEN,
+        redis_enabled=False,
     )
     app.state.repository = RecommendationRepository(db_path=":memory:")
     app.state.coordinator = StubCoordinator(mode="coordination")
     app.state.user_client = StubUserClient()
     app.state.product_client = StubProductClient()
     app.state.notification_client = StubNotificationClient()
+    app.state.redis_client = None
+    app.state.cache_service = None
+
 
 
 def test_post_recommendations_returns_accepted_and_triggers_fcm_notification() -> None:
