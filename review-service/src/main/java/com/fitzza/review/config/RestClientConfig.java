@@ -13,7 +13,8 @@ import org.springframework.web.client.RestClient;
 public class RestClientConfig {
 
     private static final int CONNECT_TIMEOUT_MILLIS = 1000;
-    private static final int READ_TIMEOUT_MILLIS = 2000;
+    // 주문 서비스가 막 떴거나 오래 쉬다 받은 첫 요청은 초기화 때문에 2초를 넘길 수 있어(로컬 확인) 넉넉히 기다린다.
+    private static final int READ_TIMEOUT_MILLIS = 5000;
 
     // @LoadBalanced가 붙으면 http://order-service 같은 서비스 이름을 Eureka에 등록된 주소로 바꿔 호출한다.
     @Bean
