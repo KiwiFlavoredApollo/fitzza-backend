@@ -105,7 +105,7 @@ The build artifact `image-publish-report.json` lists, for every service, whether
 
 ### Enable the deploy stage
 
-The production overlay allows up to 600 seconds for application startup because concurrent Java cold starts on the single pilot worker exceeded the base 120-second window. Readiness and liveness checks remain unchanged; a startup timeout is still a deployment failure.
+The production overlay allows up to 600 seconds for application startup because concurrent Java cold starts on the single pilot worker exceeded the base 120-second window. Readiness and liveness checks remain unchanged; a startup timeout is still a deployment failure. Application Deployments set `progressDeadlineSeconds: 900`, and `scripts/deploy_eks.py` waits up to 900 seconds per rollout, so image pull and scheduling time on top of a full startup window does not end the rollout early.
 
 Application updates use `maxSurge=0`, `maxUnavailable=1` because the single worker has no CPU request headroom for extra application Pods. Each service can be unavailable during replacement; this pilot configuration is not zero-downtime or highly available.
 
@@ -225,7 +225,7 @@ aws lambda invoke `
 
 aws eks describe-nodegroup `
   --cluster-name fitzza-prod `
-  --nodegroup-name fitzza-prod-arm64-c `
+  --nodegroup-name fitzza-prod-arm64-c-large `
   --query 'nodegroup.scalingConfig' `
   --profile fitzza `
   --region ap-northeast-2

@@ -56,6 +56,8 @@ Qdrant deployment, collection, persistence, and snapshot recovery procedures are
 
 The Redis PVC explicitly uses the existing `fitzza-gp3-retain` StorageClass. The cluster has no default StorageClass, so omitting it leaves a new PVC pending. Applying the Redis manifest provisions a separate 5 GiB EBS volume; this local configuration change does not create one. The class retains volumes after PVC deletion, so review retained Redis volumes during teardown.
 
+This manifest assumes an existing `redis-data` PVC was already bound with `fitzza-gp3-retain`; a bound PVC's `storageClassName` cannot be changed in place. Before applying `base/redis.yaml` to an existing cluster, confirm that `kubectl -n fitzza get pvc redis-data -o jsonpath='{.spec.storageClassName}'` prints `fitzza-gp3-retain`. If it prints another class, do not apply the PVC: moving Redis data to this class requires a backup, PVC recreation and restore, which this baseline does not cover. CD never applies this PVC because it is operator-owned.
+
 Redis uses one replica with a `Recreate` update strategy and a shared `ReadWriteOnce` data volume. During an update, the existing Pod terminates before its replacement starts, so Redis is unavailable until the replacement is ready. Schedule Redis updates in a maintenance window and account for failures in Redis-dependent requests during this interruption.
 
 After applying the update, wait for `kubectl -n fitzza rollout status deployment/redis --timeout=300s` to succeed and verify the application health endpoints before routing production traffic again.
