@@ -123,19 +123,46 @@ Resolve the foundation outputs and the EKS cluster security group, fill `deliver
 
 Images are immutable and tagged with the 12-character Git commit SHA. For a failed application update, an authorized operator can inspect `kubectl -n fitzza rollout history deployment/<service>` and run `kubectl -n fitzza rollout undo deployment/<service> --to-revision=<verified-good-revision>`. Confirm the restored image, rollout, external health and relevant API before restoring traffic. Preserve known-good image digests before a release; ECR retention does not guarantee an old tag still exists.
 
-For emergency image-only recovery, an operator may run `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image>` or a full `rollout undo`. Both are update operations: even with `--field-manager=fitzza-codebuild`, the API server records the image field under a separate `fitzza-codebuild`/`Update` owner (`kubectl-rollout` for undo). The next CD apply with a different image then fails with an image-field conflict. Before resuming CD, remove only that update owner from the recovered Deployment. This changes no field values and does not restart Pods:
+For emergency image-only recovery, an operator may run `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image>` or a full `rollout undo`. Both are update operations: even with `--field-manager=fitzza-codebuild`, the API server records the image field under a separate `fitzza-codebuild`/`Update` owner (`kubectl-rollout` for undo). The next CD apply with a different image then fails with an image-field conflict. Before resuming CD, remove that update owner from the recovered Deployment. This removes ownership records only: field values stay and Pods do not restart. Remove the whole entry even when it also owns other template fields (for example after `rollout undo`), so that CD becomes the only owner of every field it applies; removing only the image path would leave later conflicts on those fields. The block patches only when exactly one main-resource `apps/v1` Update entry owns the image, and the patch is rejected if the Deployment or that entry changed after the listing:
 
 ```powershell
 $svc = "<service>"
-$mf = (kubectl -n fitzza get deployment $svc --show-managed-fields -o json | ConvertFrom-Json).metadata.managedFields
-0..($mf.Count - 1) | ForEach-Object { [pscustomobject]@{ index = $_; manager = $mf[$_].manager; operation = $mf[$_].operation; ownsImage = (($mf[$_].fieldsV1 | ConvertTo-Json -Depth 50 -Compress) -match '"f:image"') } } | Format-Table -AutoSize
-
-# Replace <index> and <manager> with the Update entry that owns the image; the test operations reject a wrong index.
-'[{"op":"test","path":"/metadata/managedFields/<index>/manager","value":"<manager>"},{"op":"test","path":"/metadata/managedFields/<index>/operation","value":"Update"},{"op":"remove","path":"/metadata/managedFields/<index>"}]' | Set-Content -Path "$env:TEMP\managedfields-patch.json" -Encoding ascii
-kubectl -n fitzza patch deployment $svc --type=json --patch-file "$env:TEMP\managedfields-patch.json"
+$deploy = kubectl -n fitzza get deployment $svc --show-managed-fields -o json | ConvertFrom-Json
+$mf = @($deploy.metadata.managedFields)
+$owners = 0..($mf.Count - 1) | ForEach-Object { [pscustomobject]@{ index = $_; manager = $mf[$_].manager; operation = $mf[$_].operation; apiVersion = $mf[$_].apiVersion; subresource = $mf[$_].subresource; ownsImage = (($mf[$_].fieldsV1 | ConvertTo-Json -Depth 50 -Compress) -match '"f:image"') } }
+$owners | Format-Table -AutoSize
+$target = @($owners | Where-Object { $_.operation -eq "Update" -and $_.ownsImage -and $_.apiVersion -eq "apps/v1" -and -not $_.subresource })
+if ($target.Count -eq 1) {
+  $i = $target[0].index
+  $patch = @(
+    @{ op = "test"; path = "/metadata/resourceVersion"; value = $deploy.metadata.resourceVersion },
+    @{ op = "test"; path = "/metadata/managedFields/$i/manager"; value = $target[0].manager },
+    @{ op = "test"; path = "/metadata/managedFields/$i/operation"; value = "Update" },
+    @{ op = "test"; path = "/metadata/managedFields/$i/apiVersion"; value = "apps/v1" },
+    @{ op = "remove"; path = "/metadata/managedFields/$i" }
+  )
+  ConvertTo-Json -InputObject $patch -Compress | Set-Content -Path "$env:TEMP\managedfields-patch.json" -Encoding ascii
+  kubectl -n fitzza patch deployment $svc --type=json --patch-file "$env:TEMP\managedfields-patch.json"
+} elseif ($target.Count -eq 0) {
+  Write-Host "No Update owner of the image remains."
+} else {
+  Write-Warning "Several Update entries own the image; inspect them before patching."
+}
 ```
 
-Run the listing again and confirm that `fitzza-codebuild`/`Apply` is the only remaining image owner. If a Deploy already failed on this conflict, retry only that action with `aws codepipeline retry-stage-execution --retry-mode FAILED_ACTIONS`. Do not use `set image --field-manager=fitzza-codebuild` to hand ownership back. Never resolve this by forcing conflicts on all resources or on Qdrant storage; a forced apply of a partial manifest also removes fields that only CD owned.
+Run the block again; it should report that no Update owner of the image remains and list `fitzza-codebuild`/`Apply` as the image owner. If a Deploy already failed on this conflict, retry only that action:
+
+```powershell
+$id, $status, $revision = (aws codepipeline list-pipeline-executions --pipeline-name fitzza-prod-delivery --max-results 1 --profile fitzza --region ap-northeast-2 --query "pipelineExecutionSummaries[0].[pipelineExecutionId,status,sourceRevisions[0].revisionId]" --output text) -split "\s+"
+"$id $status $revision"
+if ($status -eq "Failed") {
+  aws codepipeline retry-stage-execution --pipeline-name fitzza-prod-delivery --stage-name Deploy --pipeline-execution-id $id --retry-mode FAILED_ACTIONS --profile fitzza --region ap-northeast-2
+} else {
+  Write-Warning "The latest execution is $status; never retry an older run over a newer deployment."
+}
+```
+
+Confirm that the printed revision is the one you intend to deploy. Do not use `set image --field-manager=fitzza-codebuild` to hand ownership back. Never resolve this by forcing conflicts on all resources or on Qdrant storage; a forced apply of a partial manifest also removes fields that only CD owned.
 
 ### Pilot evidence (2026-10-21)
 
