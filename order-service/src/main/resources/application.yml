@@ -13,23 +13,10 @@ spring:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fitzza}
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD}
-    hikari:
-      schema: order_service
-  flyway:
-    enabled: true
-    schemas: order_service
-    default-schema: order_service
-    create-schemas: true
-    baseline-on-migrate: true
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
-    properties:
-      hibernate:
-        default_schema: order_service
-        hbm2ddl:
-          create_namespaces: true
   cloud:
     openfeign:
       client:

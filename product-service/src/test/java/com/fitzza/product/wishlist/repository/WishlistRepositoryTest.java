@@ -16,11 +16,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 
-@DataJpaTest(properties = {
-        "spring.cloud.config.enabled=false",
-        "spring.flyway.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
-})
+@DataJpaTest(properties = "spring.cloud.config.enabled=false")
 class WishlistRepositoryTest {
 
     private static final Long USER_ID = 1L;
