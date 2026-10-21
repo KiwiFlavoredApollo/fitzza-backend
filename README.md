@@ -115,13 +115,15 @@ psql -v ON_ERROR_STOP=1 -U <관리자> -d fitzza -f infra/postgres/service-accou
 
 현재 **product-service**, **order-service**는 `src/main/resources/db/migration`의 Flyway 스크립트로 테이블을 관리하고, Hibernate `ddl-auto`는 `validate`입니다. 나머지 JPA 서비스는 아직 `ddl-auto: update`이며, 같은 규칙으로 서비스 담당자가 Flyway를 붙입니다. `infra/postgres/init.sql`은 서비스별 PostgreSQL 스키마만 만듭니다.
 
-공통 규칙: 버전은 `V1__`, `V2__` 순번(+ 슬랙 사전 공유), `baseline-on-migrate: true`, 한 번 머지·실행된 SQL은 수정하지 않고 새 버전 파일을 추가합니다.
+공통 규칙:
 
-이미 Hibernate로 테이블이 있는 DB는 `baseline-on-migrate`로 현재 스키마를 baseline(V1)으로 표시하고 V1 SQL은 다시 실행하지 않습니다. 빈 스키마(신규 볼륨·RDS)에서는 V1이 테이블을 생성합니다.
+1. **버전 네이밍:** `V1__`, `V2__` … 단순 순번. 동시에 작업할 때는 슬랙에 번호를 미리 공유한다.
+2. **baseline-on-migrate:** 이미 테이블이 있는 로컬/RDS는 현재 상태를 baseline(V1)으로 기록하고 V1 SQL은 다시 실행하지 않는다. 빈 스키마(신규 볼륨·RDS)에서는 V1이 테이블을 생성한다.
+3. **스크립트 불변:** 한 번 머지·실행된 SQL은 직접 수정하지 않고, 변경은 새 버전 파일(`V…sql`)을 추가한다.
 
 ## 기존 사용자 DB 업그레이드
 
-기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 마이그레이션이 명시한 이름으로 제약을 생성합니다.
+기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 엔티티 매핑에 명시한 이름으로 제약을 생성합니다(user-service가 Flyway로 전환되면 마이그레이션 기준으로 바뀝니다).
 
 성별 코드가 `W`/`M`에서 `F`/`M`으로 바뀌었습니다. 예전 DB에는 `gender`에 `W`/`M`만 허용하는 검사 제약이 남아 있어 `F`를 저장하지 못하므로, 기존 DB를 재사용하면 아래를 한 번 실행합니다. 체형(`body_type`) 컬럼은 더 이상 쓰지 않으며 남아 있어도 동작에는 영향이 없습니다.
 
