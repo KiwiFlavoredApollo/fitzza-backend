@@ -12,8 +12,10 @@ import com.fitzza.product.wishlist.dto.WishlistItemResponse;
 import com.fitzza.product.wishlist.dto.WishlistResponse;
 import com.fitzza.product.wishlist.entity.WishlistEntity;
 import com.fitzza.product.wishlist.repository.WishlistRepository;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +59,19 @@ public class WishlistService {
     @Transactional(readOnly = true)
     public boolean isWishlisted(Long userId, Long productId) {
         return wishlistRepository.existsByUserIdAndItemId(userId, String.valueOf(productId));
+    }
+
+    /** 목록 페이지용. 한 번에 조회해 N+1을 피한다. */
+    @Transactional(readOnly = true)
+    public Set<Long> findWishlistedProductIds(Long userId, Collection<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return Set.of();
+        }
+        List<String> itemIds = productIds.stream().map(String::valueOf).distinct().toList();
+        return wishlistRepository.findByUserIdAndItemIdIn(userId, itemIds).stream()
+                .map(WishlistEntity::getItemId)
+                .map(Long::valueOf)
+                .collect(Collectors.toSet());
     }
 
     @Transactional(readOnly = true)

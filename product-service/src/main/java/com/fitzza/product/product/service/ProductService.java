@@ -52,12 +52,20 @@ public class ProductService {
     private final WishlistService wishlistService;
 
     public ProductListPageResponse findProducts(
-            String category, ProductSortType sortType, int page, int size) {
+            String category, ProductSortType sortType, int page, int size, Long userId) {
         validateCategoryLength(category);
         PageRequest pageRequest = PageRequest.of(page, size, sortType.toSort());
         Page<ProductEntity> products = productRepository.findAll(
                 ProductSpecifications.visibleInCategory(category), pageRequest);
-        return ProductListPageResponse.from(products.map(ProductListResponse::from), sortType);
+        Set<Long> wishlistedIds = userId == null
+                ? Set.of()
+                : wishlistService.findWishlistedProductIds(
+                        userId,
+                        products.getContent().stream().map(ProductEntity::getProductId).toList());
+        Page<ProductListResponse> mapped = products.map(product -> ProductListResponse.from(
+                product,
+                userId == null ? null : wishlistedIds.contains(product.getProductId())));
+        return ProductListPageResponse.from(mapped, sortType);
     }
 
     private void validateCategoryLength(String category) {

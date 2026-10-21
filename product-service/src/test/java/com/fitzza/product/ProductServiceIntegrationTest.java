@@ -138,7 +138,12 @@ class ProductServiceIntegrationTest {
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sort").value("TIME_DESC"))
-                .andExpect(jsonPath("$.content").isArray());
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content[0].wished").doesNotExist());
+        mockMvc.perform(get("/api/products").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.productId==" + shirt.getProductId() + ")].wished")
+                        .value(org.hamcrest.Matchers.contains(false)));
         mockMvc.perform(get("/api/products").param("category", "TO"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
@@ -254,6 +259,12 @@ class ProductServiceIntegrationTest {
         mockMvc.perform(get("/api/products/" + shirt.getProductId()).header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.wished").value(true));
+        mockMvc.perform(get("/api/products").header(ApiHeaders.USER_ID, USER_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.productId==" + shirt.getProductId() + ")].wished")
+                        .value(org.hamcrest.Matchers.contains(true)))
+                .andExpect(jsonPath("$.content[?(@.productId==" + knit.getProductId() + ")].wished")
+                        .value(org.hamcrest.Matchers.contains(false)));
 
         mockMvc.perform(get("/api/wishlists").header(ApiHeaders.USER_ID, USER_ID))
                 .andExpect(status().isOk())
