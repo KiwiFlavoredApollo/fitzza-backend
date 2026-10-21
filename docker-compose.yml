@@ -130,6 +130,8 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
     environment:
       <<: *java-environment
+      PRODUCT_SERVICE_DB_USER: ${PRODUCT_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      PRODUCT_SERVICE_DB_PASSWORD: ${PRODUCT_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
       RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
@@ -144,6 +146,8 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
     environment:
       <<: *java-environment
+      ORDER_SERVICE_DB_USER: ${ORDER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      ORDER_SERVICE_DB_PASSWORD: ${ORDER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
     depends_on: *domain-dependencies
