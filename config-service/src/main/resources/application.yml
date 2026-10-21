@@ -2,10 +2,6 @@ server:
   port: 8888
 
 spring:
-  config:
-    import:
-      - "optional:file:${FITZZA_ENV_FILE:../.env}[.properties]"
-      - "optional:file:${FITZZA_ENV_FILE:./.env}[.properties]"
   application:
     name: config-service
   profiles:
