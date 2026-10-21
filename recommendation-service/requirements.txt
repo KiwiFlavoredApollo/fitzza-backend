@@ -16,3 +16,7 @@ Pillow==12.3.0
 
 # Qdrant
 qdrant-client==1.19.1
+
+# Redis Cache
+redis>=5.0.0
+fakeredis>=2.20.0

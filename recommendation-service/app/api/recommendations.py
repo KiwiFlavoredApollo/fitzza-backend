@@ -7,9 +7,12 @@ logger = logging.getLogger(__name__)
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.clients.redis_client import RedisClient
 from app.clients.user_client import UserServiceClient
 from app.core.config import Settings, get_settings
 from app.core.database import RecommendationRepository
+from app.services.cache_service import CacheService
+
 from app.schemas.recommendation import (
     InternalComboProductItem,
     InternalComboResponse,
@@ -90,12 +93,35 @@ def _get_repository(request: Request) -> RecommendationRepository:
     return repo
 
 
-def _get_settings(request: Request) -> Settings:
-    settings = getattr(request.app.state, "settings", None)
+def _get_settings_from_app(app: Any) -> Settings:
+    settings = getattr(app.state, "settings", None)
     if settings is None:
         settings = get_settings()
-        request.app.state.settings = settings
+        app.state.settings = settings
     return settings
+
+
+def _get_settings(request: Request) -> Settings:
+    return _get_settings_from_app(request.app)
+
+
+def _get_redis_client(app: Any) -> RedisClient:
+    redis_client = getattr(app.state, "redis_client", None)
+    if redis_client is None:
+        settings = _get_settings_from_app(app)
+        redis_client = RedisClient(settings)
+        app.state.redis_client = redis_client
+    return redis_client
+
+
+def _get_cache_service(app: Any) -> CacheService:
+    cache_service = getattr(app.state, "cache_service", None)
+    if cache_service is None:
+        settings = _get_settings_from_app(app)
+        redis_client = _get_redis_client(app)
+        cache_service = CacheService(redis_client=redis_client, settings=settings)
+        app.state.cache_service = cache_service
+    return cache_service
 
 
 def _get_coordinator(app: Any) -> Any:
@@ -103,9 +129,11 @@ def _get_coordinator(app: Any) -> Any:
     if coordinator is None:
         from app.services.coordinator import FashionPipelineCoordinator
 
-        coordinator = FashionPipelineCoordinator()
+        cache_service = _get_cache_service(app)
+        coordinator = FashionPipelineCoordinator(cache_service=cache_service)
         app.state.coordinator = coordinator
     return coordinator
+
 
 
 def _sync_user_body(
@@ -298,12 +326,26 @@ def process_recommendation_request(
             user_body=user_body,
         )
 
-        pipeline_result = coordinator.run(
+        cache_service = _get_cache_service(app)
+        cached_result = cache_service.get_pipeline_result(
             user_query=query_text,
             user_id=str(user_id),
         )
+        if cached_result is not None:
+            pipeline_result = cached_result
+        else:
+            pipeline_result = coordinator.run(
+                user_query=query_text,
+                user_id=str(user_id),
+            )
+            cache_service.set_pipeline_result(
+                user_query=query_text,
+                user_id=str(user_id),
+                result=pipeline_result,
+            )
 
         result_type = pipeline_result.get("type", "coordination")
+
         tpo_summary = pipeline_result.get("tpo")
         comment = pipeline_result.get("comment")
 
@@ -488,8 +530,14 @@ def get_combo_internal(
         allowed_callers=("community", "product"),
     )
 
-    repository = _get_repository(request)
-    combo = repository.get_combo(comboId)
+    cache_service = _get_cache_service(request.app)
+    combo = cache_service.get_combo(comboId)
+    if combo is None:
+        repository = _get_repository(request)
+        combo = repository.get_combo(comboId)
+        if combo is not None:
+            cache_service.set_combo(comboId, combo)
+
     if combo is None:
         raise RecommendationApiError(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -549,4 +597,9 @@ def receive_size_feedback(
         size_feedback=payload.sizeFeedback,
         purchased_spec=purchased_spec,
     )
+
+    cache_service = _get_cache_service(request.app)
+    cache_service.invalidate_user_pipeline(user_id=str(payload.userId))
+
     return Response(status_code=status.HTTP_202_ACCEPTED)
+

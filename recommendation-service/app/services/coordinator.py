@@ -11,15 +11,17 @@ logger = logging.getLogger(__name__)
 # 자연어 의도 분석 -> 단품/코디 분기 -> 조화도 검수 -> 응답 생성하는 전체 흐름 총괄
 
 class FashionPipelineCoordinator:
-    def __init__(self):
+    def __init__(self, cache_service: Any = None):
         logger.info("패션 추천 파이프라인 컴포넌트 초기화 중...")
+        self.cache_service = cache_service
         self.parser = QueryParser()
-        self.engine = FashionSearchEngine()
+        self.engine = FashionSearchEngine(cache_service=cache_service)
         self.size_resolver = SizeProfileResolver()
         self.harmonizer = OutfitHarmonizer(self.engine)
         self.responder = ResponseGenerator()
 
         logger.info("전체 파이프라인 준비 완료")
+
 
     def _attach_size_info(
             self,

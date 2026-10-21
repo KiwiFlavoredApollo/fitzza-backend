@@ -24,7 +24,9 @@ class FashionSearchEngine:
             qdrant_url: Optional[str] = None,
             collection_name: Optional[str] = None,
             model_name: str = "patrickjohncyh/fashion-clip",
+            cache_service: Optional[Any] = None,
     ):
+        self.cache_service = cache_service
         self.qdrant_url = (
                 qdrant_url
                 or os.getenv("QDRANT_URL", "http://localhost:6333")
@@ -50,6 +52,11 @@ class FashionSearchEngine:
 
     def encode_text(self, clip_query_en: str) -> list[float]:
         """검색 텍스트를 Fashion-CLIP 벡터로 변환."""
+        if self.cache_service is not None:
+            cached_vector = self.cache_service.get_text_embedding(clip_query_en)
+            if cached_vector is not None:
+                return cached_vector
+
         inputs = self.processor(
             text=[clip_query_en],
             return_tensors="pt",
@@ -69,7 +76,11 @@ class FashionSearchEngine:
 
             feats = self._normalize(feats)
 
-        return feats.cpu().numpy()[0].tolist()
+        vector = feats.cpu().numpy()[0].tolist()
+        if self.cache_service is not None:
+            self.cache_service.set_text_embedding(clip_query_en, vector)
+        return vector
+
 
     @staticmethod
     def _as_list(value: Any) -> list[str]:
@@ -185,6 +196,26 @@ class FashionSearchEngine:
 
         if slot_budget is not None and slot_budget <= 0:
             raise ValueError("slot_budget은 0보다 커야 합니다.")
+
+        cache_params = {
+            "clip_query_en": clip_query_en,
+            "category": category,
+            "subcategory": subcategory,
+            "season_preferences": season_preferences,
+            "slot_budget": slot_budget,
+            "max_price": max_price,
+            "color": color,
+            "fit_type": fit_type,
+            "touch_type": touch_type,
+            "stretch_type": stretch_type,
+            "transparency_type": transparency_type,
+            "thickness_type": thickness_type,
+            "top_k": top_k,
+        }
+        if self.cache_service is not None:
+            cached_results = self.cache_service.get_search_result(cache_params)
+            if cached_results is not None:
+                return cached_results
 
         query_vector = self.encode_text(clip_query_en)
 
@@ -349,4 +380,9 @@ class FashionSearchEngine:
             reverse=True,
         )
 
-        return results[:top_k]
+        top_results = results[:top_k]
+        if self.cache_service is not None:
+            self.cache_service.set_search_result(cache_params, top_results)
+
+        return top_results
+
