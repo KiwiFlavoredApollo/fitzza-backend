@@ -2,9 +2,9 @@ server:
   port: 8082
 spring:
   datasource:
-    # 서비스 전용 DB 계정. 공용 POSTGRES_USER와 분리한다.
-    username: ${PRODUCT_POSTGRES_USER:product_service}
-    password: ${PRODUCT_POSTGRES_PASSWORD:fitzza_local}
+    # 서비스 전용 DB 계정(product_service_app)이 있으면 그걸 쓰고, 없으면 공용 계정(POSTGRES_USER)을 쓴다.
+    username: ${PRODUCT_SERVICE_DB_USER:${POSTGRES_USER:fitzza}}
+    password: ${PRODUCT_SERVICE_DB_PASSWORD:${POSTGRES_PASSWORD:fitzza_local}}
     hikari:
       schema: product_service
   flyway:

@@ -1,22 +1,25 @@
 # PostgreSQL 초기화 (로컬)
 
-`init.sql`은 Compose Postgres **최초 기동** 시 스키마와 product/order 전용 계정을 만든다.
+`init.sql`은 Compose Postgres **최초 기동** 시 스키마만 만든다.
+서비스 전용 DB 계정은 `<스키마>_app`(예: `product_service_app`)이며, 스크립트로 별도 생성한다.
 
-| 역할 | 스키마 | 로컬 기본 비밀번호 |
-|------|--------|-------------------|
-| `product_service` | `product_service` | `fitzza_local` |
-| `order_service` | `order_service` | `fitzza_local` |
+| 역할 | 스키마 | env (비밀번호) |
+|------|--------|----------------|
+| `product_service_app` | `product_service` | `PRODUCT_SERVICE_DB_PASSWORD` |
+| `order_service_app` | `order_service` | `ORDER_SERVICE_DB_PASSWORD` |
 
-공용 계정 `fitzza`는 그대로 두고, product·order 앱만 전용 계정으로 접속한다.
+앱 설정은 `PRODUCT_SERVICE_DB_USER`/`_PASSWORD`가 있으면 전용 계정을 쓰고, 없으면 공용 `POSTGRES_USER`/`POSTGRES_PASSWORD`로 fallback한다.
 
-## 기존 볼륨 / RDS
+## product / order 계정 적용
 
-`init.sql`은 이미 있는 데이터 디렉터리에는 다시 실행되지 않는다. 아래를 한 번 적용한다.
+`\ir`가 같은 디렉터리의 `service-account.psql`을 참조하므로 `infra/postgres`에서 실행한다. psql 15+ 필요.
 
 ```bash
-set -a && source .env && set +a
-docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-  < infra/postgres/product_order_roles.sql
+cd infra/postgres
+export PRODUCT_SERVICE_DB_PASSWORD="${PRODUCT_SERVICE_DB_PASSWORD:-fitzza_local}"
+export ORDER_SERVICE_DB_PASSWORD="${ORDER_SERVICE_DB_PASSWORD:-fitzza_local}"
+psql -v ON_ERROR_STOP=1 -h localhost -U "${POSTGRES_USER:-fitzza}" -d "${POSTGRES_DB:-fitzza}" \
+  -f product_order_roles.sql
 ```
 
-RDS에서는 관리자 계정으로 같은 SQL을 실행하고, 비밀번호는 Secret 값에 맞게 바꾼다.
+비밀번호 env가 없는 서비스는 건너뛴다. 다시 실행해도 된다(비밀번호 갱신·기존 테이블 소유권 이전).
