@@ -17,6 +17,13 @@ def test_delivery_template_does_not_grant_cluster_admin():
     assert "get secret" not in spec
 
 
+def test_artifact_endpoint_is_opt_in_and_account_scoped():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "HasDeliveryArtifactBucket: !Not" in template
+    assert "aws:PrincipalAccount: !Ref AWS::AccountId" in template
+    assert "s3:::${DeliveryArtifactBucketName}/*" in template
+
+
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl unavailable")
 def test_delivery_overlay_excludes_operator_owned_resources():
     yaml = pytest.importorskip("yaml")

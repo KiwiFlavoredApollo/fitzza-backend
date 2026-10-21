@@ -67,6 +67,11 @@ Parameters:
     Type: String
     Default: fitzza
     AllowedPattern: '^[a-z0-9]+(?:[._/-][a-z0-9]+)*$'
+  DeliveryArtifactBucketName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    Description: Existing private delivery artifact bucket; empty keeps endpoint access disabled.
   DatabaseEngineVersion:
     Type: String
     Default: '17.6'
@@ -107,6 +112,7 @@ Rules:
 Conditions:
   ManagedDatabasePassword: !Equals [!Ref DatabasePasswordSource, managed]
   SsmDatabasePassword: !Equals [!Ref DatabasePasswordSource, ssm]
+  HasDeliveryArtifactBucket: !Not [!Equals [!Ref DeliveryArtifactBucketName, '']]
 
 Mappings:
   EcrRepositoryNames:
@@ -397,6 +403,7 @@ Resources:
         must:
           - stay attached to the private route table
           - allow read access to the regional ECR layer bucket for EKS system images
+          - allow delivery artifacts only for the explicit bucket and this account
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -417,6 +424,28 @@ Resources:
             Principal: '*'
             Action: s3:GetObject
             Resource: !Sub 'arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*'
+          - !If
+            - HasDeliveryArtifactBucket
+            - Sid: AllowDeliveryArtifactObjects
+              Effect: Allow
+              Principal: '*'
+              Action: [s3:GetObject, s3:GetObjectVersion, s3:PutObject]
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DeliveryArtifactBucketName}/*'
+              Condition:
+                StringEquals:
+                  aws:PrincipalAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
+          - !If
+            - HasDeliveryArtifactBucket
+            - Sid: AllowDeliveryArtifactBucketMetadata
+              Effect: Allow
+              Principal: '*'
+              Action: [s3:GetBucketAcl, s3:GetBucketLocation]
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DeliveryArtifactBucketName}'
+              Condition:
+                StringEquals:
+                  aws:PrincipalAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
       RouteTableIds:
         - !Ref PrivateRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
