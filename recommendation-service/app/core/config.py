@@ -79,6 +79,28 @@ class Settings:
     http_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("HTTP_TIMEOUT_SECONDS", "5.0"))
     )
+    redis_host: str = field(
+        default_factory=lambda: os.getenv("REDIS_HOST", "localhost")
+    )
+    redis_port: int = field(
+        default_factory=lambda: int(os.getenv("REDIS_PORT", "6379"))
+    )
+    redis_db: int = field(
+        default_factory=lambda: int(os.getenv("REDIS_DB", "0"))
+    )
+    redis_password: str | None = field(
+        default_factory=lambda: os.getenv("REDIS_PASSWORD") or None
+    )
+    redis_enabled: bool = field(
+        default_factory=lambda: os.getenv("REDIS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
+    )
+    redis_ttl_seconds: int = field(
+        default_factory=lambda: int(os.getenv("REDIS_TTL_SECONDS", "3600"))
+    )
+    redis_socket_timeout: float = field(
+        default_factory=lambda: float(os.getenv("REDIS_SOCKET_TIMEOUT", "2.0"))
+    )
+
 
     def get_postgres_dsn(self) -> str | None:
         if self.database_url.strip():
