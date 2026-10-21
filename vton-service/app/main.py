@@ -49,9 +49,11 @@ def _mount_router_routes(
                 status_code=route.status_code,
                 tags=route.tags,
                 summary=route.summary,
+                description=route.description,
                 methods=list(route.methods or []),
                 responses=route.responses,
                 response_class=route.response_class,
+                openapi_extra=route.openapi_extra,
             )
 
 

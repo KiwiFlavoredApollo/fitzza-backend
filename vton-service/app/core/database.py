@@ -667,3 +667,165 @@ class VtonRepository:
                     }
                 finally:
                     self._close_sqlite_if_transient(conn)
+
+    def get_user_fittings(
+        self,
+        user_id: int,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """사용자의 활성(삭제되지 않은) 피팅 목록을 최신순으로 조회하고 전체 건수와 함께 반환합니다."""
+        items: list[dict[str, Any]] = []
+        total_count = 0
+
+        if self._use_postgres:
+            schema = self.postgres_schema
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        # 전체 건수
+                        cur.execute(
+                            f"""
+                            SELECT COUNT(*) AS total_count
+                            FROM {schema}.fittings
+                            WHERE user_id = %s AND is_deleted = FALSE;
+                            """,
+                            (user_id,),
+                        )
+                        count_row = cur.fetchone()
+                        if count_row:
+                            total_count = int(
+                                count_row["total_count"]
+                                if isinstance(count_row, dict) or hasattr(count_row, "__getitem__") and "total_count" in count_row
+                                else count_row[0]
+                            )
+                        else:
+                            total_count = 0
+
+                        if total_count == 0:
+                            return [], 0
+
+                        # 목록 조회
+                        cur.execute(
+                            f"""
+                            SELECT fitting_id, user_id, photo_id, status,
+                                   result_image_url, error_message, created_at, updated_at
+                            FROM {schema}.fittings
+                            WHERE user_id = %s AND is_deleted = FALSE
+                            ORDER BY fitting_id DESC
+                            LIMIT %s OFFSET %s;
+                            """,
+                            (user_id, limit, offset),
+                        )
+                        rows = cur.fetchall() or []
+                        fitting_ids = [int(r["fitting_id"]) for r in rows]
+
+                        # 상품 목록 매핑
+                        product_map: dict[int, list[dict[str, Any]]] = {fid: [] for fid in fitting_ids}
+                        if fitting_ids:
+                            placeholders = ",".join(["%s"] * len(fitting_ids))
+                            cur.execute(
+                                f"""
+                                SELECT fitting_id, product_id, product_name, price, image_url, category_name
+                                FROM {schema}.fitting_products
+                                WHERE fitting_id IN ({placeholders})
+                                ORDER BY id ASC;
+                                """,
+                                fitting_ids,
+                            )
+                            for pr in cur.fetchall() or []:
+                                fid = int(pr["fitting_id"])
+                                product_map[fid].append({
+                                    "productId": int(pr["product_id"]),
+                                    "productName": pr["product_name"],
+                                    "price": int(pr["price"]),
+                                    "imageUrl": pr["image_url"],
+                                    "categoryName": pr["category_name"],
+                                })
+
+                        for r in rows:
+                            fid = int(r["fitting_id"])
+                            prods = product_map.get(fid, [])
+                            items.append({
+                                "fittingId": fid,
+                                "userId": int(r["user_id"]),
+                                "photoId": r["photo_id"],
+                                "status": r["status"],
+                                "resultImageUrl": r["result_image_url"],
+                                "productCount": len(prods),
+                                "products": prods,
+                                "createdAt": self._format_utc_timestamp(r["created_at"]),
+                            })
+        else:
+            with self._lock:
+                conn = self._get_sqlite_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT COUNT(*)
+                        FROM fittings
+                        WHERE user_id = ? AND is_deleted = 0;
+                        """,
+                        (user_id,),
+                    )
+                    count_row = cur.fetchone()
+                    total_count = int(count_row[0]) if count_row else 0
+
+                    if total_count == 0:
+                        return [], 0
+
+                    cur.execute(
+                        """
+                        SELECT fitting_id, user_id, photo_id, status,
+                               result_image_url, error_message, created_at, updated_at
+                        FROM fittings
+                        WHERE user_id = ? AND is_deleted = 0
+                        ORDER BY fitting_id DESC
+                        LIMIT ? OFFSET ?;
+                        """,
+                        (user_id, limit, offset),
+                    )
+                    rows = [dict(r) for r in cur.fetchall()]
+                    fitting_ids = [int(r["fitting_id"]) for r in rows]
+
+                    product_map = {fid: [] for fid in fitting_ids}
+                    if fitting_ids:
+                        placeholders = ",".join(["?"] * len(fitting_ids))
+                        cur.execute(
+                            f"""
+                            SELECT fitting_id, product_id, product_name, price, image_url, category_name
+                            FROM fitting_products
+                            WHERE fitting_id IN ({placeholders})
+                            ORDER BY id ASC;
+                            """,
+                            fitting_ids,
+                        )
+                        for pr in cur.fetchall():
+                            pr_dict = dict(pr)
+                            fid = int(pr_dict["fitting_id"])
+                            product_map[fid].append({
+                                "productId": int(pr_dict["product_id"]),
+                                "productName": pr_dict["product_name"],
+                                "price": int(pr_dict["price"]),
+                                "imageUrl": pr_dict["image_url"],
+                                "categoryName": pr_dict["category_name"],
+                            })
+
+                    for r in rows:
+                        fid = int(r["fitting_id"])
+                        prods = product_map.get(fid, [])
+                        items.append({
+                            "fittingId": fid,
+                            "userId": int(r["user_id"]),
+                            "photoId": r["photo_id"],
+                            "status": r["status"],
+                            "resultImageUrl": r["result_image_url"],
+                            "productCount": len(prods),
+                            "products": prods,
+                            "createdAt": self._format_utc_timestamp(r["created_at"]),
+                        })
+                finally:
+                    self._close_sqlite_if_transient(conn)
+
+        return items, total_count

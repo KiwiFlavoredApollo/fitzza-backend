@@ -122,29 +122,44 @@ def to_png_bytes(image_bytes: bytes) -> bytes:
         return buffer.getvalue()
 
 
-def build_prompt(categories: list[str]) -> str:
+def build_prompt(categories: list[str], *, has_user_face: bool = False) -> str:
     """OpenAI 이미지 편집 API에 전달할 한국어 지시문 프롬프트를 생성합니다."""
+    start_index = 3 if has_user_face else 2
     clothing_instructions = "\n".join(
-        f"- 참조 이미지 {index + 2}: {category}"
+        f"- 참조 이미지 {index + start_index}: {category}"
         for index, category in enumerate(categories)
     )
 
+    face_prompt_section = (
+        """
+[인물 얼굴 합성 요구사항]
+1. 첫 번째 입력 이미지는 기본 전신 인물(아바타) 체형 및 포즈 참조 사진입니다.
+2. 두 번째 입력 이미지는 사용자의 얼굴(인물) 사진입니다.
+3. 아바타 인물의 전체적인 서 있는 포즈, 체형 비율, 어깨너비, 키 비율은 첫 번째 아바타 이미지를 그대로 따르되, 얼굴의 이목구비, 표정, 시선, 헤어스타일은 두 번째 사용자 얼굴 사진의 특징을 자연스럽게 반영하여 합성하세요.
+4. 얼굴과 목, 어깨 연결선, 피부 톤이 어색함 없이 하나의 자연스러운 인물로 이어지도록 블렌딩하세요.
+""".strip()
+        if has_user_face
+        else """
+[기본 인물 요구사항]
+1. 첫 번째 입력 이미지는 기본 전신 인물(아바타) 사진입니다.
+2. 기본 인물의 고유한 얼굴, 헤어스타일, 체형 비율, 포즈, 표정, 시선, 촬영 구도 및 배경을 그대로 유지하세요.
+""".strip()
+    )
+
     return f"""
-첫 번째 입력 이미지는 기본 전신 인물(아바타) 사진입니다.
-그 이후의 입력 이미지들은 순서대로 착용할 의류 상품 참조 이미지입니다.
+{face_prompt_section}
 
 [의류 참조 이미지 매핑]
 {clothing_instructions}
 
 [가상 피팅 요구사항]
-1. 기본 인물의 고유한 얼굴, 헤어스타일, 체형 비율, 포즈, 표정, 시선, 촬영 구도 및 배경을 그대로 유지하세요.
-2. 각 참조 이미지로 전달된 의류 상품을 아바타 인물에게 자연스럽게 입히세요.
-3. 제공되지 않은 카테고리의 새로운 의류나 아이템을 임의로 추가하거나 생성하지 마세요.
-4. 각 상품의 고유한 색상, 패턴, 소재 질감, 실루엣, 디테일 디자인을 충실히 반영하세요.
-5. 상의와 아우터가 모두 전달된 경우 아우터를 상의 위에 자연스럽게 겉옷으로 걸치세요.
-6. 신발은 발에 착용하고, 모자는 머리에 맞추어 씌우세요.
-7. 인물의 포즈와 체형에 맞추어 주름, 원단 핏, 그림자, 조명이 현실적이고 자연스럽게 어우러지도록 합성하세요.
-8. 여러 장의 사진을 이어붙인 콜라주가 아닌, 하나의 완성된 자연스러운 피팅 전신 사진으로 출력하세요.
+1. 각 참조 이미지로 전달된 의류 상품을 인물에게 자연스럽게 입히세요.
+2. 제공되지 않은 카테고리의 새로운 의류나 아이템을 임의로 추가하거나 생성하지 마세요.
+3. 각 상품의 고유한 색상, 패턴, 소재 질감, 실루엣, 디테일 디자인을 충실히 반영하세요.
+4. 상의와 아우터가 모두 전달된 경우 아우터를 상의 위에 자연스럽게 겉옷으로 걸치세요.
+5. 신발은 발에 착용하고, 모자는 머리에 맞추어 씌우세요.
+6. 인물의 포즈와 체형에 맞추어 주름, 원단 핏, 그림자, 조명이 현실적이고 자연스럽게 어우러지도록 합성하세요.
+7. 여러 장의 사진을 이어붙인 콜라주가 아닌, 하나의 완성된 자연스러운 피팅 전신 사진으로 출력하세요.
 """.strip()
 
 
@@ -206,6 +221,7 @@ def generate_tryon_image(
     *,
     avatar_bytes: bytes | None = None,
     avatar_path: str | Path | None = None,
+    user_face_bytes: bytes | None = None,
     api_key: str | None = None,
     model: str | None = None,
     timeout_seconds: float | None = None,
@@ -213,7 +229,7 @@ def generate_tryon_image(
     openai_client: Any = None,
 ) -> bytes:
     """
-    기본 아바타와 의류 이미지들을 OpenAI Image Edit API에 전달하여 가상 피팅 결과 이미지를 생성합니다.
+    기본 아바타와 의류 이미지들(및 선택적으로 사용자 얼굴 사진)을 OpenAI Image Edit API에 전달하여 가상 피팅 결과 이미지를 생성합니다.
     """
     parsed_categories = parse_categories(categories)
 
@@ -229,6 +245,14 @@ def generate_tryon_image(
             raise VtonConfigurationError("전달된 아바타 이미지가 유효하지 않습니다.") from exc
     else:
         avatar_png = load_avatar_png(avatar_path)
+
+    # 사용자 얼굴 이미지가 전달된 경우 PNG 검증
+    user_face_png: bytes | None = None
+    if user_face_bytes is not None:
+        try:
+            user_face_png = to_png_bytes(user_face_bytes)
+        except (UnidentifiedImageError, OSError, ValueError) as exc:
+            raise VtonValidationError("사용자 얼굴 이미지가 유효하지 않습니다.") from exc
 
     clothing_png_list: list[bytes] = []
     for index, raw_bytes in enumerate(clothing_images):
@@ -261,6 +285,9 @@ def generate_tryon_image(
     image_inputs: list[tuple[str, bytes, str]] = [
         ("avatar.png", avatar_png, "image/png"),
     ]
+    if user_face_png is not None:
+        image_inputs.append(("user_face.png", user_face_png, "image/png"))
+
     for index, clothing_png in enumerate(clothing_png_list):
         image_inputs.append(
             (f"clothing_{index + 1}.png", clothing_png, "image/png")
@@ -276,7 +303,7 @@ def generate_tryon_image(
         result = client.images.edit(
             model=resolved_model,
             image=image_inputs,
-            prompt=build_prompt(parsed_categories),
+            prompt=build_prompt(parsed_categories, has_user_face=user_face_png is not None),
             n=1,
             size="1024x1536",
             quality="high",
