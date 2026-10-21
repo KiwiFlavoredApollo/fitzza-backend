@@ -1,0 +1,12 @@
+*
+!Dockerfile
+!requirements.txt
+!requirements-cloud.txt
+!src/
+!src/**/*.py
+!jev/
+!jev/**/*.py
+!jev/**/*.json
+!jev/SOURCE.md
+**/__pycache__/
+**/*.pyc

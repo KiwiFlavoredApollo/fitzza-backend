@@ -1,0 +1,33 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCuratedBundleAndPriorResponses",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/curated/bundle.tar.gz",
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/jev/color_map_jev_results.jsonl"
+      ]
+    },
+    {
+      "Sid": "WriteJevReviewOnly",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/jev/*"
+    },
+    {
+      "Sid": "ReadJevKeyOnly",
+      "Effect": "Allow",
+      "Action": "ssm:GetParameter",
+      "Resource": "arn:aws:ssm:ap-northeast-2:414901227428:parameter/fitzza/prod/data-pipeline/typesafe-api-key"
+    },
+    {
+      "Sid": "DecryptViaSsmOnly",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:ap-northeast-2:414901227428:key/a4a303e7-fbc7-45ec-8798-2480c7176e7b",
+      "Condition": {"StringEquals": {"kms:ViaService": "ssm.ap-northeast-2.amazonaws.com"}}
+    }
+  ]
+}
