@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.clients.sqs_client import SqsClient
 from app.clients.storage_client import StorageClient
 from app.core.config import Settings, get_settings
 from app.core.database import VtonRepository
@@ -59,6 +60,7 @@ _REPO: VtonRepository | None = None
 _PRODUCT_CLIENT: ProductServiceClient | None = None
 _NOTIFICATION_CLIENT: NotificationServiceClient | None = None
 _STORAGE_CLIENT: StorageClient | None = None
+_SQS_CLIENT: SqsClient | None = None
 
 
 def get_repo() -> VtonRepository:
@@ -94,17 +96,27 @@ def get_storage_client() -> StorageClient:
     return _STORAGE_CLIENT
 
 
+def get_sqs_client() -> SqsClient:
+    global _SQS_CLIENT
+    if _SQS_CLIENT is None:
+        _SQS_CLIENT = SqsClient()
+    return _SQS_CLIENT
+
+
 def set_dependencies_for_tests(
     repo: VtonRepository | None = None,
     product_client: ProductServiceClient | None = None,
     notification_client: NotificationServiceClient | None = None,
     storage_client: StorageClient | None = None,
+    sqs_client: SqsClient | None = None,
 ) -> None:
-    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT
+    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT, _SQS_CLIENT
     _REPO = repo
     _PRODUCT_CLIENT = product_client
     _NOTIFICATION_CLIENT = notification_client
     _STORAGE_CLIENT = storage_client
+    _SQS_CLIENT = sqs_client
+
 
 
 def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
@@ -540,19 +552,38 @@ async def request_fitting(
 
     result_image_url = _resolve_result_image_url(fitting_id, request)
 
-    # 백그라운드 태스크 등록
-    background_tasks.add_task(
-        _run_background_vton,
-        fitting_id=fitting_id,
-        user_id=x_user_id,
-        photo_id=photo_id,
-        product_ids=unique_product_ids,
-        result_image_url=result_image_url,
-        request_id_header=x_request_id,
-        user_face_bytes=user_face_bytes,
-    )
+    settings = get_settings()
+    if settings.queue_backend == "sqs":
+        sqs_client = get_sqs_client()
+        sqs_payload = {
+            "fitting_id": fitting_id,
+            "user_id": x_user_id,
+            "photo_id": photo_id,
+            "product_ids": unique_product_ids,
+            "result_image_url": result_image_url,
+            "request_id_header": x_request_id,
+        }
+        sqs_client.send_message(sqs_payload)
+        logger.info(
+            "SQS 피팅 작업 발행 완료 (queue_backend=sqs, fittingId=%s, userId=%s)",
+            fitting_id,
+            x_user_id,
+        )
+    else:
+        # 백그라운드 태스크 등록 (QUEUE_BACKEND=memory)
+        background_tasks.add_task(
+            _run_background_vton,
+            fitting_id=fitting_id,
+            user_id=x_user_id,
+            photo_id=photo_id,
+            product_ids=unique_product_ids,
+            result_image_url=result_image_url,
+            request_id_header=x_request_id,
+            user_face_bytes=user_face_bytes,
+        )
 
     return FittingCreateResponse(fittingId=fitting_id, status="PENDING")
+
 
 
 @router.get(
