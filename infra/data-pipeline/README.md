@@ -2,6 +2,10 @@
 
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
+The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,
+and creates Jev's `data/` bundle only when the input contract passes. It never guesses missing color-image mappings,
+starts Jev, or grants human/indexing approval. It is suspended in EKS; actual collection remains separately authorized.
+
 The AI data pipeline runs in this order:
 
 ```text

@@ -9,7 +9,7 @@
 | 단계 | 준비 리소스 | 다음 단계 조건 |
 | --- | --- | --- |
 | 신규 수집 | crawler-collection-prepared / src.cloud_batch | 500개 seed ID 제외, 실행별 체크포인트 |
-| 데이터 품질·선정 | 별도 검증 및 curated 번들 게시 필요 | 3000개 고유 상품·목표 비율·실측·색상별 이미지 검증 |
+| 데이터 계약·선정 | data-curation-prepared / src.cloud_curate | 3000개 고유 상품·목표 비율·의류 계절·실측·색상 이미지 연결 검사; 실제 이미지 내용 검증은 별도 |
 | Jev 색상 정제 | jev-color-review-prepared / src.jev_job | SSM 키 등록 및 curated/bundle.tar.gz |
 | 사람 검수 | 로컬 review-bundle / src.review_gate | 미확정 색상 및 기존 overrides의 명시적 재검수 |
 | 인덱싱 | fashion-clip-indexer-prepared / indexer/entrypoint.py | 색상 승인 + 품질 승인 + 모델 revision 고정 |
@@ -34,6 +34,7 @@ raw batch 성공과 screened 수량을 최종 합격 상품 수로 간주하지 
 
 ```text
 seed/manifest.json                # seed 후보 ID·hash
+seed/objects/<sha256>             # manifest와 동일한 기존 상품 JSON; 실제 실행 전 별도 게시 필요
 crawler/objects/<sha256>           # raw 체크포인트, 내용 주소 기반
 crawler/checkpoints.json           # 경로→hash 목록, ETag 조건부 게시
 curated/bundle.tar.gz              # 품질·선정 후 data/**/*.json을 운영자가 게시
@@ -43,7 +44,9 @@ approved/bundle.tar.gz             # 사람이 검수하고 품질 검증한 승
 indexer/report.json                # 적재 후 보고서, 서빙 전환 아님
 ```
 
-현재 raw→curated 자동 선정·색상 이미지 품질 검증과 전체 단계 오케스트레이션은 완료되지 않았다.
+raw→curated 연결 코드·이미지·전용 IAM·정지 Job 대기 배포를 완료했다. 실제 실행 검증은 아직 하지 않았다.
+현재 크롤러 parser는 color_image_mappings를 만들지 않으므로 신규 screened 결과는 정제 입력에 합격하지 못한다.
+이 필드의 실제 근거 기반 수집 연결과 이미지 내용 검증 및 전체 단계 오케스트레이션은 완료되지 않았다.
 FITZZA-219 완료나 전체 end-to-end 검증 완료로 기록하지 않는다. 운영자 입력 없이 raw를 Jev에 바로 넘기지 않는다.
 checkpoint는 같은 실행에서 직렬 Job으로만 갱신한다. ETag 충돌은 실패이며 강제로 덮어쓰지 않는다.
 새 worker는 이전 pilot 경로를 자동 합치지 않는다.
@@ -53,13 +56,50 @@ checkpoint는 같은 실행에서 직렬 Job으로만 갱신한다. ETag 충돌�
 일반 대화·파일·명령행 인자에 키를 붙여 넣지 않는다. 대화형 PowerShell에서 아래를 실행하고 숨김 프롬프트에 입력한다.
 
 ```powershell
-C:\inspire\final-project\fashion-crawler-starter\.venv\Scripts\python.exe C:\Users\user\.codex\worktrees\crawler-cloud-pipeline\backend_project\infra\data-pipeline\register_jev_key.py
+py -m venv "$env:TEMP\fitzza-key-register"
+& "$env:TEMP\fitzza-key-register\Scripts\python.exe" -m pip install "boto3[crt]>=1.41.0"
+& "$env:TEMP\fitzza-key-register\Scripts\python.exe" C:\Users\user\.codex\worktrees\crawler-cloud-pipeline\backend_project\infra\data-pipeline\register_jev_key.py
 ```
 
 스크립트는 `fitzza` 프로필로 `/fitzza/prod/data-pipeline/typesafe-api-key`를 Standard SecureString으로 새로 등록한다.
 기존 값은 덮어쓰지 않으며 키를 출력하지 않는다. 이 스크립트는 배포 과정에서 자동 실행하지 않는다.
 Jev Job은 실행 승인을 받은 경우에만 해당 파라미터를 복호화해 자식 프로세스에 전달한다.
 Secrets Manager 자원은 새로 만들지 않는다.
+10/21 사용자가 등록을 완료했고, describe-parameters로 SecureString version 1 메타데이터만 확인했다.
+키 값은 읽지 않았고 Jev 호출도 하지 않았다. 기존 크롤러 가상환경은 변경하지 않는다.
+
+## raw → curated 연결 (배포와 실제 실행은 별도)
+
+컨테이너의 `/app` 또는 소스 `crawler` 폴더에서 다음은 로컬 JSON만 읽는다.
+`--source` 순서대로 seed와 신규 screened 디렉터리를 입력한다. 원본은 수정하지 않는다.
+
+```powershell
+python -B -m src.curate_dataset --source <seed-data> --source <screened-data>
+```
+
+이 명령은 수량·탈락 사유·부족량을 출력한다. `--bundle <새-파일.tar.gz>`를 추가하면
+카테고리별 900/750/600/450/300 및 의류 계절 quota 충족 때만 `data/`와 `config/curation_report.json`을 만든다.
+동일 ID 중복은 실패하고, 기존 번들은 덮어쓰지 않는다. 이미지 내용 확인이나 색상·품질 승인 파일은 생성하지 않는다.
+색상 이름이나 이미지가 없을 때 상품명에서 추측하거나 다른 상품 이미지를 복사하지 않는다.
+
+`src.cloud_curate --bucket <bucket> --run-id <run-id>`는 기본적으로 네트워크 호출 0회다.
+별도 실행 승인 후 `--execute-approved-run`이 지정된 때만 S3 seed manifest/objects와
+동일 실행의 screened 체크포인트를 읽고 SHA-256을 검증한다. 후보·탈락·실패 기록은 입력에서 제외한다.
+선정 완료 시 `curated/bundle.tar.gz`를 `IfNoneMatch=*`로 최초 게시한다. 미완료면 게시 없이 실패하며 Jev는 시작하지 않는다.
+이는 단계 간 데이터 연결이며 자동 단계 실행기가 아니다. 실제 사용 전 입력 객체 준비가 필요하다.
+`curator-job.yaml`은 `fitzza-curator` 서비스 계정을 사용하며 전용 `fitzza-prod-curator` 역할에 연결됐다.
+IAM은 이번 실행의 seed/체크포인트 읽기와 `If-None-Match: *`가 있는 curated 번들 생성만 허용한다.
+앱·CD·기존 수집 역할은 변경하지 않았으며 삭제·SSM 키 읽기·승인본 쓰기 권한은 없다.
+Autopilot 정적 분석 baseline에서 S3 Get/Put만 남기고 실제 입력·출력 경로로 제한했다.
+분석 도구의 `WILDCARD_WITHOUT_LIKE_OPERATOR` 경고 1건은 literal `*` 헤더 비교에 관한 것이다.
+이 값은 와일드카드 패턴이 아니므로 정확한 `StringEquals`를 유지했다. 권한 시뮬레이터에서
+조건부 Put 허용, 헤더 없는 Put·Delete·SSM 읽기 차단을 확인했다. 실제 Pod AWS 호출 검증은 별도다.
+임시 Docker 인증 설정은 push 후 로그아웃했다.
+
+기존 500개 오프라인 검사 결과: 488개 계약 통과, 12개 `invalid_actual_size`로 제외.
+통과량은 상의 98 / 하의 96 / 신발 96 / 아우터 99 / 모자 99, 추가 부족량은 802/654/504/351/201이다.
+검사 기준은 모든 사이즈 행에 인덱서가 인식하는 유한 양수 실측값이 있는지다. 일부 행만 사용 가능한 상품도 제외한다.
+488개는 현재 입력 계약 통과 수량이지 최종 이미지 품질·사람 검수 합격 수량이 아니다.
 
 ## 사람 검수와 승인
 
