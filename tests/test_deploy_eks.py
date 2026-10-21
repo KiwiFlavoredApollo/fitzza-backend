@@ -20,7 +20,8 @@ def test_base_rollouts_finish_before_application_apply():
     for app in APPLICATIONS:
         assert any(f"deployment/{app}" in command for command in commands[apply_indexes[2] + 1:])
     assert all(call.kwargs["check"] for call in run.call_args_list)
-    assert all(call.kwargs["timeout"] == 660 for call in run.call_args_list)
+    assert all(call.kwargs["timeout"] == 960 for call in run.call_args_list)
+    assert all("--timeout=900s" in command for command in commands if "rollout" in command)
 
 
 def test_config_server_failure_prevents_application_apply():
@@ -33,7 +34,7 @@ def test_config_server_failure_prevents_application_apply():
 
 @pytest.mark.parametrize("completed_calls", [0, 2])
 def test_timeout_propagates_and_stops_deployment(completed_calls):
-    timeout = subprocess.TimeoutExpired("kubectl", 660)
+    timeout = subprocess.TimeoutExpired("kubectl", 960)
     with patch("scripts.deploy_eks.subprocess.run") as run:
         run.side_effect = [None] * completed_calls + [timeout]
         with pytest.raises(subprocess.TimeoutExpired) as error:

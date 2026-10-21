@@ -4,8 +4,8 @@ import argparse
 import subprocess
 
 
-# Leave a minute for process overhead beyond kubectl's 600-second rollout wait.
-KUBECTL_TIMEOUT_SECONDS = 660
+# The rollout wait matches the prod progressDeadlineSeconds; leave a minute for process overhead.
+KUBECTL_TIMEOUT_SECONDS = 960
 
 APPLICATIONS = (
     "user-service", "product-service", "order-service", "community-service",
@@ -25,7 +25,7 @@ def deploy(manifest: str) -> None:
         kubectl(*args)
 
     def wait(resource: str) -> None:
-        kubectl("-n", "fitzza", "rollout", "status", resource, "--timeout=600s")
+        kubectl("-n", "fitzza", "rollout", "status", resource, "--timeout=900s")
 
     # The delivery overlay excludes operator-owned storage, data workloads and RBAC.
     apply("fitzza.io/workload!=application")
