@@ -152,29 +152,21 @@ def _run_background_vton(
             used_categories.add(cat)
             resolved_products.append(item)
 
-        # 1-1. 필수 카테고리(하의) 누락 시 기본 베이직 하의 샘플 이미지 자동 보완
-        if "하의" not in used_categories:
-            try:
-                sample_bottom_bytes = load_sample_clothing_png("하의")
-                fallback_bottom_item = {
-                    "productId": 0,
-                    "productName": "기본 베이직 팬츠",
-                    "price": 0,
-                    "imageUrl": "",
-                    "categoryName": "하의",
-                    "imageBytes": sample_bottom_bytes,
-                }
-                resolved_products.append(fallback_bottom_item)
-                used_categories.add("하의")
-                logger.info("하의 누락 감지 -> 기본 베이직 하의 이미지 자동 폴백 적용 (fittingId=%s)", fitting_id)
-            except Exception as e:
-                logger.warning("기본 하의 샘플 로드 실패: %s", e)
-
-        # 상품 DB 영속화
+        # 상품 DB 영속화 (사용자가 요청한 실제 상품들만 DB에 저장)
         repo.save_fitting_products(fitting_id, resolved_products)
 
         categories = [p["categoryName"] for p in resolved_products]
         clothing_images = [p["imageBytes"] for p in resolved_products]
+
+        # 1-1. 필수 카테고리(하의) 누락 시 기본 베이직 하의 샘플 이미지 자동 보완 (AI 생성 입력에만 추가)
+        if "하의" not in used_categories:
+            try:
+                sample_bottom_bytes = load_sample_clothing_png("하의")
+                categories.append("하의")
+                clothing_images.append(sample_bottom_bytes)
+                logger.info("하의 누락 감지 -> 기본 베이직 하의 이미지 자동 폴백 적용 (fittingId=%s)", fitting_id)
+            except Exception as e:
+                logger.warning("기본 하의 샘플 로드 실패: %s", e)
 
         # 1-2. 사용자 얼굴 이미지 로드 (전달된 photo_id가 있는 경우)
         user_face_bytes: bytes | None = None
@@ -234,7 +226,7 @@ def _run_background_vton(
     except Exception as exc:
         err_msg = str(exc) or type(exc).__name__
         logger.error(
-            "비동기 가상 피팅 실패 (fittingId=%s, userId=%s): %s",
+            "가상 피팅 백그라운드 처리 실패 (fittingId=%s, userId=%s): %s",
             fitting_id,
             user_id,
             err_msg,
@@ -376,28 +368,48 @@ async def request_fitting(
     # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds 동시 수신)
     if "multipart/form-data" in content_type:
         form = await request.form()
-        raw_product_ids = form.get("productIds")
-        if not raw_product_ids:
+        raw_values = form.getlist("productIds")
+        if not raw_values:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="productIds가 누락되었습니다.",
             )
+
+        parsed_pids: list[Any] = []
         try:
-            if isinstance(raw_product_ids, str):
-                cleaned_pids = raw_product_ids.strip()
-                if cleaned_pids.startswith("["):
-                    product_ids = [int(x) for x in json.loads(cleaned_pids)]
+            for raw in raw_values:
+                if isinstance(raw, str):
+                    cleaned = raw.strip()
+                    if cleaned.startswith("["):
+                        loaded = json.loads(cleaned)
+                        if not isinstance(loaded, list):
+                            raise ValueError("JSON 배열 형식이어야 합니다.")
+                        parsed_pids.extend(loaded)
+                    else:
+                        parsed_pids.extend(
+                            [x.strip() for x in cleaned.split(",") if x.strip()]
+                        )
                 else:
-                    product_ids = [int(x.strip()) for x in cleaned_pids.split(",") if x.strip()]
-            else:
-                product_ids = [int(x) for x in form.getlist("productIds")]
-        except (ValueError, json.JSONDecodeError) as exc:
+                    raise TypeError("productIds는 문자열이어야 합니다.")
+
+            # Pydantic 모델로 productIds 유효성 및 개수 제약(1~5개 정수) 검증
+            validated_req = FittingCreateRequest(productIds=parsed_pids)
+            product_ids = validated_req.productIds
+        except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="productIds는 정수 배열 또는 쉼표 구분 문자열이어야 합니다.",
+                detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
             ) from exc
 
-        # userImage 파일이 첨부된 경우 저장
+        # 상품 검증 선행: 중복 제거 및 최대 개수 확인 (실패 시 이미지 I/O 자체를 방지)
+        unique_product_ids = list(dict.fromkeys(product_ids))
+        if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"피팅 가능한 상품은 최대 {len(SUPPORTED_CATEGORIES)}개입니다.",
+            )
+
+        # 상품 검증 통과 후 userImage 파일 저장 수행
         user_image_file = form.get("userImage")
         if user_image_file and hasattr(user_image_file, "read"):
             content = await user_image_file.read(MAX_PHOTO_SIZE_BYTES + 1)
@@ -415,11 +427,18 @@ async def request_fitting(
                         detail="유효하지 않은 이미지 파일입니다.",
                     ) from exc
 
-                settings = get_settings()
-                photos_dir = settings.get_photos_dir()
-                photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
-                photo_path = photos_dir / photo_filename
-                await run_in_threadpool(photo_path.write_bytes, png_bytes)
+                try:
+                    settings = get_settings()
+                    photos_dir = settings.get_photos_dir()
+                    photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
+                    photo_path = photos_dir / photo_filename
+                    await run_in_threadpool(photo_path.write_bytes, png_bytes)
+                except OSError as exc:
+                    logger.error("사용자 사진 파일 저장 I/O 실패: %s", exc, exc_info=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="사용자 사진 파일 저장 중 오류가 발생했습니다.",
+                    ) from exc
 
                 repo = get_repo()
                 photo_record = repo.save_user_photo(
@@ -438,25 +457,24 @@ async def request_fitting(
             ) from exc
 
         try:
-            req = FittingCreateRequest(**body)
+            req = FittingCreateRequest.model_validate(body)
             product_ids = req.productIds
             photo_id = req.photoId
         except ValidationError as exc:
             raise RequestValidationError(exc.errors()) from exc
 
-    if not product_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="최소 하나 이상의 상품 ID를 전달해야 합니다.",
-        )
+        if not product_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="최소 하나 이상의 상품 ID를 전달해야 합니다.",
+            )
 
-    # 중복 상품 제거
-    unique_product_ids = list(dict.fromkeys(product_ids))
-    if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"피팅 가능한 상품은 최대 {len(SUPPORTED_CATEGORIES)}개입니다.",
-        )
+        unique_product_ids = list(dict.fromkeys(product_ids))
+        if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"피팅 가능한 상품은 최대 {len(SUPPORTED_CATEGORIES)}개입니다.",
+            )
 
     repo = get_repo()
     if photo_id is not None:

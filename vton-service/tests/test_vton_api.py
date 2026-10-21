@@ -488,6 +488,47 @@ def test_post_vton_multipart_validations() -> None:
         assert resp_too_large.status_code == 400
         assert "15MB" in resp_too_large.json()["message"]
 
+    # 5. 비정상 타입의 productIds (null, float 등) 시 400 Bad Request
+    resp_invalid_type = client.post(
+        "/api/vton",
+        data={"productIds": "[null]"},
+        files={"userImage": ("photo.png", img_bytes, "image/png")},
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_invalid_type.status_code == 400
+
+    # 6. 상품 개수 초과(6개) 시 400 차단 및 사진 파일 미저장 확인 (고아 파일 누수 방지)
+    test_photos = Path("data/photos")
+    before_count = len(list(test_photos.glob("user_7_*.png"))) if test_photos.exists() else 0
+    resp_exceed = client.post(
+        "/api/vton",
+        data={"productIds": "[1, 2, 3, 4, 5, 6]"},
+        files={"userImage": ("should_not_save.png", img_bytes, "image/png")},
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_exceed.status_code == 400
+    after_count = len(list(test_photos.glob("user_7_*.png"))) if test_photos.exists() else 0
+    assert after_count == before_count
+
+
+def test_post_vton_non_object_json_returns_400() -> None:
+    client = TestClient(app)
+    # 배열 형태의 JSON 본문 (객체가 아님) 전송 시 500이 아닌 400 반환
+    resp_arr = client.post(
+        "/api/vton",
+        json=[101, 102],
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_arr.status_code == 400
+
+    # null 또는 문자열 전송 시 400 반환
+    resp_str = client.post(
+        "/api/vton",
+        json="just_a_string",
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_str.status_code == 400
+
 
 def test_get_fitting_not_found() -> None:
     client = TestClient(app)
@@ -682,9 +723,15 @@ def test_background_vton_fallback_bottom_when_missing(tmp_path: Path) -> None:
         assert mock_generate.called
         kwargs = mock_generate.call_args.kwargs
         categories = kwargs["categories"]
-        # 상의 1개 + 기본 하의 폴백 1개 = 총 2개
+        # AI 생성에는 상의 1개 + 기본 하의 폴백 1개 = 총 2개 전달
         assert "상의" in categories
         assert "하의" in categories
+
+        # DB에는 사용자가 실제 요청한 상의(101)만 저장되고, 폴백 하의(0번 가짜 상품)는 저장되지 않아야 함
+        detail = repo.get_fitting_detail(fitting_id)
+        assert detail is not None
+        assert len(detail["products"]) == 1
+        assert detail["products"][0]["productId"] == 101
 
 
 def test_background_vton_fails_when_user_photo_file_missing() -> None:
