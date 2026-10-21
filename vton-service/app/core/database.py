@@ -686,14 +686,21 @@ class VtonRepository:
                         # 전체 건수
                         cur.execute(
                             f"""
-                            SELECT COUNT(*)
+                            SELECT COUNT(*) AS total_count
                             FROM {schema}.fittings
                             WHERE user_id = %s AND is_deleted = FALSE;
                             """,
                             (user_id,),
                         )
                         count_row = cur.fetchone()
-                        total_count = int(count_row[0]) if count_row else 0
+                        if count_row:
+                            total_count = int(
+                                count_row["total_count"]
+                                if isinstance(count_row, dict) or hasattr(count_row, "__getitem__") and "total_count" in count_row
+                                else count_row[0]
+                            )
+                        else:
+                            total_count = 0
 
                         if total_count == 0:
                             return [], 0
