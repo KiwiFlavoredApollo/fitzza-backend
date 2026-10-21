@@ -71,7 +71,7 @@ class CommentSupportServiceTest {
         deleted.delete();
         when(commentRepository.findById(1L)).thenReturn(Optional.of(comment(1L, "예뻐요")));
         when(commentRepository.findById(2L)).thenReturn(Optional.of(deleted));
-        Post normal = Post.createNormal(7L, "제목", "내용", PostCategory.DAILY, null);
+        Post normal = Post.createNormal(7L, "제목", "내용", PostCategory.DAILY);
         ReflectionTestUtils.setField(normal, "id", POST_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(normal));
 
@@ -115,8 +115,8 @@ class CommentSupportServiceTest {
     }
 
     private static VoteOption option(Long id, int order) {
-        VoteOption option = VoteOption.of(POST_ID, order, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null,
-                "https://cdn.example.com/" + id + ".png", null, null);
+        VoteOption option = VoteOption.of(POST_ID, order, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, String.valueOf(id),
+                "https://cdn.example.com/" + id + ".png", "상품 " + id, 39000);
         ReflectionTestUtils.setField(option, "id", id);
         return option;
     }

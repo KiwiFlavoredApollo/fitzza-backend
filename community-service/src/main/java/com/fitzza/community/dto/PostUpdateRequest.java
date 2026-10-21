@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
-// 보내지 않은 항목은 그대로 둔다. imageUrl만 null을 보낼 수 있고, 그때는 첨부 이미지를 뗀다.
+// 보내지 않은 항목은 그대로 둔다.
 // options는 투표글에서만 보낼 수 있고, 보내면 선택지를 통째로 바꾼다(투표가 한 표라도 있으면 거절). null은 받지 않는다.
 public class PostUpdateRequest {
 
@@ -27,9 +27,6 @@ public class PostUpdateRequest {
 
     private PostCategory category;
 
-    @Size(max = Post.IMAGE_URL_MAX_LENGTH, message = "이미지 주소가 너무 깁니다.")
-    private String imageUrl;
-
     @Size(
             min = VoteOption.MIN_OPTIONS,
             max = VoteOption.MAX_OPTIONS,
@@ -37,8 +34,6 @@ public class PostUpdateRequest {
     private List<@NotNull(message = "투표 선택지를 확인해주세요.") @Valid VoteOptionRequest> options;
 
     // "보내지 않음"과 "null로 보냄"을 구분하려고 setter가 불렸는지 기록한다.
-    private boolean imageUrlSent;
-
     private boolean optionsSent;
 
     public String getTitle() {
@@ -65,15 +60,6 @@ public class PostUpdateRequest {
         this.category = category;
     }
 
-    public String getImageUrl() {
-        return imageUrl;
-    }
-
-    public void setImageUrl(String imageUrl) {
-        this.imageUrl = imageUrl;
-        this.imageUrlSent = true;
-    }
-
     public List<VoteOptionRequest> getOptions() {
         return options;
     }
@@ -88,10 +74,5 @@ public class PostUpdateRequest {
     @AssertTrue(message = "투표 선택지를 확인해주세요.")
     public boolean isOptionsNotNullWhenSent() {
         return !optionsSent || options != null;
-    }
-
-    @JsonIgnore
-    public boolean isImageUrlSent() {
-        return imageUrlSent;
     }
 }

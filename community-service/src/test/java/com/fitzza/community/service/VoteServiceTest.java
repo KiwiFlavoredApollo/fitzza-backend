@@ -80,7 +80,7 @@ class VoteServiceTest {
                 AUTHOR_ID,
                 request(
                         new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL),
-                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL)));
+                        new VoteOptionRequest(VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, 31L, IMAGE_URL)));
 
         assertThat(response.postId()).isEqualTo(POST_ID);
         ArgumentCaptor<Post> post = ArgumentCaptor.forClass(Post.class);
@@ -88,7 +88,6 @@ class VoteServiceTest {
         assertThat(post.getValue().getVoteEndAt())
                 .isBetween(before.plus(Post.VOTE_DURATION), Instant.now().plus(Post.VOTE_DURATION));
         assertThat(post.getValue().getPostType()).isEqualTo(PostType.VOTE);
-        assertThat(post.getValue().getImageUrl()).isEqualTo("https://cdn.example.com/cover.png");
         assertThat(post.getValue().getUserId()).isEqualTo(AUTHOR_ID);
 
         @SuppressWarnings("unchecked")
@@ -102,15 +101,14 @@ class VoteServiceTest {
         assertThat(first.getImageUrl()).isEqualTo(IMAGE_URL);
         VoteOption second = options.getValue().get(1);
         assertThat(second.getLabel()).isEqualTo("B");
-        assertThat(second.getItemType()).isEqualTo(VoteItemType.IMAGE);
-        assertThat(second.getItemId()).isNull();
+        assertThat(second.getItemType()).isEqualTo(VoteItemType.COMBO);
+        assertThat(second.getItemId()).isEqualTo("31");
     }
 
     @Test
     void createRejectsOptionsThatDoNotFitTogether() {
         VoteOptionRequest product =
                 new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL);
-        VoteOptionRequest upload = new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL);
 
         assertRejected(() -> voteService.createVotePost(AUTHOR_ID, request(product)), ErrorCode.INVALID_VOTE_OPTIONS);
         assertRejected(
@@ -120,15 +118,15 @@ class VoteServiceTest {
                 () -> voteService.createVotePost(
                         AUTHOR_ID,
                         request(
-                                upload,
+                                product,
                                 new VoteOptionRequest(
-                                        VoteOptionSource.WISHLIST, VoteItemType.IMAGE, null, IMAGE_URL))),
+                                        VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, null, IMAGE_URL))),
                 ErrorCode.INVALID_VOTE_OPTIONS);
         assertRejected(
                 () -> voteService.createVotePost(
                         AUTHOR_ID,
                         request(
-                                upload,
+                                product,
                                 new VoteOptionRequest(
                                         VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, IMAGE_URL))),
                 ErrorCode.INVALID_VOTE_OPTIONS);
@@ -255,7 +253,7 @@ class VoteServiceTest {
         when(voteRepository.existsByPostId(POST_ID)).thenReturn(false);
 
         voteService.replaceOptions(AUTHOR_ID, POST_ID, List.of(
-                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, 31L, IMAGE_URL),
                 new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, IMAGE_URL),
                 new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 57L, IMAGE_URL)));
 
@@ -267,7 +265,7 @@ class VoteServiceTest {
         assertThat(options.getValue())
                 .extracting(VoteOption::getPostId, VoteOption::getLabel, VoteOption::getItemId)
                 .containsExactly(
-                        tuple(POST_ID, "A", null),
+                        tuple(POST_ID, "A", "31"),
                         tuple(POST_ID, "B", "56"),
                         tuple(POST_ID, "C", "57"));
         verify(commentRepository).clearSupportByPostId(POST_ID);
@@ -280,7 +278,7 @@ class VoteServiceTest {
         when(voteRepository.existsByPostId(POST_ID)).thenReturn(true);
 
         assertRejected(
-                () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.VOTE_OPTIONS_LOCKED);
+                () -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoProducts()), ErrorCode.VOTE_OPTIONS_LOCKED);
         verify(voteOptionRepository, never()).deleteByPostId(anyLong());
         verifyNoInteractions(commentRepository, eventPublisher);
     }
@@ -288,16 +286,16 @@ class VoteServiceTest {
     @Test
     void optionsCannotBeReplacedOnAClosedVoteANormalPostOrByAnotherUser() {
         when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(closedVotePost()));
-        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.VOTE_CLOSED);
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoProducts()), ErrorCode.VOTE_CLOSED);
 
         when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(normalPost()));
-        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.NOT_VOTE_POST);
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoProducts()), ErrorCode.NOT_VOTE_POST);
 
         when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.of(openVotePost()));
-        assertRejected(() -> voteService.replaceOptions(VOTER_ID, POST_ID, twoUploads()), ErrorCode.NOT_AUTHOR);
+        assertRejected(() -> voteService.replaceOptions(VOTER_ID, POST_ID, twoProducts()), ErrorCode.NOT_AUTHOR);
 
         when(postRepository.findVisibleForUpdate(POST_ID)).thenReturn(Optional.empty());
-        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoUploads()), ErrorCode.POST_NOT_FOUND);
+        assertRejected(() -> voteService.replaceOptions(AUTHOR_ID, POST_ID, twoProducts()), ErrorCode.POST_NOT_FOUND);
         verify(voteOptionRepository, never()).deleteByPostId(anyLong());
     }
 
@@ -313,15 +311,15 @@ class VoteServiceTest {
         verify(voteOptionRepository, never()).deleteByPostId(anyLong());
     }
 
-    private static List<VoteOptionRequest> twoUploads() {
-        VoteOptionRequest upload = new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL);
-        return List.of(upload, upload);
+    private static List<VoteOptionRequest> twoProducts() {
+        return List.of(
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, IMAGE_URL));
     }
 
     private static PostCreateRequest request(VoteOptionRequest... options) {
         return new PostCreateRequest(
-                "뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, "https://cdn.example.com/cover.png",
-                null, null, PostType.VOTE, List.of(options));
+                "뭐가 나을까요", "골라주세요", PostCategory.COORDI_QUESTION, null, null, PostType.VOTE, List.of(options));
     }
 
     private static Post openVotePost() {
@@ -339,14 +337,21 @@ class VoteServiceTest {
     }
 
     private static Post normalPost() {
-        Post post = Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY, null);
+        Post post = Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY);
         ReflectionTestUtils.setField(post, "id", POST_ID);
         return post;
     }
 
     private static VoteOption option(Long optionId, int displayOrder) {
         VoteOption option = VoteOption.of(
-                POST_ID, displayOrder, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL, null, null);
+                POST_ID,
+                displayOrder,
+                VoteOptionSource.WISHLIST,
+                VoteItemType.PRODUCT,
+                String.valueOf(displayOrder),
+                IMAGE_URL,
+                "셔츠",
+                39000);
         ReflectionTestUtils.setField(option, "id", optionId);
         return option;
     }

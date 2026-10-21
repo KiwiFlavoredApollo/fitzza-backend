@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.fitzza.community.client.ComboResults.ComboResult;
 import com.fitzza.community.client.FittingResults.FittingResult;
+import com.fitzza.community.client.ProductCatalog.ProductSummary;
 import com.fitzza.community.client.SharedTargetGateway.SharedTarget;
 import com.fitzza.community.client.WorldcupResults.WinnerProduct;
 import com.fitzza.community.client.WorldcupResults.WorldcupResult;
@@ -35,8 +36,9 @@ class VerifiedSharedTargetGatewayTest {
     private final WorldcupResults worldcupResults = mock(WorldcupResults.class);
     private final ComboResults comboResults = mock(ComboResults.class);
     private final FittingResults fittingResults = mock(FittingResults.class);
+    private final ProductCatalog productCatalog = mock(ProductCatalog.class);
     private final VerifiedSharedTargetGateway gateway =
-            new VerifiedSharedTargetGateway(worldcupResults, comboResults, fittingResults);
+            new VerifiedSharedTargetGateway(worldcupResults, comboResults, fittingResults, productCatalog);
 
     @Test
     void myWorldcupResultBecomesASnapshotOfTheWinner() {
@@ -165,6 +167,50 @@ class VerifiedSharedTargetGatewayTest {
         when(fittingResults.findFitting(3L, 7L)).thenThrow(new ResourceAccessException("connection refused"));
 
         assertRejected(() -> gateway.resolve(7L, SharedType.FITTING, 3L), ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
+    }
+
+
+    @Test
+    void myWishlistedProductBecomesASnapshotOfThatProduct() {
+        when(productCatalog.isWishlisted(7L, 55L)).thenReturn(true);
+        when(productCatalog.findProduct(55L)).thenReturn(Optional.of(
+                new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, "https://cdn.example.com/55.png", "ON_SALE")));
+
+        SharedTarget target = gateway.resolve(7L, SharedType.PRODUCT, 55L);
+
+        SharedSnapshot snapshot = target.snapshot();
+        assertThat(snapshot.getProductId()).isEqualTo(55L);
+        assertThat(snapshot.getBrandName()).isEqualTo("Fitzza");
+        assertThat(snapshot.getProductName()).isEqualTo("오버핏 셔츠");
+        assertThat(snapshot.getPrice()).isEqualTo(39000);
+        assertThat(snapshot.getImageUrl()).isEqualTo("https://cdn.example.com/55.png");
+        assertThat(target.items()).isEmpty();
+    }
+
+    @Test
+    void aProductIHaveNotWishlistedIsForbidden() {
+        when(productCatalog.isWishlisted(7L, 55L)).thenReturn(false);
+
+        assertRejected(() -> gateway.resolve(7L, SharedType.PRODUCT, 55L), ErrorCode.NOT_WISHLISTED_ITEM);
+    }
+
+    @Test
+    void aMissingOrHiddenProductIsNotFound() {
+        when(productCatalog.isWishlisted(7L, 55L)).thenReturn(true);
+        when(productCatalog.isWishlisted(7L, 56L)).thenReturn(true);
+        when(productCatalog.findProduct(55L)).thenReturn(Optional.empty());
+        when(productCatalog.findProduct(56L)).thenReturn(Optional.of(
+                new ProductSummary(56L, "Fitzza", "숨긴 상품", 39000, "https://cdn.example.com/56.png", "HIDDEN")));
+
+        assertRejected(() -> gateway.resolve(7L, SharedType.PRODUCT, 55L), ErrorCode.SHARED_TARGET_NOT_FOUND);
+        assertRejected(() -> gateway.resolve(7L, SharedType.PRODUCT, 56L), ErrorCode.SHARED_TARGET_NOT_FOUND);
+    }
+
+    @Test
+    void aProductShareIsRefusedWhenTheProductServiceIsDown() {
+        when(productCatalog.isWishlisted(7L, 55L)).thenThrow(new ResourceAccessException("connection refused"));
+
+        assertRejected(() -> gateway.resolve(7L, SharedType.PRODUCT, 55L), ErrorCode.SHARE_LOOKUP_UNAVAILABLE);
     }
 
     private static void assertRejected(Runnable call, ErrorCode expected) {

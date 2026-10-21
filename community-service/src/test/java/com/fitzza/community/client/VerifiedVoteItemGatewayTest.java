@@ -39,7 +39,7 @@ class VerifiedVoteItemGatewayTest {
     @Test
     void wishlistedProductIsStoredWithTheProductServiceImageNameAndPrice() {
         catalog.wishlist(USER_ID, 55L);
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
 
         VoteItemSnapshot snapshot = resolveWishlist(USER_ID, 55L);
 
@@ -49,7 +49,7 @@ class VerifiedVoteItemGatewayTest {
     @Test
     void soldOutProductCanStillBeAVoteOption() {
         catalog.wishlist(USER_ID, 55L);
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "SOLD_OUT"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, PRODUCT_IMAGE, "SOLD_OUT"));
 
         assertThat(resolveWishlist(USER_ID, 55L).name()).isEqualTo("오버핏 셔츠");
     }
@@ -57,7 +57,7 @@ class VerifiedVoteItemGatewayTest {
     @Test
     void productWithoutAnImageKeepsTheRequestImage() {
         catalog.wishlist(USER_ID, 55L);
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, null, "ON_SALE"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, null, "ON_SALE"));
 
         assertThat(resolveWishlist(USER_ID, 55L).imageUrl()).isEqualTo(REQUEST_IMAGE);
     }
@@ -65,7 +65,7 @@ class VerifiedVoteItemGatewayTest {
     @Test
     void someoneElsesWishlistIsRejected() {
         catalog.wishlist(USER_ID, 55L);
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
 
         assertRejectedWith(() -> resolveWishlist(OTHER_USER_ID, 55L), ErrorCode.NOT_WISHLISTED_ITEM);
     }
@@ -74,7 +74,7 @@ class VerifiedVoteItemGatewayTest {
     void hiddenOrMissingProductsAreRejected() {
         catalog.wishlist(USER_ID, 55L);
         catalog.wishlist(USER_ID, 56L);
-        catalog.product(new ProductSummary(55L, "숨긴 상품", 39000, PRODUCT_IMAGE, "HIDDEN"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "숨긴 상품", 39000, PRODUCT_IMAGE, "HIDDEN"));
 
         assertRejectedWith(() -> resolveWishlist(USER_ID, 55L), ErrorCode.INVALID_VOTE_OPTIONS);
         assertRejectedWith(() -> resolveWishlist(USER_ID, 56L), ErrorCode.INVALID_VOTE_OPTIONS);
@@ -103,16 +103,6 @@ class VerifiedVoteItemGatewayTest {
                 HttpStatus.UNAUTHORIZED, "unauthorized", HttpHeaders.EMPTY, null, null);
 
         assertThatThrownBy(() -> resolveWishlist(USER_ID, 55L)).isInstanceOf(HttpClientErrorException.class);
-    }
-
-    @Test
-    void uploadsKeepTheRequestImageWithoutAnyLookup() {
-        VoteItemSnapshot upload =
-                gateway.resolve(USER_ID, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, REQUEST_IMAGE);
-
-        assertThat(upload).isEqualTo(new VoteItemSnapshot(REQUEST_IMAGE, null, null));
-        assertThat(catalog.calls).isZero();
-        verifyNoInteractions(combos);
     }
 
     @Test
@@ -157,7 +147,7 @@ class VerifiedVoteItemGatewayTest {
     // 받은 추천인지 확인할 API가 없어 단품은 상품이 있는지만 보고 상품 서비스 값으로 채운다.
     @Test
     void aRecommendedProductIsFilledFromTheProductServiceWithoutAWishlistCheck() {
-        catalog.product(new ProductSummary(55L, "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
+        catalog.product(new ProductSummary(55L, "Fitzza", "오버핏 셔츠", 39000, PRODUCT_IMAGE, "ON_SALE"));
 
         VoteItemSnapshot snapshot =
                 gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.PRODUCT, 55L, REQUEST_IMAGE);
@@ -167,12 +157,9 @@ class VerifiedVoteItemGatewayTest {
     }
 
     @Test
-    void aRecommendationNeedsAnIdAndCannotBeAnImage() {
+    void aRecommendationNeedsAnId() {
         assertRejectedWith(
                 () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, REQUEST_IMAGE),
-                ErrorCode.INVALID_VOTE_OPTIONS);
-        assertRejectedWith(
-                () -> gateway.resolve(USER_ID, VoteOptionSource.AI_RECOMMEND, VoteItemType.IMAGE, 5L, REQUEST_IMAGE),
                 ErrorCode.INVALID_VOTE_OPTIONS);
         verifyNoInteractions(combos);
     }

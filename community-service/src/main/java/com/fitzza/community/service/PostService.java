@@ -102,11 +102,8 @@ public class PostService {
         return PostPageResponse.of(content, posts);
     }
 
-    // 썸네일은 첨부 이미지, 투표글의 첫 번째 선택지 이미지, 공유 대상 스냅샷 이미지 순으로 고른다.
+    // 썸네일은 투표글의 첫 번째 선택지 이미지, 공유 대상 스냅샷 이미지 순으로 고른다. 사용자가 직접 올린 이미지는 없다.
     private static String thumbnailOf(Post post, Map<Long, String> firstOptionImages) {
-        if (hasText(post.getImageUrl())) {
-            return post.getImageUrl();
-        }
         String optionImage = firstOptionImages.get(post.getId());
         if (hasText(optionImage)) {
             return optionImage;
@@ -115,16 +112,13 @@ public class PostService {
         return snapshot != null && hasText(snapshot.getImageUrl()) ? snapshot.getImageUrl() : null;
     }
 
-    // 첨부 이미지가 없는 투표글만 선택지 이미지를 찾는다. 해당하는 글이 없으면 조회하지 않는다.
+    // 투표글만 선택지 이미지를 찾는다. 해당하는 글이 없으면 조회하지 않는다.
     private Map<Long, String> firstOptionImagesOf(List<Post> posts) {
-        List<Long> voteIdsWithoutImage = posts.stream()
-                .filter(post -> post.isVote() && !hasText(post.getImageUrl()))
-                .map(Post::getId)
-                .toList();
-        if (voteIdsWithoutImage.isEmpty()) {
+        List<Long> voteIds = posts.stream().filter(Post::isVote).map(Post::getId).toList();
+        if (voteIds.isEmpty()) {
             return Map.of();
         }
-        return PostImage.toMap(voteOptionRepository.findFirstOptionImages(voteIdsWithoutImage));
+        return PostImage.toMap(voteOptionRepository.findFirstOptionImages(voteIds));
     }
 
     private static boolean hasText(String value) {
@@ -152,7 +146,6 @@ public class PostService {
                 post.getCategory(),
                 post.getPostType(),
                 new AuthorResponse(post.getUserId(), nickname),
-                post.getImageUrl(),
                 SharedResponse.of(post),
                 postLikeRepository.countByPostId(postId),
                 liked,
@@ -174,8 +167,7 @@ public class PostService {
         SharedTarget shared = request.sharedType() == null
                 ? null
                 : sharedTargetGateway.resolve(userId, request.sharedType(), request.sharedId());
-        Post post = Post.createNormal(
-                userId, request.title(), request.content(), request.category(), request.imageUrl());
+        Post post = Post.createNormal(userId, request.title(), request.content(), request.category());
         if (shared != null) {
             post.attachShared(request.sharedType(), request.sharedId(), shared.snapshot(), shared.items());
         }
@@ -197,9 +189,6 @@ public class PostService {
         }
         if (request.getCategory() != null) {
             post.changeCategory(request.getCategory());
-        }
-        if (request.isImageUrlSent()) {
-            post.changeImageUrl(request.getImageUrl());
         }
     }
 

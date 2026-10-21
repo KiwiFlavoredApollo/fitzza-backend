@@ -29,8 +29,9 @@ class JevVoteSupportJudgeTest {
 
     private static final VoteOption SHIRT =
             option(100L, 1, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "오버핏 셔츠", 39000);
-    private static final VoteOption PHOTO = option(101L, 2, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, null);
-    private static final List<VoteOption> OPTIONS = List.of(SHIRT, PHOTO);
+    private static final VoteOption COMBO =
+            option(101L, 2, VoteOptionSource.AI_RECOMMEND, VoteItemType.COMBO, null, null);
+    private static final List<VoteOption> OPTIONS = List.of(SHIRT, COMBO);
 
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -42,15 +43,15 @@ class JevVoteSupportJudgeTest {
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + API_KEY))
                 .andExpect(jsonPath("$.model").value(JevVoteSupportJudge.MODEL))
-                .andExpect(jsonPath("$.state").value(containsString("댓글: 사진 쪽이 더 나아요")))
+                .andExpect(jsonPath("$.state").value(containsString("댓글: 코디 쪽이 더 나아요")))
                 .andExpect(jsonPath("$.state").value(containsString("어떤 게 나아요?")))
                 .andExpect(jsonPath("$.questions.support.type").value("choice"))
                 .andExpect(jsonPath("$.questions.support.criteria.A").value("1번째 선택지: 오버핏 셔츠 (39,000원)"))
-                .andExpect(jsonPath("$.questions.support.criteria.B").value("2번째 선택지: 작성자가 올린 사진"))
+                .andExpect(jsonPath("$.questions.support.criteria.B").value("2번째 선택지: AI 추천 코디"))
                 .andExpect(jsonPath("$.questions.support.criteria.none").exists())
                 .andRespond(withSuccess(answer("B", 0.83), MediaType.APPLICATION_JSON));
 
-        assertThat(judge.judge("어떤 게 나아요?", "사진 쪽이 더 나아요", OPTIONS)).contains(101L);
+        assertThat(judge.judge("어떤 게 나아요?", "코디 쪽이 더 나아요", OPTIONS)).contains(101L);
         server.verify();
     }
 
@@ -101,7 +102,7 @@ class JevVoteSupportJudgeTest {
 
     private static VoteOption option(
             Long id, int order, VoteOptionSource source, VoteItemType type, String name, Integer price) {
-        VoteOption option = VoteOption.of(10L, order, source, type, type == VoteItemType.IMAGE ? null : "55",
+        VoteOption option = VoteOption.of(10L, order, source, type, String.valueOf(id),
                 "https://cdn.example.com/" + id + ".png", name, price);
         ReflectionTestUtils.setField(option, "id", id);
         return option;

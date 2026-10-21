@@ -10,7 +10,7 @@ public enum ErrorCode {
     INVALID_VOTE_OPTION(HttpStatus.BAD_REQUEST, "이 게시글의 선택지가 아닙니다."),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "로그인이 필요합니다."),
     NOT_AUTHOR(HttpStatus.FORBIDDEN, "작성자만 할 수 있습니다."),
-    NOT_WISHLISTED_ITEM(HttpStatus.FORBIDDEN, "찜한 상품만 투표 선택지로 고를 수 있습니다."),
+    NOT_WISHLISTED_ITEM(HttpStatus.FORBIDDEN, "찜한 상품만 고를 수 있습니다."),
     NOT_SHARED_OWNER(HttpStatus.FORBIDDEN, "내 결과만 공유할 수 있습니다."),
     NOT_RECOMMENDED_ITEM(HttpStatus.FORBIDDEN, "내가 받은 추천만 투표 선택지로 고를 수 있습니다."),
     POST_NOT_FOUND(HttpStatus.NOT_FOUND, "게시글을 찾을 수 없습니다."),

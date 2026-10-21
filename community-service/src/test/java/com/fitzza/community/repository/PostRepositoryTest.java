@@ -32,10 +32,10 @@ class PostRepositoryTest {
 
     @Test
     void feedLeavesOutDeletedPostsAndFiltersByCategoryAndType() {
-        save(Post.createNormal(AUTHOR_ID, "셔츠 추천", "린넨 셔츠 어때요", PostCategory.FASHION, null));
-        save(Post.createNormal(AUTHOR_ID, "오늘 날씨", "산책했어요", PostCategory.DAILY, null));
+        save(Post.createNormal(AUTHOR_ID, "셔츠 추천", "린넨 셔츠 어때요", PostCategory.FASHION));
+        save(Post.createNormal(AUTHOR_ID, "오늘 날씨", "산책했어요", PostCategory.DAILY));
         save(Post.createVote(AUTHOR_ID, "둘 중 뭐가 나아요", "골라주세요", PostCategory.FASHION, Instant.now()));
-        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "지웠어요", PostCategory.FASHION, null));
+        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "지웠어요", PostCategory.FASHION));
         deleted.delete();
         entityManager.flush();
 
@@ -47,9 +47,9 @@ class PostRepositoryTest {
 
     @Test
     void keywordMatchesTitleOrContentWithoutRegardToCase() {
-        save(Post.createNormal(AUTHOR_ID, "Linen Shirt", "여름에 좋아요", PostCategory.FASHION, null));
-        save(Post.createNormal(AUTHOR_ID, "여름 코디", "linen 바지도 샀어요", PostCategory.FASHION, null));
-        save(Post.createNormal(AUTHOR_ID, "겨울 코디", "패딩 추천", PostCategory.FASHION, null));
+        save(Post.createNormal(AUTHOR_ID, "Linen Shirt", "여름에 좋아요", PostCategory.FASHION));
+        save(Post.createNormal(AUTHOR_ID, "여름 코디", "linen 바지도 샀어요", PostCategory.FASHION));
+        save(Post.createNormal(AUTHOR_ID, "겨울 코디", "패딩 추천", PostCategory.FASHION));
 
         assertThat(feedTitles(null, null, "LINEN")).containsExactlyInAnyOrder("Linen Shirt", "여름 코디");
         assertThat(feedTitles(null, null, "패딩")).containsExactly("겨울 코디");
@@ -58,9 +58,9 @@ class PostRepositoryTest {
 
     @Test
     void percentAndUnderscoreInTheKeywordAreNotWildcards() {
-        save(Post.createNormal(AUTHOR_ID, "면 100% 티셔츠", "좋아요", PostCategory.FASHION, null));
-        save(Post.createNormal(AUTHOR_ID, "snake_case 티셔츠", "웃겨요", PostCategory.FASHION, null));
-        save(Post.createNormal(AUTHOR_ID, "평범한 글", "내용", PostCategory.FASHION, null));
+        save(Post.createNormal(AUTHOR_ID, "면 100% 티셔츠", "좋아요", PostCategory.FASHION));
+        save(Post.createNormal(AUTHOR_ID, "snake_case 티셔츠", "웃겨요", PostCategory.FASHION));
+        save(Post.createNormal(AUTHOR_ID, "평범한 글", "내용", PostCategory.FASHION));
 
         assertThat(feedTitles(null, null, "%")).containsExactly("면 100% 티셔츠");
         assertThat(feedTitles(null, null, "_")).containsExactly("snake_case 티셔츠");
@@ -68,8 +68,8 @@ class PostRepositoryTest {
 
     @Test
     void viewCountGoesUpByOneAndDeletedPostsAreNotCounted() {
-        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY, null));
-        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "내용", PostCategory.DAILY, null));
+        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY));
+        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "내용", PostCategory.DAILY));
         deleted.delete();
         entityManager.flush();
 
@@ -83,8 +83,8 @@ class PostRepositoryTest {
 
     @Test
     void deletedPostsAreInvisibleToTheVisibleOnlyLookups() {
-        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY, null));
-        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "내용", PostCategory.DAILY, null));
+        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY));
+        Post deleted = save(Post.createNormal(AUTHOR_ID, "지운 글", "내용", PostCategory.DAILY));
         deleted.delete();
         entityManager.flush();
         entityManager.clear();
@@ -99,7 +99,7 @@ class PostRepositoryTest {
     // 삭제된 글이 늦게 도착한 수정으로 되살아나지 않는지 확인한다.
     @Test
     void savingAStaleCopyFailsInsteadOfOverwritingANewerChange() {
-        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY, null));
+        Post post = save(Post.createNormal(AUTHOR_ID, "제목", "내용", PostCategory.DAILY));
         entityManager.flush();
         entityManager.clear();
 
@@ -127,7 +127,7 @@ class PostRepositoryTest {
         closedEarly.closeVote();
         Post deleted = save(Post.createVote(AUTHOR_ID, "지운 투표", "골라주세요", PostCategory.FASHION, sevenHoursAgo));
         deleted.delete();
-        save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY, null));
+        save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY));
         entityManager.flush();
 
         assertThat(postRepository.findVotePostIdsDueToClose(now, PageRequest.of(0, 100)))
@@ -181,11 +181,11 @@ class PostRepositoryTest {
 
     @Test
     void aSharedPostKeepsItsTargetAndSnapshot() {
-        Post post = Post.createNormal(AUTHOR_ID, "월드컵 결과", "우승 상품", PostCategory.FASHION, null);
+        Post post = Post.createNormal(AUTHOR_ID, "월드컵 결과", "우승 상품", PostCategory.FASHION);
         post.attachShared(SharedType.WORLDCUP, 9L,
                 new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, "https://cdn.example.com/55.png"));
         Long postId = save(post).getId();
-        Long normalId = save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY, null)).getId();
+        Long normalId = save(Post.createNormal(AUTHOR_ID, "일반 글", "내용", PostCategory.DAILY)).getId();
         entityManager.flush();
         entityManager.clear();
 
@@ -201,7 +201,7 @@ class PostRepositoryTest {
 
     @Test
     void aSharedComboKeepsItsSummaryAndItemsInOrder() {
-        Post post = Post.createNormal(AUTHOR_ID, "추천 코디", "어때요", PostCategory.FASHION, null);
+        Post post = Post.createNormal(AUTHOR_ID, "추천 코디", "어때요", PostCategory.FASHION);
         post.attachShared(SharedType.COMBO, 31L,
                 new SharedSnapshot(null, null, null, 89000, "https://cdn.example.com/1.png", "톤온톤으로 잘 어울려요"),
                 List.of(

@@ -89,7 +89,7 @@ class PostServiceTest {
         });
 
         PostCreatedResponse response = postService.create(
-                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, "  ", null, null, null, null));
+                AUTHOR_ID, new PostCreateRequest("  오늘의 코디  ", "  내용입니다  ", PostCategory.DAILY, null, null, null, null));
 
         assertThat(response.postId()).isEqualTo(POST_ID);
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
@@ -100,7 +100,6 @@ class PostServiceTest {
         assertThat(saved.getTitle()).isEqualTo("오늘의 코디");
         assertThat(saved.getContent()).isEqualTo("내용입니다");
         assertThat(saved.getCategory()).isEqualTo(PostCategory.DAILY);
-        assertThat(saved.getImageUrl()).isNull();
         assertThat(saved.isShared()).isFalse();
         verifyNoInteractions(sharedTargetGateway);
     }
@@ -108,9 +107,9 @@ class PostServiceTest {
     @Test
     void createOfAVotePostIsHandedToTheVoteService() {
         PostCreateRequest request = new PostCreateRequest(
-                "뭐가 나을까요", "골라주세요", PostCategory.FASHION, null, null, null, PostType.VOTE, List.of(
-                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
-                        new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL)));
+                "뭐가 나을까요", "골라주세요", PostCategory.FASHION, null, null, PostType.VOTE, List.of(
+                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, OPTION_IMAGE_URL),
+                        new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, OPTION_IMAGE_URL)));
         when(voteService.createVotePost(AUTHOR_ID, request)).thenReturn(new PostCreatedResponse(POST_ID));
 
         assertThat(postService.create(AUTHOR_ID, request).postId()).isEqualTo(POST_ID);
@@ -126,7 +125,7 @@ class PostServiceTest {
         when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
 
         postService.create(AUTHOR_ID, new PostCreateRequest(
-                "월드컵 결과", "우승 상품이에요", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L, null, null));
+                "월드컵 결과", "우승 상품이에요", PostCategory.FASHION, SharedType.WORLDCUP, 9L, null, null));
 
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(captor.capture());
@@ -144,7 +143,7 @@ class PostServiceTest {
         when(postRepository.save(any(Post.class))).then(invocation -> invocation.getArgument(0));
 
         postService.create(AUTHOR_ID, new PostCreateRequest(
-                "추천 코디", "어때요", PostCategory.FASHION, null, SharedType.COMBO, 31L, null, null));
+                "추천 코디", "어때요", PostCategory.FASHION, SharedType.COMBO, 31L, null, null));
 
         ArgumentCaptor<Post> captor = ArgumentCaptor.forClass(Post.class);
         verify(postRepository).save(captor.capture());
@@ -159,7 +158,7 @@ class PostServiceTest {
                 .thenThrow(new CommunityApiException(ErrorCode.NOT_SHARED_OWNER));
 
         assertThatThrownBy(() -> postService.create(AUTHOR_ID, new PostCreateRequest(
-                        "월드컵 결과", "남의 결과", PostCategory.FASHION, null, SharedType.WORLDCUP, 9L, null, null)))
+                        "월드컵 결과", "남의 결과", PostCategory.FASHION, SharedType.WORLDCUP, 9L, null, null)))
                 .isInstanceOf(CommunityApiException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.NOT_SHARED_OWNER);
@@ -168,7 +167,7 @@ class PostServiceTest {
 
     @Test
     void feedUsesTheSharedSnapshotImageWhenThereIsNoOtherImage() {
-        Post shared = post(3L, AUTHOR_ID, null);
+        Post shared = post(3L, AUTHOR_ID);
         shared.attachShared(SharedType.WORLDCUP, 9L,
                 new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL));
         when(postRepository.findAll(ArgumentMatchers.<Specification<Post>>any(), any(Pageable.class)))
@@ -182,8 +181,8 @@ class PostServiceTest {
 
     @Test
     void feedFillsCountsAndNicknamesForThePage() {
-        Post newer = post(2L, AUTHOR_ID, IMAGE_URL);
-        Post older = post(1L, OTHER_ID, null);
+        Post newer = post(2L, AUTHOR_ID);
+        Post older = post(1L, OTHER_ID);
         when(postRepository.findAll(ArgumentMatchers.<Specification<Post>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(newer, older), PageRequest.of(0, 20), 2));
         when(postLikeRepository.countByPostIds(List.of(2L, 1L))).thenReturn(List.of(new IdCount(2L, 3L)));
@@ -197,7 +196,7 @@ class PostServiceTest {
         assertThat(feed.content()).hasSize(2);
         assertThat(feed.content().get(0).postId()).isEqualTo(2L);
         assertThat(feed.content().get(0).nickname()).isEqualTo("fitzza");
-        assertThat(feed.content().get(0).thumbnailUrl()).isEqualTo(IMAGE_URL);
+        assertThat(feed.content().get(0).thumbnailUrl()).isNull();
         assertThat(feed.content().get(0).likeCount()).isEqualTo(3);
         assertThat(feed.content().get(0).commentCount()).isZero();
         assertThat(feed.content().get(1).postId()).isEqualTo(1L);
@@ -206,25 +205,24 @@ class PostServiceTest {
         assertThat(feed.content().get(1).commentCount()).isEqualTo(5);
     }
 
-    // 첨부 이미지가 없는 투표글은 첫 번째 선택지 이미지를 썸네일로 쓰고, 이미지가 있는 글은 선택지를 조회하지 않는다.
+    // 투표글은 첫 번째 선택지 이미지를 썸네일로 쓰고, 일반 글은 선택지를 조회하지 않는다.
     @Test
-    void voteWithoutAnAttachmentUsesItsFirstOptionImageAsTheThumbnail() {
-        Post voteWithoutImage = votePost(3L);
-        Post voteWithImage = votePost(4L);
-        ReflectionTestUtils.setField(voteWithImage, "imageUrl", IMAGE_URL);
-        Post normalWithoutImage = post(5L, AUTHOR_ID, null);
+    void voteUsesItsFirstOptionImageAsTheThumbnail() {
+        Post voteWithOptionImage = votePost(3L);
+        Post voteWithoutOptionImage = votePost(4L);
+        Post normal = post(5L, AUTHOR_ID);
         when(postRepository.findAll(ArgumentMatchers.<Specification<Post>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(
-                        List.of(voteWithoutImage, voteWithImage, normalWithoutImage), PageRequest.of(0, 20), 3));
-        when(voteOptionRepository.findFirstOptionImages(List.of(3L)))
+                        List.of(voteWithOptionImage, voteWithoutOptionImage, normal), PageRequest.of(0, 20), 3));
+        when(voteOptionRepository.findFirstOptionImages(List.of(3L, 4L)))
                 .thenReturn(List.of(new PostImage(3L, OPTION_IMAGE_URL)));
 
         PostPageResponse feed = postService.getFeed(null, null, null, 0, 20);
 
         assertThat(feed.content())
                 .extracting(PostSummaryResponse::thumbnailUrl)
-                .containsExactly(OPTION_IMAGE_URL, IMAGE_URL, null);
-        verify(voteOptionRepository).findFirstOptionImages(List.of(3L));
+                .containsExactly(OPTION_IMAGE_URL, null, null);
+        verify(voteOptionRepository).findFirstOptionImages(List.of(3L, 4L));
     }
 
     @Test
@@ -247,7 +245,7 @@ class PostServiceTest {
 
     @Test
     void detailShowsTheSharedTargetAndItsSnapshot() {
-        Post post = post(POST_ID, AUTHOR_ID, null);
+        Post post = post(POST_ID, AUTHOR_ID);
         post.attachShared(SharedType.WORLDCUP, 9L, new SharedSnapshot(55L, "Fitzza", "오버핏 셔츠", 39000, OPTION_IMAGE_URL));
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
@@ -262,7 +260,7 @@ class PostServiceTest {
 
     @Test
     void detailCountsTheViewAndTellsWhetherTheViewerLikedIt() {
-        Post post = post(POST_ID, AUTHOR_ID, IMAGE_URL);
+        Post post = post(POST_ID, AUTHOR_ID);
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
         when(postLikeRepository.existsById(new PostLikeId(POST_ID, OTHER_ID))).thenReturn(true);
@@ -276,7 +274,6 @@ class PostServiceTest {
         assertThat(detail.postId()).isEqualTo(POST_ID);
         assertThat(detail.author().userId()).isEqualTo(AUTHOR_ID);
         assertThat(detail.author().nickname()).isEqualTo("fitzza");
-        assertThat(detail.imageUrl()).isEqualTo(IMAGE_URL);
         assertThat(detail.liked()).isTrue();
         assertThat(detail.likeCount()).isEqualTo(4);
         assertThat(detail.commentCount()).isEqualTo(2);
@@ -292,7 +289,7 @@ class PostServiceTest {
         Post votePost = Post.createVote(AUTHOR_ID, "제목", "내용", PostCategory.COORDI_QUESTION, Instant.now());
         ReflectionTestUtils.setField(votePost, "id", POST_ID);
         VoteOption option = VoteOption.of(
-                POST_ID, 1, VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, IMAGE_URL, null, null);
+                POST_ID, 1, VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, "55", IMAGE_URL, "셔츠", 39000);
         ReflectionTestUtils.setField(option, "id", 100L);
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(votePost));
@@ -313,7 +310,7 @@ class PostServiceTest {
     void detailForAnonymousViewerIsNeverLiked() {
         when(postRepository.incrementViewCount(POST_ID)).thenReturn(1);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID))
-                .thenReturn(Optional.of(post(POST_ID, AUTHOR_ID, null)));
+                .thenReturn(Optional.of(post(POST_ID, AUTHOR_ID)));
 
         PostDetailResponse detail = postService.getDetail(POST_ID, null);
 
@@ -335,7 +332,7 @@ class PostServiceTest {
 
     @Test
     void updateChangesOnlyTheFieldsThatWereSent() {
-        Post post = post(POST_ID, AUTHOR_ID, IMAGE_URL);
+        Post post = post(POST_ID, AUTHOR_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
         PostUpdateRequest request = new PostUpdateRequest();
         request.setTitle("  새 제목  ");
@@ -345,7 +342,6 @@ class PostServiceTest {
         assertThat(post.getTitle()).isEqualTo("새 제목");
         assertThat(post.getContent()).isEqualTo("내용");
         assertThat(post.getCategory()).isEqualTo(PostCategory.FASHION);
-        assertThat(post.getImageUrl()).isEqualTo(IMAGE_URL);
         verifyNoInteractions(voteService);
     }
 
@@ -354,8 +350,8 @@ class PostServiceTest {
         Post post = votePost(POST_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
         List<VoteOptionRequest> options = List.of(
-                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL),
-                new VoteOptionRequest(VoteOptionSource.UPLOAD, VoteItemType.IMAGE, null, OPTION_IMAGE_URL));
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 55L, OPTION_IMAGE_URL),
+                new VoteOptionRequest(VoteOptionSource.WISHLIST, VoteItemType.PRODUCT, 56L, OPTION_IMAGE_URL));
         PostUpdateRequest request = new PostUpdateRequest();
         request.setTitle("바뀐 투표");
         request.setOptions(options);
@@ -382,23 +378,8 @@ class PostServiceTest {
     }
 
     @Test
-    void updateRemovesTheImageWhenNullIsSent() {
-        Post post = post(POST_ID, AUTHOR_ID, IMAGE_URL);
-        when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
-        PostUpdateRequest request = new PostUpdateRequest();
-        request.setImageUrl(null);
-        request.setCategory(PostCategory.DAILY);
-
-        postService.update(AUTHOR_ID, POST_ID, request);
-
-        assertThat(post.getImageUrl()).isNull();
-        assertThat(post.getCategory()).isEqualTo(PostCategory.DAILY);
-        assertThat(post.getTitle()).isEqualTo("제목");
-    }
-
-    @Test
     void updateByAnotherUserIsRejected() {
-        Post post = post(POST_ID, AUTHOR_ID, null);
+        Post post = post(POST_ID, AUTHOR_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
         PostUpdateRequest request = new PostUpdateRequest();
         request.setTitle("남의 글 고치기");
@@ -412,7 +393,7 @@ class PostServiceTest {
 
     @Test
     void deleteKeepsTheRowAndMarksItDeleted() {
-        Post post = post(POST_ID, AUTHOR_ID, null);
+        Post post = post(POST_ID, AUTHOR_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
 
         postService.delete(AUTHOR_ID, POST_ID);
@@ -423,7 +404,7 @@ class PostServiceTest {
 
     @Test
     void deleteByAnotherUserIsRejected() {
-        Post post = post(POST_ID, AUTHOR_ID, null);
+        Post post = post(POST_ID, AUTHOR_ID);
         when(postRepository.findByIdAndDeletedAtIsNull(POST_ID)).thenReturn(Optional.of(post));
 
         assertThatThrownBy(() -> postService.delete(OTHER_ID, POST_ID))
@@ -494,8 +475,8 @@ class PostServiceTest {
         return post;
     }
 
-    private static Post post(Long postId, Long userId, String imageUrl) {
-        Post post = Post.createNormal(userId, "제목", "내용", PostCategory.FASHION, imageUrl);
+    private static Post post(Long postId, Long userId) {
+        Post post = Post.createNormal(userId, "제목", "내용", PostCategory.FASHION);
         ReflectionTestUtils.setField(post, "id", postId);
         return post;
     }

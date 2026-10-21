@@ -110,11 +110,11 @@ public class JevVoteSupportJudge implements VoteSupportJudge {
         return title + "댓글: " + comment.strip();
     }
 
-    // 직접 올린 사진은 이름이 없어 라벨로만 구분한다.
+    // 코디나 이름 없는 상품은 이름 대신 종류로 구분한다.
     static String describe(VoteOption option) {
         String name = option.getSnapshotName();
         if (name == null || name.isBlank()) {
-            name = option.getItemType() == VoteItemType.COMBO ? "AI 추천 코디" : "작성자가 올린 사진";
+            name = option.getItemType() == VoteItemType.COMBO ? "AI 추천 코디" : "상품";
         }
         String text = option.getDisplayOrder() + "번째 선택지: " + name.strip();
         Integer price = option.getSnapshotPrice();
