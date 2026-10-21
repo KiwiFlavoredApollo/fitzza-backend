@@ -1,4 +1,4 @@
-"""Apply the rendered production manifests in dependency order. Requires a live cluster."""
+"""Apply the delivery overlay; cluster, Secret and data resources are operator-owned."""
 
 import argparse
 import subprocess
@@ -27,7 +27,7 @@ def deploy(manifest: str) -> None:
     def wait(resource: str) -> None:
         kubectl("-n", "fitzza", "rollout", "status", resource, "--timeout=600s")
 
-    # Services, configuration, storage and data workloads must exist before app Pods.
+    # The delivery overlay excludes operator-owned storage, data workloads and RBAC.
     apply("fitzza.io/workload!=application")
     apply("app.kubernetes.io/name in (config-service,discovery-service)")
     for resource in ("deployment/config-service", "deployment/discovery-service",

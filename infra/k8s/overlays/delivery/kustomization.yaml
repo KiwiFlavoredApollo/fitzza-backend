@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../prod
+patches:
+  - target:
+      kind: Namespace
+      name: fitzza
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: fitzza
+  - target:
+      kind: StorageClass
+      name: fitzza-gp3-retain
+    patch: |-
+      $patch: delete
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: fitzza-gp3-retain
+  - target:
+      kind: ServiceAccount
+      name: fitzza-application
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: fitzza-application
+  - target:
+      kind: PersistentVolumeClaim
+      name: redis-data
+    patch: |-
+      $patch: delete
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: redis-data
+  - target:
+      kind: StatefulSet
+      name: qdrant
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: qdrant
+  - target:
+      kind: Deployment
+      name: redis
+    patch: |-
+      $patch: delete
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: redis
+  - target:
+      kind: NetworkPolicy
+      name: qdrant-ingress
+    patch: |-
+      $patch: delete
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: qdrant-ingress

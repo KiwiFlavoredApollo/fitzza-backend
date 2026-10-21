@@ -5,6 +5,8 @@ Description: >-
   The EKS deploy stage stays disabled until EnableDeployStage is true.
 
 Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
   com.aws.cloudformation.Context:
     arch: GitHub Connection -> CodePipeline V2 -> CodeBuild (ARM small) test + image publish -> optional VPC CodeBuild EKS deploy
     must:
@@ -411,7 +413,7 @@ Resources:
         why: apply commit-pinned manifests to EKS without image push or source access permissions
         must:
           - EKS access belongs only to this role
-          - no secrets-manager read; Kubernetes Secret is pre-provisioned out of band
+          - no secrets-manager or SSM read; Kubernetes Secret is pre-provisioned out of band
         mutable: change-with-constraints
     Properties:
       AssumeRolePolicyDocument:
@@ -420,6 +422,10 @@ Resources:
           - Effect: Allow
             Principal: { Service: codebuild.amazonaws.com }
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ProjectName}-${Environment}-deploy'
       Policies:
         - PolicyName: deploy-to-eks
           PolicyDocument:
@@ -469,15 +475,14 @@ Resources:
     Condition: DeployEnabled
     Metadata:
       com.aws.cloudformation.Context:
-        why: authenticate the deploy project through EKS access entries instead of aws-auth edits
+        why: authenticate the deploy project to a namespace-only Kubernetes role instead of granting cluster administration
         must:
           - principal stays DeployRole
           - access is used only by the develop delivery pipeline
+          - bind fitzza-delivery group only through the bootstrap RoleBinding in namespace fitzza
         mutable: review-required
     Properties:
-      AccessPolicies:
-        - AccessScope: { Type: cluster }
-          PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+      KubernetesGroups: [fitzza-delivery]
       ClusterName: !Ref EksClusterName
       PrincipalArn: !GetAtt DeployRole.Arn
       Type: STANDARD

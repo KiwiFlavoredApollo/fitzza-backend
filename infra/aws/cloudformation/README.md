@@ -111,11 +111,17 @@ Application updates use `maxSurge=0`, `maxUnavailable=1` because the single work
 
 Follow [the pilot deployment runbook](PILOT_DEPLOYMENT.md) for the Secret budget correction and the 10/20 validation sequence before the 10/21 pilot.
 
-Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The deploy stage intentionally stops if the `fitzza-app-secrets` Secret does not exist.
+Before enabling CD, an operator must provision the namespace, application Secret, service account, Redis/PVC, Qdrant/PVC, StorageClass and Qdrant NetworkPolicy, then apply `infra/k8s/bootstrap/delivery-rbac.yaml`. These operator-owned resources are excluded from `infra/k8s/overlays/delivery`; in particular CD never reapplies Qdrant's immutable volume claim template.
+
+The deploy access entry maps only to Kubernetes group `fitzza-delivery`, bound to a Role in namespace `fitzza`. It cannot read Secrets, mutate PVCs/StatefulSets, create RBAC or manage cluster resources. The role can modify application workloads, which inherently use the pre-provisioned application credentials; do not attach privileged workload service accounts in this namespace.
+
+Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
 
 ### Rollback
 
-Images are immutable and tagged with the 12-character Git commit SHA. To roll back, rerun the pipeline for the desired commit with `--source-revisions`; unchanged images are reused, so the run only retags. Verify every Deployment and StatefulSet rollout before restoring traffic.
+Images are immutable and tagged with the 12-character Git commit SHA. For a failed application update, an authorized operator can inspect `kubectl -n fitzza rollout history deployment/<service>` and run `kubectl -n fitzza rollout undo deployment/<service> --to-revision=<verified-good-revision>`. Confirm the restored image, rollout, external health and relevant API before restoring traffic. Preserve known-good image digests before a release; ECR retention does not guarantee an old tag still exists.
+
+Do not rerun an old source revision whose deployspec predates the namespace-only delivery overlay: that older deployment contract may require prohibited cluster permissions. Use the current reviewed deployment tooling with known-good images instead. Rolling back an image does not reverse database migrations, Secret rotation or data changes. No automatic rollback is configured; a failed deployment stops the pipeline and requires this explicit recovery procedure.
 
 ## Cost controls
 
