@@ -32,7 +32,9 @@ def test_delivery_overlay_excludes_operator_owned_resources():
         check=True, capture_output=True, text=True, timeout=30,
     )
     documents = list(yaml.safe_load_all(result.stdout))
-    assert len([d for d in documents if d["kind"] == "Deployment"]) == 11
+    deployments = [d for d in documents if d["kind"] == "Deployment"]
+    assert len(deployments) == 11
+    assert all(d["spec"]["progressDeadlineSeconds"] == 900 for d in deployments)
     assert all(d["kind"] in {"Deployment", "Service", "ConfigMap", "Ingress"}
                for d in documents)
     assert all(d["metadata"]["namespace"] == "fitzza" for d in documents)
@@ -46,6 +48,12 @@ def test_delivery_role_has_no_secret_storage_or_rbac_mutation():
         (ROOT / "infra/k8s/bootstrap/delivery-rbac.yaml").read_text()
     )
     assert role["metadata"]["namespace"] == binding["metadata"]["namespace"] == "fitzza"
+    assert binding["subjects"] == [
+        {"kind": "Group", "name": "fitzza-delivery", "apiGroup": "rbac.authorization.k8s.io"}
+    ]
+    assert binding["roleRef"] == {
+        "kind": "Role", "name": role["metadata"]["name"], "apiGroup": "rbac.authorization.k8s.io"
+    }
     for rule in role["rules"]:
         assert "*" not in rule["verbs"] + rule["resources"] + rule["apiGroups"]
         assert "secrets" not in rule["resources"]
