@@ -2,6 +2,9 @@ server:
   port: 8083
 spring:
   datasource:
+    # 서비스 전용 DB 계정. 공용 POSTGRES_USER와 분리한다.
+    username: ${ORDER_POSTGRES_USER:order_service}
+    password: ${ORDER_POSTGRES_PASSWORD:fitzza_local}
     hikari:
       schema: order_service
   flyway:
