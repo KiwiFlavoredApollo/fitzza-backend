@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.clients.storage_client import StorageClient
 from app.core.config import Settings, get_settings
 from app.core.database import VtonRepository
 from app.schemas.tryon import (
@@ -57,6 +58,7 @@ router = APIRouter()
 _REPO: VtonRepository | None = None
 _PRODUCT_CLIENT: ProductServiceClient | None = None
 _NOTIFICATION_CLIENT: NotificationServiceClient | None = None
+_STORAGE_CLIENT: StorageClient | None = None
 
 
 def get_repo() -> VtonRepository:
@@ -85,18 +87,30 @@ def get_notification_client() -> NotificationServiceClient:
     return _NOTIFICATION_CLIENT
 
 
+def get_storage_client() -> StorageClient:
+    global _STORAGE_CLIENT
+    if _STORAGE_CLIENT is None:
+        _STORAGE_CLIENT = StorageClient()
+    return _STORAGE_CLIENT
+
+
 def set_dependencies_for_tests(
     repo: VtonRepository | None = None,
     product_client: ProductServiceClient | None = None,
     notification_client: NotificationServiceClient | None = None,
+    storage_client: StorageClient | None = None,
 ) -> None:
-    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT
+    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT
     _REPO = repo
     _PRODUCT_CLIENT = product_client
     _NOTIFICATION_CLIENT = notification_client
+    _STORAGE_CLIENT = storage_client
 
 
 def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
+    storage = get_storage_client()
+    if storage.is_s3:
+        return storage.get_public_url(f"fittings/{fitting_id}.png")
     settings = get_settings()
     if settings.public_base_url.strip():
         base = settings.public_base_url.rstrip("/")
@@ -119,6 +133,7 @@ def _run_background_vton(
     product_ids: list[int],
     result_image_url: str,
     request_id_header: str | None = None,
+    user_face_bytes: bytes | None = None,
 ) -> None:
     """백그라운드에서 상품 조회, AI 피팅 합성, 결과 이미지 저장, DB 업데이트 및 FCM 알림을 수행합니다."""
     settings = get_settings()
@@ -168,31 +183,36 @@ def _run_background_vton(
             except Exception as e:
                 logger.warning("기본 하의 샘플 로드 실패: %s", e)
 
-        # 1-2. 사용자 얼굴 이미지 로드 (전달된 photo_id가 있는 경우)
-        user_face_bytes: bytes | None = None
-        if photo_id is not None:
+        # 1-2. 사용자 얼굴 이미지 로드 (직접 전달받은 바이트가 없고 photo_id가 있는 경우에만 스토리지 다운로드)
+        if user_face_bytes is None and photo_id is not None:
             photo_info = repo.get_user_photo(photo_id)
             if not photo_info or not photo_info.get("filePath"):
                 raise VtonValidationError(f"지정된 사용자 이미지(photoId={photo_id}) 정보를 찾을 수 없습니다.")
 
-            photo_file = Path(photo_info["filePath"])
-            if not photo_file.is_file():
-                raise VtonValidationError(f"지정된 사용자 이미지 파일(photoId={photo_id})을 찾을 수 없습니다.")
-
+            file_ref = photo_info["filePath"]
             try:
-                user_face_bytes = photo_file.read_bytes()
+                storage = get_storage_client()
+                user_face_bytes = storage.download_bytes(file_ref)
                 logger.info(
-                    "사용자 얼굴 사진 적용 (photoId=%s, path=%s)",
+                    "사용자 얼굴 사진 적용 (photoId=%s, ref=%s, size=%d)",
                     photo_id,
-                    photo_file,
+                    file_ref,
+                    len(user_face_bytes),
                 )
             except Exception as exc:
                 logger.error(
-                    "사용자 얼굴 사진 파일 로드 실패 (photoId=%s): %s",
+                    "사용자 얼굴 사진 파일 로드 실패 (photoId=%s, ref=%s): %s",
                     photo_id,
+                    file_ref,
                     exc,
                 )
-                raise VtonValidationError(f"사용자 이미지(photoId={photo_id}) 파일을 읽는 데 실패했습니다.") from exc
+                raise VtonValidationError(f"사용자 이미지(photoId={photo_id})를 불러오는 데 실패했습니다.") from exc
+        elif user_face_bytes is not None:
+            logger.info(
+                "메모리 상의 사용자 얼굴 사진 직접 전달 적용 (photoId=%s, size=%d)",
+                photo_id,
+                len(user_face_bytes),
+            )
 
         # 2. OpenAI 이미지 편집 피팅 실행 (아바타 몸 + 사용자 얼굴 + 의류)
         output_png = generate_tryon_image(
@@ -206,14 +226,23 @@ def _run_background_vton(
             max_retries=settings.openai_max_retries,
         )
 
-        # 3. 결과 이미지 파일 디스크 저장
-        storage_dir = Path(settings.storage_dir)
-        storage_dir.mkdir(parents=True, exist_ok=True)
-        image_file = storage_dir / f"{fitting_id}.png"
-        image_file.write_bytes(output_png)
+        # 3. 결과 이미지 스토리지 저장 (S3 또는 Local Fallback)
+        storage = get_storage_client()
+        result_key = f"fittings/{fitting_id}.png"
+        uploaded_result_url = storage.upload_bytes(result_key, output_png, content_type="image/png")
+
+        # 3-1. 로컬 fallback을 위한 디스크 복제본 저장 (FileResponse 호환 보장)
+        try:
+            storage_dir = Path(settings.storage_dir)
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            image_file = storage_dir / f"{fitting_id}.png"
+            image_file.write_bytes(output_png)
+        except Exception as file_exc:
+            logger.warning("로컬 피팅 파일 캐시 저장 건너뜀 (fittingId=%s): %s", fitting_id, file_exc)
 
         # 4. DB 상태 완료(COMPLETED) 갱신
-        repo.mark_completed(fitting_id, result_image_url=result_image_url)
+        final_image_url = uploaded_result_url if storage.is_s3 else result_image_url
+        repo.mark_completed(fitting_id, result_image_url=final_image_url)
 
         # 5. notification-service 피팅 완료 FCM 알림 전송
         notif_client.send_fitting_done(
@@ -364,6 +393,7 @@ async def request_fitting(
     content_type = request.headers.get("content-type", "").lower()
     product_ids: list[int] = []
     photo_id: int | None = None
+    user_face_bytes: bytes | None = None
 
     # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds 동시 수신)
     if "multipart/form-data" in content_type:
@@ -421,29 +451,46 @@ async def request_fitting(
                     )
                 try:
                     png_bytes = await run_in_threadpool(to_png_bytes, content)
+                    user_face_bytes = png_bytes
                 except Exception as exc:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="유효하지 않은 이미지 파일입니다.",
                     ) from exc
 
+                storage = get_storage_client()
+                photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
+                photo_key = f"photos/{x_user_id}/{photo_filename}"
+
+                # S3 또는 로컬 스토리지 업로드
                 try:
-                    settings = get_settings()
-                    photos_dir = settings.get_photos_dir()
-                    photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
-                    photo_path = photos_dir / photo_filename
-                    await run_in_threadpool(photo_path.write_bytes, png_bytes)
-                except OSError as exc:
-                    logger.error("사용자 사진 파일 저장 I/O 실패: %s", exc, exc_info=True)
+                    uploaded_ref = await run_in_threadpool(
+                        storage.upload_bytes,
+                        key=photo_key,
+                        data=png_bytes,
+                        content_type="image/png",
+                    )
+                except Exception as exc:
+                    logger.error("사용자 사진 스토리지 저장 실패: %s", exc, exc_info=True)
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail="사용자 사진 파일 저장 중 오류가 발생했습니다.",
                     ) from exc
 
+                # 로컬 디스크 캐시 복제본 저장 (로컬 fallback 및 개발 호환성)
+                try:
+                    settings = get_settings()
+                    photos_dir = settings.get_photos_dir()
+                    photo_path = photos_dir / photo_filename
+                    await run_in_threadpool(photo_path.write_bytes, png_bytes)
+                except Exception as file_exc:
+                    logger.warning("로컬 사용자 사진 캐시 저장 건너뜀 (userId=%s): %s", x_user_id, file_exc)
+
                 repo = get_repo()
+                stored_file_path = photo_key if storage.is_s3 else uploaded_ref
                 photo_record = repo.save_user_photo(
                     user_id=x_user_id,
-                    file_path=str(photo_path.resolve()),
+                    file_path=stored_file_path,
                 )
                 photo_id = photo_record["photoId"]
     else:
@@ -502,6 +549,7 @@ async def request_fitting(
         product_ids=unique_product_ids,
         result_image_url=result_image_url,
         request_id_header=x_request_id,
+        user_face_bytes=user_face_bytes,
     )
 
     return FittingCreateResponse(fittingId=fitting_id, status="PENDING")
@@ -601,7 +649,7 @@ def delete_fitting(
         404: {"description": "이미지를 찾을 수 없거나 아직 생성되지 않음/삭제됨"},
     },
 )
-def get_fitting_image(fittingId: int) -> FileResponse:
+def get_fitting_image(fittingId: int) -> Response:
     # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
     repo = get_repo()
     detail = repo.get_fitting_detail(fittingId)
@@ -620,17 +668,27 @@ def get_fitting_image(fittingId: int) -> FileResponse:
     storage_dir = Path(settings.storage_dir)
     image_file = storage_dir / f"{fittingId}.png"
 
-    if not image_file.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="피팅 결과 이미지 파일이 존재하지 않습니다.",
+    if image_file.is_file():
+        return FileResponse(
+            path=str(image_file),
+            media_type="image/png",
+            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
         )
 
-    return FileResponse(
-        path=str(image_file),
-        media_type="image/png",
-        headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
-    )
+    # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3)에서 스트리밍 조회 시도
+    storage = get_storage_client()
+    try:
+        img_bytes = storage.download_bytes(f"fittings/{fittingId}.png")
+        return Response(
+            content=img_bytes,
+            media_type="image/png",
+            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="피팅 결과 이미지 파일을 찾을 수 없습니다.",
+        )
 
 
 @router.get(
@@ -645,7 +703,7 @@ def get_fitting_image(fittingId: int) -> FileResponse:
 def get_fitting_user_image(
     fittingId: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
-) -> FileResponse:
+) -> Response:
     if not x_user_id or x_user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -681,18 +739,26 @@ def get_fitting_user_image(
             detail="사용자 사진 정보를 찾을 수 없습니다.",
         )
 
-    photo_file = Path(photo_info["filePath"])
-    if not photo_file.is_file():
+    file_ref = photo_info["filePath"]
+    storage = get_storage_client()
+    try:
+        user_bytes = storage.download_bytes(file_ref)
+        return Response(
+            content=user_bytes,
+            media_type="image/png",
+            headers={"Content-Disposition": f'inline; filename="user-{photo_id}.png"'},
+        )
+    except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="사용자 사진 파일이 서버에 존재하지 않습니다.",
         )
-
-    return FileResponse(
-        path=str(photo_file),
-        media_type="image/png",
-        headers={"Content-Disposition": f'inline; filename="user-{photo_id}.png"'},
-    )
+    except Exception as exc:
+        logger.error("사용자 사진 로드 실패 (photoId=%s, ref=%s): %s", photo_id, file_ref, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="사용자 사진 파일 로드 중 오류가 발생했습니다.",
+        )
 
 
 @router.get(
