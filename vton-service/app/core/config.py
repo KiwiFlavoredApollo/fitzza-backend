@@ -95,6 +95,28 @@ class Settings:
     public_base_url: str = field(
         default_factory=lambda: os.getenv("VTON_PUBLIC_BASE_URL", "")
     )
+    storage_backend: str = field(
+        default_factory=lambda: os.getenv("VTON_STORAGE_BACKEND", "local")
+    )
+    aws_s3_bucket_name: str = field(
+        default_factory=lambda: os.getenv("AWS_S3_BUCKET_NAME", "fitzza-assets")
+    )
+    aws_endpoint_url: str = field(
+        default_factory=lambda: os.getenv("AWS_ENDPOINT_URL", "")
+    )
+    aws_region: str = field(
+        default_factory=lambda: os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
+    )
+    aws_access_key_id: str = field(
+        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "test")
+    )
+    aws_secret_access_key: str = field(
+        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+    )
+    cloudfront_domain: str = field(
+        default_factory=lambda: os.getenv("CLOUDFRONT_DOMAIN", "")
+    )
+
 
     def get_photos_dir(self) -> Path:
         if self.photos_dir.strip():
