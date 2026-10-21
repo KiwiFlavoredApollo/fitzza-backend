@@ -2,6 +2,7 @@ package com.fitzza.product.wishlist.repository;
 
 import com.fitzza.product.wishlist.entity.WishlistEntity;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +13,8 @@ public interface WishlistRepository extends JpaRepository<WishlistEntity, Long> 
     Page<WishlistEntity> findByUserId(Long userId, Pageable pageable);
 
     Optional<WishlistEntity> findByUserIdAndItemId(Long userId, String itemId);
+
+    List<WishlistEntity> findByUserIdAndItemIdIn(Long userId, Collection<String> itemIds);
 
     boolean existsByUserIdAndItemId(Long userId, String itemId);
 

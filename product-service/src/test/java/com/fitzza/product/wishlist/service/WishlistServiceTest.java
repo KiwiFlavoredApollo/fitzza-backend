@@ -15,6 +15,7 @@ import com.fitzza.product.wishlist.dto.WishlistCreateRequest;
 import com.fitzza.product.wishlist.dto.WishlistResponse;
 import com.fitzza.product.wishlist.entity.WishlistEntity;
 import com.fitzza.product.wishlist.repository.WishlistRepository;
+import java.util.List;
 import java.util.Optional;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,16 @@ class WishlistServiceTest {
         when(wishlistRepository.existsByUserIdAndItemId(USER_ID, "7")).thenReturn(true);
 
         assertThat(wishlistService.checkWishlist(USER_ID, 7L).wishlisted()).isTrue();
+    }
+
+    @Test
+    void findWishlistedProductIdsReturnsOnlyMatchingItems() {
+        when(wishlistRepository.findByUserIdAndItemIdIn(USER_ID, List.of("7", "8")))
+                .thenReturn(List.of(WishlistEntity.builder().userId(USER_ID).itemId("7").build()));
+
+        assertThat(wishlistService.findWishlistedProductIds(USER_ID, List.of(7L, 8L)))
+                .containsExactly(7L);
+        assertThat(wishlistService.findWishlistedProductIds(USER_ID, List.of())).isEmpty();
     }
 
     private void assertErrorCode(ThrowingCallable callable, ErrorCode expected) {

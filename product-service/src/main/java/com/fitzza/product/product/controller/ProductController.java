@@ -36,7 +36,8 @@ public class ProductController {
             description = "카테고리 코드 길이에 따라 대분류(3)·중분류(6)·소분류(9)로 조회한다. "
                     + "코드가 없으면 전체 노출 상품을 반환한다. "
                     + "sort는 TIME_DESC(상품 ID 내림차순) 또는 PRICE_ASC(낮은 가격, 같으면 상품 ID 내림차순)이며 "
-                    + "그 밖의 값은 TIME_DESC로 처리한다.")
+                    + "그 밖의 값은 TIME_DESC로 처리한다. "
+                    + "X-User-Id가 있으면 각 항목에 wished를 포함한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "조회 성공"),
             @ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터",
@@ -51,8 +52,10 @@ public class ProductController {
             @Parameter(description = "페이지 번호(0부터 시작)")
             @RequestParam(defaultValue = PagingConstants.DEFAULT_PAGE) @Min(0) int page,
             @Parameter(description = "페이지 크기")
-            @RequestParam(defaultValue = PagingConstants.DEFAULT_SIZE) @Min(1) @Max(PagingConstants.MAX_SIZE) int size) {
-        return productService.findProducts(category, ProductSortType.from(sort), page, size);
+            @RequestParam(defaultValue = PagingConstants.DEFAULT_SIZE) @Min(1) @Max(PagingConstants.MAX_SIZE) int size,
+            @Parameter(description = "요청 사용자 ID. 있으면 각 항목의 찜 여부를 포함한다.")
+            @RequestHeader(value = ApiHeaders.USER_ID, required = false) Long userId) {
+        return productService.findProducts(category, ProductSortType.from(sort), page, size, userId);
     }
 
     @Operation(summary = "상품 상세 조회",
