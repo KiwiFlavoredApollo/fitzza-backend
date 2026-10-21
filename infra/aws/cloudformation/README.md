@@ -123,6 +123,16 @@ Resolve the foundation outputs and the EKS cluster security group, fill `deliver
 
 Images are immutable and tagged with the 12-character Git commit SHA. For a failed application update, an authorized operator can inspect `kubectl -n fitzza rollout history deployment/<service>` and run `kubectl -n fitzza rollout undo deployment/<service> --to-revision=<verified-good-revision>`. Confirm the restored image, rollout, external health and relevant API before restoring traffic. Preserve known-good image digests before a release; ECR retention does not guarantee an old tag still exists.
 
+For image-only recovery, prefer `kubectl -n fitzza set image deployment/<service> <container>=<verified-good-image> --field-manager=fitzza-codebuild`. A full `rollout undo` can take image-field ownership away from server-side CD. After such a recovery, explicitly hand the next reviewed image back with `set image --field-manager=fitzza-codebuild` before resuming CD. Never resolve this by forcing conflicts on all resources or on Qdrant storage.
+
+### Pilot evidence (2026-10-21)
+
+- Pipeline execution `a33f217f-ea25-4d12-a101-832f8c346079`: Source/Build/Deploy succeeded for source `c4fd7ddc34996846b1d1d80d5bed58c7ca51aed8`; successful deploy build `76f70d28-4dcc-4c09-a502-a9d12f791fa8`.
+- Initial deploy retries exposed an artifact endpoint denial and the manual rollback image ownership conflict; both were corrected without cluster-admin access or forcing storage fields. The successful BuildOutput was reused for deploy retries.
+- All 11 application images use tag `c4fd7ddc3499`; Redis and Qdrant remain operator-owned. External health and product read returned HTTP 200; API CORS accepted the configured localhost origin.
+- Gateway invalid-image injection produced ErrImagePull and external HTTP 503. Restoring the verified revision recovered HTTP 200. Qdrant PVC identity and collection/point counts (2/2) were unchanged before/after recovery and CD.
+- This verifies a manually triggered exact-commit pipeline and Gateway image recovery, not database migration rollback or automatic failure recovery. The reviewed changes must still merge into develop before its push trigger can use the new delivery contract.
+
 Do not rerun an old source revision whose deployspec predates the namespace-only delivery overlay: that older deployment contract may require prohibited cluster permissions. Use the current reviewed deployment tooling with known-good images instead. Rolling back an image does not reverse database migrations, Secret rotation or data changes. No automatic rollback is configured; a failed deployment stops the pipeline and requires this explicit recovery procedure.
 
 ## Cost controls
