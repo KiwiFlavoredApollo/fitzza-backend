@@ -60,6 +60,17 @@
     "https://image.msscdn.net/images/prd_img/20240816/4336667/detail_4336667_17237842083037_500.jpg"
   ],
   "features": {},
+  "material": "COTTEN 60% POLYESTER 40%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTEN 60% POLYESTER 40%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

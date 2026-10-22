@@ -82,6 +82,20 @@
       "가을"
     ]
   },
+  "material": "POLYESTER 62% / RAYON 34% / POLYURETHANE 4%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "POLYESTER 62%<br />\nRAYON 34%<br />\nPOLYURETHANE 4%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

@@ -84,6 +84,20 @@
       "가을"
     ]
   },
+  "material": "MAIN / COTTON 50% RAYON 50% / PARTS / COTTON 100%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "MAIN<br />\nCOTTON 50% RAYON 50%<br />\n<br />\nPARTS<br />\nCOTTON 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

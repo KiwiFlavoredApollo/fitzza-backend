@@ -82,6 +82,20 @@
       "겨울"
     ]
   },
+  "material": "일반 : Cotton 80% / Poly 20%, 여름용 : Cotton 60% / Poly 40%, 기모 : Cotton 50% / Poly 50%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "일반 : Cotton 80% / Poly 20%, 여름용 : Cotton 60% / Poly 40%, 기모 : Cotton 50% / Poly 50%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

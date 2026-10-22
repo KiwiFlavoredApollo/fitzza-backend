@@ -66,6 +66,17 @@
       "가벼움"
     ]
   },
+  "material": "ARTIFICIAL LEATHER",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "ARTIFICIAL LEATHER",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

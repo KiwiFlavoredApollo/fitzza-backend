@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20260512/6461459/detail_6461459_17798520224548_500.jpg"
   ],
   "features": {},
+  "material": "외피소재 : 합성가죽(PU) + 메쉬 / 내피소재 : 폴리에스터 메쉬 / 아웃솔 : EVA + 고무",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "외피소재 : 합성가죽(PU) + 메쉬<br />\n내피소재 : 폴리에스터 메쉬<br />\n아웃솔 : EVA + 고무",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

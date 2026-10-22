@@ -64,6 +64,17 @@
     "https://image.msscdn.net/images/prd_img/20260918/7364357/detail_7364357_17897030699520_500.jpg"
   ],
   "features": {},
+  "material": "Polyester 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Polyester 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

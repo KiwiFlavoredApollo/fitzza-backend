@@ -62,6 +62,17 @@
     "https://image.msscdn.net/images/prd_img/20250822/5353688/detail_5353688_17688064768998_500.jpg"
   ],
   "features": {},
+  "material": "ACRYLIC 45%, NYLON 40%, WOOL 15%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "ACRYLIC 45%, NYLON 40%, WOOL 15%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

@@ -72,6 +72,17 @@
     "https://image.msscdn.net/images/prd_img/20240116/3796553/detail_3796553_17053952564517_500.jpg"
   ],
   "features": {},
+  "material": "BK겉감: 폴리에스터 66% 레이온 29% 폴리우레탄 5% GR,KH,LB,NA겉감: 폴리에스터 63% 레이온 31% 폴리우레탄 6%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "BK겉감: 폴리에스터 66% 레이온 29% 폴리우레탄 5%  GR,KH,LB,NA겉감: 폴리에스터 63% 레이온 31% 폴리우레탄 6%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

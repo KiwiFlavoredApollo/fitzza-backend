@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20230720/3416534/detail_3416534_16992580369421_500.jpg"
   ],
   "features": {},
+  "material": "상피재료 : 소가죽 / 창 재료 : 고무",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상피재료 : 소가죽 / 창 재료 : 고무",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

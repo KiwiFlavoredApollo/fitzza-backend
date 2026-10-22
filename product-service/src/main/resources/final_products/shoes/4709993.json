@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20250110/4709993/detail_4709993_17364796867993_500.jpg"
   ],
   "features": {},
+  "material": "겉감:극세사(합성피혁) / 안감: 합성피혁",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감:극세사(합성피혁) / 안감: 합성피혁",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

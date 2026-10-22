@@ -84,6 +84,20 @@
       "여름"
     ]
   },
+  "material": "코튼(Cotton) 65% 폴리 35%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "코튼(Cotton) 65% 폴리 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반바지",

@@ -74,6 +74,17 @@
     "https://image.msscdn.net/images/prd_img/20240227/3902775/detail_3902775_17738913762797_500.jpg"
   ],
   "features": {},
+  "material": "Cotton 63% / Rayon 19% / Polyester 18%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 63% / Rayon 19% / Polyester 18%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

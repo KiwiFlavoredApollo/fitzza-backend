@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20250225/4827828/detail_4827828_17588665925751_500.jpg"
   ],
   "features": {},
+  "material": "100% 나일론",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "100% 나일론",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

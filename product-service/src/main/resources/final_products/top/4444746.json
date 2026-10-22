@@ -64,6 +64,17 @@
     "https://image.msscdn.net/images/prd_img/20240919/4444746/detail_4444746_17278360816028_500.jpg"
   ],
   "features": {},
+  "material": "울 70% 캐시미어 30%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "울 70% 캐시미어 30% ",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

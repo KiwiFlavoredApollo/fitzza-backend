@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20220831/2758147/detail_2758147_7_500.jpg"
   ],
   "features": {},
+  "material": "합성피혁 PU 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "합성피혁 PU 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

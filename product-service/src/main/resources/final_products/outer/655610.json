@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20171019/655610/detail_655610_17918566497150_500.jpg"
   ],
   "features": {},
+  "material": "버진 울 80% 캐시미어 20%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "버진 울  80% 캐시미어 20%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "코트",

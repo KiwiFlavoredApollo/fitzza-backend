@@ -89,6 +89,20 @@
       "가을"
     ]
   },
+  "material": "4계절 원단 [블랙 / 그레이] 제조국 : 대한민국 Polyester 75%, Rayon 18%, Span 7% / Polyester 75%, Rayon 21%, Polyurethane 4% 제조국 : 중국 Polyester 75%, Rayon 20%, Span 5% Polyester 80 rayon16 span4 4계절 원단 [그린/아이보리/딥브라운]…",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "4계절 원단 [블랙 / 그레이] 제조국 : 대한민국 Polyester 75%, Rayon 18%, Span 7% / Polyester 75%, Rayon 21%, Polyurethane 4% 제조국 : 중국 Polyester 75%, Rayon 20%, Span 5%  Polyester 80 rayon16 span4  4계절 원단 [그린/아이보리/딥브라운] Polyester 75%, Rayon 18%, Span 7% / Polyester 75%, Rayon 21%, Polyurethane 4%  Polyester77 rayon20 span3 여름원단 T/R POLY 76% RAYON 22% SPAN 2%  Polyester65 rayon30 span5 / POLY 77%, RAYON 18%, SPAN 5% 겨울원단 T/R POLY 72% R 25% SPAN 3%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

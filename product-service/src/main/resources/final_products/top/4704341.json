@@ -99,6 +99,20 @@
       "겨울"
     ]
   },
+  "material": "겉감: 코튼(Cotton) 54%, 폴리에스터 46% / 배색: 코튼(Cotton) 95%, 폴리우레탄 5%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감: 코튼(Cotton) 54%, 폴리에스터 46% / 배색: 코튼(Cotton) 95%, 폴리우레탄 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

@@ -86,6 +86,20 @@
       "겨울"
     ]
   },
+  "material": "PIGMENT BLACK - COTTON 100% / PIGMENT PINK - COTTON 60% + POLYESTER 40% / BLACK,GREY - COTTON 58% + POLYESTER 42%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "PIGMENT BLACK - COTTON 100%<br />\nPIGMENT PINK - COTTON 60% + POLYESTER 40%<br />\n BLACK,GREY - COTTON 58% + POLYESTER 42%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

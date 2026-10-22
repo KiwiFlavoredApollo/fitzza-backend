@@ -242,6 +242,7 @@ async def run() -> None:
                             continue
 
                         product = await crawler.attach_actual_size(product)
+                        product = await crawler.attach_essential_material(product)
 
                         product.setdefault("dataset", {})
                         product["dataset"].update(

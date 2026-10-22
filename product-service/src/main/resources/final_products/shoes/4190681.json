@@ -66,6 +66,17 @@
       "가벼움"
     ]
   },
+  "material": "표면 재질: EVA / 밑창 소재: EVA",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "표면 재질: EVA<br />\n밑창 소재: EVA",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

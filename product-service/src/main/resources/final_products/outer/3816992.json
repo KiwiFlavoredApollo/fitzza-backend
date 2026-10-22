@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20240123/3816992/detail_3816992_17079636828649_500.jpg"
   ],
   "features": {},
+  "material": "겉감 : NYLON 100% / 안감 : POLYESTER 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감 : NYLON 100%<br />\n안감 : POLYESTER 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

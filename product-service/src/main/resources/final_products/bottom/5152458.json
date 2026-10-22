@@ -62,6 +62,17 @@
     "https://image.msscdn.net/images/prd_img/20250528/5152458/detail_5152458_17484073109343_500.jpg"
   ],
   "features": {},
+  "material": "겉감 폴리에스터 69% 레이온 26% 폴리우레탄 5%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감 폴리에스터 69% 레이온 26% 폴리우레탄 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

@@ -62,6 +62,17 @@
     "https://image.msscdn.net/images/prd_img/20260616/6679454/detail_6679454_17817701334369_500.jpg"
   ],
   "features": {},
+  "material": "WOOL 40% POLYESTER 60%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "WOOL 40% POLYESTER 60%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

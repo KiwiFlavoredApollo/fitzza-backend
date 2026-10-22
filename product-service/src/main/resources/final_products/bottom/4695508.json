@@ -93,6 +93,17 @@
     "https://image.msscdn.net/images/prd_img/20250102/4695508/detail_4695508_17560844153268_500.jpg"
   ],
   "features": {},
+  "material": "코튼 65%, 폴리 23%, 레이온 12%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "코튼 65%, 폴리 23%, 레이온 12%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

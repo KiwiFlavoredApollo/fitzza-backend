@@ -60,6 +60,17 @@
     "https://image.msscdn.net/images/prd_img/20250705/5228477/detail_5228477_17520741086302_500.jpg"
   ],
   "features": {},
+  "material": "COTTON 70%, POLY 30%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTON 70%, POLY 30%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

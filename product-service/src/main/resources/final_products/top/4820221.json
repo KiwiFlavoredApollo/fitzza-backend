@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20250223/4820221/detail_4820221_17402904391123_500.jpg"
   ],
   "features": {},
+  "material": "cotton 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "cotton 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

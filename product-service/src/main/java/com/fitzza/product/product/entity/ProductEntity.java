@@ -190,6 +190,25 @@ public class ProductEntity implements Persistable<Long> {
         this.colorImageMappings = mappings == null ? List.of() : List.copyOf(mappings);
     }
 
+    /**
+     * 이미 저장된 상품의 소재·핏이 비어 있을 때만 시드 값으로 채운다(재시드 백필).
+     * 이미 값이 있으면 덮어쓰지 않는다.
+     *
+     * @return 실제로 바뀐 값이 있으면 true
+     */
+    public boolean fillMissingMaterialAndFit(String material, FitType fitType) {
+        boolean changed = false;
+        if (this.material == null && material != null) {
+            this.material = material;
+            changed = true;
+        }
+        if (this.fitType == null && fitType != null) {
+            this.fitType = fitType;
+            changed = true;
+        }
+        return changed;
+    }
+
     /** 가장 하위 단계의 카테고리 코드를 반환한다. */
     public String getCategoryCode() {
         if (subcategory != null) {

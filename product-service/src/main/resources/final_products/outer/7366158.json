@@ -91,6 +91,20 @@
       "겨울"
     ]
   },
+  "material": "겉 Cotton 100% / 안 Poly 100%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉 Cotton 100% / 안 Poly 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

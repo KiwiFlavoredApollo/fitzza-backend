@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20230215/3086665/detail_3086665_16765140574970_500.jpg"
   ],
   "features": {},
+  "material": "Nylon 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Nylon 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

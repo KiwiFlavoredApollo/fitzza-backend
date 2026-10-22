@@ -64,6 +64,17 @@
     "https://image.msscdn.net/images/prd_img/20240221/3887843/detail_3887843_17089118255176_500.jpg"
   ],
   "features": {},
+  "material": "Linen 56%, Cotton 44%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Linen 56%, Cotton 44%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

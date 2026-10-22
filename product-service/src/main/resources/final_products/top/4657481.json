@@ -58,6 +58,17 @@
     "https://image.msscdn.net/images/prd_img/20241209/4657481/detail_4657481_17636161708855_500.jpg"
   ],
   "features": {},
+  "material": "폴리 64% / 아크릴 33% / 폴리우레탄 3%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리 64% / 아크릴 33% / 폴리우레탄 3%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

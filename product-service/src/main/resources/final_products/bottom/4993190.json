@@ -85,6 +85,17 @@
       "가을"
     ]
   },
+  "material": "면100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

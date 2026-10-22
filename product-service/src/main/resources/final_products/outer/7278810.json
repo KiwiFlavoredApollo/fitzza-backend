@@ -60,6 +60,17 @@
     "https://image.msscdn.net/images/prd_img/20260908/7278810/detail_7278810_17888591270141_500.jpg"
   ],
   "features": {},
+  "material": "69% 면 / 31% 폴리에스터",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "69% 면<br />\n31% 폴리에스터",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

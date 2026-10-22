@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20240404/4026527/detail_4026527_17866733417642_500.jpg"
   ],
   "features": {},
+  "material": "ZEROVITY BIO",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "ZEROVITY BIO",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

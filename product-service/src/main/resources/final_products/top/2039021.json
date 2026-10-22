@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20210723/2039021/detail_2039021_6_500.jpg"
   ],
   "features": {},
+  "material": "면100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

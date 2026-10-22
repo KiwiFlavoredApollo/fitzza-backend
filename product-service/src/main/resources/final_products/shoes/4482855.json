@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20241002/4482855/detail_4482855_17278559385507_500.jpg"
   ],
   "features": {},
+  "material": "UPPRE : Synthetic leather 100% / SOLE : Rubber 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "UPPRE : Synthetic leather 100% / SOLE : Rubber 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

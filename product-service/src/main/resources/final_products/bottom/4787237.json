@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20250213/4787237/detail_4787237_17908208603489_500.jpg"
   ],
   "features": {},
+  "material": "사계절 원단(대한민국) COTTON 55%, POLY 45%/COTTON 58%, POLY 42% / 사계절 원단(중국) COTTON 80%, POLY 20% 사계절 원단(중국) COTTON 57%, POLY 43% /기모원단(대한민국) COTTON 40%, POLY 60% / 기모원단(중국) COTTON 50%, POLY 50%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "사계절 원단(대한민국) COTTON 55%, POLY 45%/COTTON 58%, POLY 42% / 사계절 원단(중국) COTTON 80%, POLY 20%  사계절 원단(중국) COTTON 57%, POLY 43% /기모원단(대한민국) COTTON 40%, POLY 60% / 기모원단(중국) COTTON 50%, POLY 50%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

@@ -88,6 +88,20 @@
       "가을"
     ]
   },
+  "material": "LIGHT BLUE, INDIGO : COTTON 72% POLYESTER 22% RAYON 6% WHITE, BEIGE, SKY BLUE : POLYESTER 57% RAYON 18% LINEN 17% COTTON 8% / POLYESTER 62% COTTON 17% LINEN 11% RAYON 10%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "LIGHT BLUE, INDIGO : COTTON 72% POLYESTER 22% RAYON 6%  WHITE, BEIGE, SKY BLUE : POLYESTER 57% RAYON 18% LINEN 17% COTTON 8%   / POLYESTER 62%  COTTON 17% LINEN 11% RAYON 10%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",
