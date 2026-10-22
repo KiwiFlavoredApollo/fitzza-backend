@@ -98,7 +98,7 @@ FITZZA-221의 [payer 관리자용 예산 설정 요청안·수동 점검표](../
    실제 노드 allocatable에 들어가는지 확인하고 부족하면 배포를 멈춘다.
 3. 실제 RDS endpoint, private subnet, ALB SG, frontend origin 입력.
    TLS를 쓰면 API 도메인과 인증서를 모두 입력한다.
-4. Change Set을 검토한 후 배포 단계 활성화. develop 기준 실행과 모든 rollout 확인.
+4. Change Set을 검토한 후 배포 단계 활성화. main 기준 실행과 모든 rollout 확인.
 5. ALB 외부 health 및 핵심 사용자 흐름 확인. RDS 비공개, Redis ClusterIP,
    Pod 외부 통신, NAT·S3 Gateway Endpoint 경로를 확인한다.
 6. FITZZA-221 비용 알림 확인. 이전 이미지 버전으로 롤백 후 복구를 시험한다.

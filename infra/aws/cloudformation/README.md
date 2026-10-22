@@ -68,7 +68,7 @@ kubectl get ingressclass alb
 
 ## Delivery pipeline
 
-`delivery.yaml` creates a GitHub connection, a CodePipeline V2 pipeline, and one CodeBuild project. A push to `develop` runs:
+`delivery.yaml` creates a GitHub connection, a CodePipeline V2 pipeline, and one CodeBuild project. A push to `main` runs:
 
 1. **Source**: the exact pushed commit through the GitHub App connection. The commit SHA is passed to CodeBuild as `SOURCE_COMMIT_ID`.
 2. **Build** (`buildspec.yml`): Gradle tests, both FastAPI test suites, and the root script tests run first. Only after they all pass does CodeBuild log in to ECR and run `scripts/publish_images.sh`, which publishes native `linux/arm64` images tagged with the 12-character commit SHA and checks each image's architecture.
