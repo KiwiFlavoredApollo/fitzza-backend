@@ -347,25 +347,18 @@ def list_user_fittings(
     openapi_extra={
         "requestBody": {
             "required": True,
-            "description": "JSON 본문(상품 ID 목록 또는 추천 색상 이미지 items 목록) 또는 multipart/form-data(상품 목록 + 사용자 얼굴 이미지)",
+            "description": "JSON 본문(피팅할 상품 items 목록) 또는 multipart/form-data(상품 items 목록 + 사용자 얼굴/상반신 이미지)",
             "content": {
                 "application/json": {
                     "schema": {
                         "type": "object",
+                        "required": ["items"],
                         "properties": {
                             "photoId": {
                                 "type": "integer",
                                 "nullable": True,
-                                "description": "사용자 사진 ID (선택)",
+                                "description": "사용자 사진 ID (마네킹 아바타로 피팅 시 null)",
                                 "example": None,
-                            },
-                            "productIds": {
-                                "type": "array",
-                                "items": {"type": "integer"},
-                                "minItems": 1,
-                                "maxItems": 5,
-                                "description": "피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
-                                "example": [101, 102],
                             },
                             "items": {
                                 "type": "array",
@@ -387,7 +380,7 @@ def list_user_fittings(
                                 },
                                 "minItems": 1,
                                 "maxItems": 5,
-                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (productIds 대신 사용 권장)",
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (최소 1개, 최대 5개)",
                                 "example": [
                                     {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},
                                     {"productId": 201, "imageUrl": "https://image.msscdn.net/images/goods_img/black.jpg"},
@@ -399,12 +392,8 @@ def list_user_fittings(
                 "multipart/form-data": {
                     "schema": {
                         "type": "object",
+                        "required": ["items"],
                         "properties": {
-                            "productIds": {
-                                "type": "string",
-                                "description": "피팅할 상품 ID 목록 (예: '[101, 102]' 또는 '101,102')",
-                                "example": "[101, 102]",
-                            },
                             "items": {
                                 "type": "string",
                                 "description": "피팅할 상품 및 추천 색상별 이미지 목록 JSON 문자열 (예: '[{\"productId\": 101, \"imageUrl\": \"https://...\"}]')",
