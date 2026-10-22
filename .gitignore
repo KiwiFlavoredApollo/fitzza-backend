@@ -85,7 +85,6 @@ logs/
 *.dump
 *.backup
 vton-service/data/fittings/*.png
-!vton-service/data/fittings/2-1.png
 vton-service/data/photos/
 
 # Musinsa Crawled Dataset
