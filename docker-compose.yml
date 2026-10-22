@@ -1,0 +1,311 @@
+name: fitzza
+
+x-java-environment: &java-environment
+  CONFIG_SERVER_URL: http://config-service:8888
+  EUREKA_URL: http://discovery-service:8761/eureka/
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-fitzza}
+  POSTGRES_USER: ${POSTGRES_USER:-fitzza}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fitzza_local}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+  AWS_ENDPOINT_URL: http://localstack:4566
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+
+x-domain-dependencies: &domain-dependencies
+  config-service:
+    condition: service_healthy
+  discovery-service:
+    condition: service_healthy
+  postgres:
+    condition: service_healthy
+
+x-app-healthcheck: &app-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fitzza}
+      POSTGRES_USER: ${POSTGRES_USER:-fitzza}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fitzza_local}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-fitzza_local}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage:z
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: s3,sqs
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./infra/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  config-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.java
+      args: { MODULE: config-service }
+    ports:
+      - "8888:8888"
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8888/health"]
+
+  discovery-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.java
+      args: { MODULE: discovery-service }
+    ports:
+      - "8761:8761"
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8761/health"]
+
+  user-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: user-service } }
+    environment:
+      <<: *java-environment
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
+      JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
+      USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+    depends_on: *domain-dependencies
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+
+  product-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
+    environment:
+      <<: *java-environment
+      PRODUCT_SERVICE_DB_USER: ${PRODUCT_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      PRODUCT_SERVICE_DB_PASSWORD: ${PRODUCT_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:-}
+    depends_on: *domain-dependencies
+    expose: ["8082"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/health"]
+
+  order-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
+    environment:
+      <<: *java-environment
+      ORDER_SERVICE_DB_USER: ${ORDER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      ORDER_SERVICE_DB_PASSWORD: ${ORDER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+      ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
+    depends_on: *domain-dependencies
+    expose: ["8083"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8083/health"]
+
+  community-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: community-service } }
+    environment:
+      <<: *java-environment
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
+      VTON_SERVICE_URL: ${VTON_SERVICE_URL:-http://vton-service:8000}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai}
+      JEV_SUPPORT_THRESHOLD: ${JEV_SUPPORT_THRESHOLD:-0.6}
+      COMMUNITY_SERVICE_DB_USER: ${COMMUNITY_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      COMMUNITY_SERVICE_DB_PASSWORD: ${COMMUNITY_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+    depends_on: *domain-dependencies
+    expose: ["8084"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8084/health"]
+
+  review-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: review-service } }
+    environment:
+      <<: *java-environment
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
+      RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
+      REVIEW_SERVICE_DB_USER: ${REVIEW_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      REVIEW_SERVICE_DB_PASSWORD: ${REVIEW_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+    depends_on: *domain-dependencies
+    expose: ["8085"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8085/health"]
+
+  notification-service:
+    build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: notification-service } }
+    environment:
+      <<: *java-environment
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+      NOTIFICATION_SERVICE_DB_USER: ${NOTIFICATION_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
+    depends_on: *domain-dependencies
+    expose: ["8086"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8086/health"]
+
+  vton-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args: { SERVICE_DIR: vton-service }
+    environment:
+      <<: *java-environment
+      POSTGRES_SCHEMA: vton
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: ${VTON_QUEUE_BACKEND:-sqs}
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+    ports: ["8091:8000"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+
+  vton-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args: { SERVICE_DIR: vton-service }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *java-environment
+      POSTGRES_SCHEMA: vton
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: sqs
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  recommendation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args: { SERVICE_DIR: recommendation-service }
+    environment:
+      <<: *java-environment
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/1
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      USER_SERVICE_URL: http://user-service:8081
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:-}
+      REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_started }
+    ports: ["8092:8000"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.java
+      args: { MODULE: gateway-service }
+    environment:
+      <<: *java-environment
+      VTON_SERVICE_URL: http://vton-service:8000
+      RECOMMENDATION_URL: http://recommendation-service:8000
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+    depends_on:
+      config-service: { condition: service_healthy }
+      discovery-service: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      vton-service: { condition: service_healthy }
+      recommendation-service: { condition: service_healthy }
+    ports: ["8080:8080"]
+    healthcheck:
+      <<: *app-healthcheck
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+
+volumes:
+  postgres-data:
+  redis-data:
+  localstack-data:
+  qdrant_storage:

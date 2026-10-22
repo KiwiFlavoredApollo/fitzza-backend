@@ -1,0 +1,1346 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Fitzza AWS foundation for EKS workloads and AI data jobs - uses two AZs with one
+  NAT Gateway and scale-to-zero ARM64 compute to stay within the project budget.
+Transform: AWS::LanguageExtensions
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: public ALB subnets -> private EKS nodes; Scheduler -> Lambda -> node desired 1/0; S3 bypasses NAT; one NAT for cost
+    must:
+      - deploy only in ap-northeast-2 for the approved estimate
+      - keep worker desired=0 outside approved hours; 2026-10-24 through 26 permit 12:00-23:00 KST
+      - never store credentials or application secrets in this template
+    ref:
+      - at: infra/aws/cloudformation/README.md
+        has: deployment, validation, cost, and teardown procedure
+        scope: shared
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+  Owner:
+    Type: String
+    Default: team3
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  CostCenter:
+    Type: String
+    Default: lgcns5-retail
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  KubernetesVersion:
+    Type: String
+    Default: '1.36'
+    AllowedValues: ['1.34', '1.35', '1.36', '1.37']
+  NodeScaleUpBlockedDates:
+    Type: String
+    Default: '2026-10-19,2026-10-26'
+    AllowedPattern: '^(|[0-9]{4}-[0-9]{2}-[0-9]{2}(,[0-9]{4}-[0-9]{2}-[0-9]{2})*)$'
+    Description: Comma-separated Asia/Seoul dates when EKS scale-up must be skipped (YYYY-MM-DD).
+  ClusterPublicAccessCidrs:
+    Type: CommaDelimitedList
+    Description: Operator public IPv4 CIDR list. Use /32 whenever possible.
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    AllowedPattern: '^(10|172|192)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$'
+  PublicSubnetACidr:
+    Type: String
+    Default: 10.20.0.0/24
+  PublicSubnetCCidr:
+    Type: String
+    Default: 10.20.1.0/24
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.20.10.0/24
+  PrivateSubnetCCidr:
+    Type: String
+    Default: 10.20.11.0/24
+  EcrRepositoryPrefix:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z0-9]+(?:[._/-][a-z0-9]+)*$'
+  DeliveryArtifactBucketName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$'
+    Description: Existing private delivery artifact bucket; empty keeps endpoint access disabled.
+  DatabaseEngineVersion:
+    Type: String
+    Default: '17.6'
+    AllowedPattern: '^[0-9]+\.[0-9]+$'
+    Description: PostgreSQL engine version validated for db.t4g.micro in ap-northeast-2.
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+    AllowedValues: [db.t4g.micro, db.t4g.small]
+  DatabaseAllocatedStorage:
+    Type: Number
+    Default: 20
+    MinValue: 20
+    MaxValue: 100
+  DatabasePasswordSource:
+    Type: String
+    Default: managed
+    AllowedValues: [managed, ssm]
+    Description: Keep managed until the SSM migration is reviewed; ssm disables RDS-managed credentials.
+  DatabasePasswordSsmParameter:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^/[a-zA-Z0-9_./-]+$'
+    Description: Existing SecureString containing only the PostgreSQL password, not application JSON.
+  DatabasePasswordSsmVersion:
+    Type: String
+    Default: '1'
+    AllowedPattern: '^[1-9][0-9]*$'
+    Description: Pin the retained SecureString version; increment explicitly when rotating the database password.
+
+Rules:
+  SsmDatabasePasswordInputs:
+    RuleCondition: !Equals [!Ref DatabasePasswordSource, ssm]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DatabasePasswordSsmParameter, '']]
+        AssertDescription: An existing password-only SecureString path is required for ssm mode.
+
+Conditions:
+  ManagedDatabasePassword: !Equals [!Ref DatabasePasswordSource, managed]
+  SsmDatabasePassword: !Equals [!Ref DatabasePasswordSource, ssm]
+  HasDeliveryArtifactBucket: !Not [!Equals [!Ref DeliveryArtifactBucketName, '']]
+
+Mappings:
+  EcrRepositoryNames:
+    ConfigService: { Name: config-service }
+    DiscoveryService: { Name: discovery-service }
+    GatewayService: { Name: gateway-service }
+    UserService: { Name: user-service }
+    ProductService: { Name: product-service }
+    OrderService: { Name: order-service }
+    CommunityService: { Name: community-service }
+    ReviewService: { Name: review-service }
+    NotificationService: { Name: notification-service }
+    RecommendationService: { Name: recommendation-service }
+    # Preserve the existing repository and its immutable image history during the rename.
+    VirtualTryOnService: { Name: virtual-tryon-service }
+    VtonService: { Name: vton-service }
+    Crawler: { Name: crawler }
+    FashionClip: { Name: fashion-clip }
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolated network for Fitzza public ingress and private workloads
+        must:
+          - DNS support + hostnames stay enabled for EKS and private service discovery
+        mutable: change-with-constraints
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-vpc' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-igw' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: public ALB and the single budget-constrained NAT Gateway in the first AZ
+        must:
+          - application nodes and data stores must not be placed here
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetACidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-a' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/elb, Value: '1' }
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: second-AZ subnet for public load balancer availability
+        must:
+          - application nodes and data stores must not be placed here
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Ref PublicSubnetCCidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-c' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/elb, Value: '1' }
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private EKS node and pod placement in the first AZ
+        must:
+          - no automatic public IPv4 assignment
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnetACidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-a' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/internal-elb, Value: '1' }
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private EKS node and pod placement in the second AZ
+        must:
+          - no automatic public IPv4 assignment
+    Properties:
+      AvailabilityZone: !Select [2, !GetAZs '']
+      CidrBlock: !Ref PrivateSubnetCCidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-c' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: kubernetes.io/role/internal-elb, Value: '1' }
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-public-rt' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetA
+
+  PublicSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetC
+
+  NatElasticIp:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: fixed public address for the single outbound NAT path
+        must:
+          - delete with the project stack to stop public IPv4 charges
+    Properties:
+      Domain: vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-nat-eip' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: one-AZ outbound path selected for temporary project cost; multi-AZ NAT rejected for budget
+        must:
+          - private default route points here
+          - S3 traffic uses the gateway endpoint instead
+          - revisit HA before production use
+        mutable: review-required
+    Properties:
+      AllocationId: !GetAtt NatElasticIp.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-nat' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-private-rt' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetA
+
+  PrivateSubnetCRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnetC
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private raw, normalized, embedding, and generated-image artifacts for data + AI pipelines
+        must:
+          - block all public access
+          - require TLS
+          - retain data when the stack is deleted
+        mutable: review-required
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: RemoveOldNoncurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+      VersioningConfiguration:
+        Status: Enabled
+
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: deny every non-TLS request regardless of caller permissions
+        must:
+          - keep aws:SecureTransport deny on bucket and objects
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt DataBucket.Arn
+              - !Sub '${DataBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: route private S3 traffic without NAT processing charges
+        must:
+          - stay attached to the private route table
+          - allow read access to the regional ECR layer bucket for EKS system images
+          - allow delivery artifacts only for the explicit bucket and this account
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource:
+              - !GetAtt DataBucket.Arn
+              - !Sub '${DataBucket.Arn}/*'
+          - Sid: AllowEcrLayerDownloads
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::prod-${AWS::Region}-starport-layer-bucket/*'
+          - !If
+            - HasDeliveryArtifactBucket
+            - Sid: AllowDeliveryArtifactObjects
+              Effect: Allow
+              Principal: '*'
+              Action: [s3:GetObject, s3:GetObjectVersion, s3:PutObject]
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DeliveryArtifactBucketName}/*'
+              Condition:
+                StringEquals:
+                  aws:PrincipalAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
+          - !If
+            - HasDeliveryArtifactBucket
+            - Sid: AllowDeliveryArtifactBucketMetadata
+              Effect: Allow
+              Principal: '*'
+              Action: [s3:GetBucketAcl, s3:GetBucketLocation]
+              Resource: !Sub 'arn:${AWS::Partition}:s3:::${DeliveryArtifactBucketName}'
+              Condition:
+                StringEquals:
+                  aws:PrincipalAccount: !Ref AWS::AccountId
+            - !Ref AWS::NoValue
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      VpcId: !Ref Vpc
+
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: dedicated edge boundary for the internet-facing ALB created by AWS Load Balancer Controller
+        must:
+          - attach only to the public ALB
+          - expose only HTTP redirect and HTTPS listener ports
+          - send application traffic only to gateway targets in the VPC
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Public ALB ingress for Fitzza API
+      SecurityGroupIngress:
+        - Description: HTTP listener redirects to HTTPS
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - Description: Public HTTPS API ingress
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - Description: Forward requests only to gateway targets in this VPC
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref VpcCidr
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-alb-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private PostgreSQL boundary; permits database sessions only from EKS workloads
+        must:
+          - never allow public CIDR ingress
+          - attach only to private-subnet RDS resources
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Private PostgreSQL access from Fitzza EKS workloads
+      SecurityGroupIngress:
+        - Description: PostgreSQL from EKS cluster security group
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !GetAtt EksCluster.ClusterSecurityGroupId
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-rds-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
+  ManagedRedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: reserved private boundary if Kubernetes Redis moves to ElastiCache; current Redis remains ClusterIP-only
+        must:
+          - never allow public CIDR ingress
+          - attach only to private-subnet managed Redis resources
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Private managed Redis access from Fitzza EKS workloads
+      SecurityGroupIngress:
+        - Description: Redis from EKS cluster security group
+          IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !GetAtt EksCluster.ClusterSecurityGroupId
+      Tags:
+        - { Key: Name, Value: !Sub '${ProjectName}-${Environment}-redis-sg' }
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+      VpcId: !Ref Vpc
+
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: keep PostgreSQL ENIs in both private subnets while using single-AZ compute for the project budget
+        must:
+          - include only private subnets
+          - never add public subnets
+        mutable: change-with-constraints
+    Properties:
+      DBSubnetGroupDescription: Private subnets for Fitzza PostgreSQL
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetC
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  RdsParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: require TLS for every PostgreSQL client connection
+        must:
+          - rds.force_ssl stays enabled
+        mutable: change-with-constraints
+    Properties:
+      Description: Fitzza PostgreSQL parameters
+      Family: postgres17
+      Parameters:
+        rds.force_ssl: '1'
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  RdsInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private PostgreSQL for EKS services; single-AZ burstable ARM chosen for temporary project cost
+        must:
+          - PubliclyAccessible stays false
+          - attach only RdsSecurityGroup + RdsSubnetGroup
+          - storage stays encrypted
+          - password is RDS-managed until explicitly migrated to a version-pinned SSM SecureString
+          - disabling managed credentials deletes the RDS-managed secret; preserve recovery credentials first
+        mutable: review-required
+        mutability:
+          AllocatedStorage: change-with-constraints
+          DBInstanceClass: change-with-constraints
+    Properties:
+      AllocatedStorage: !Ref DatabaseAllocatedStorage
+      AllowMajorVersionUpgrade: false
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBName: fitzza
+      DBParameterGroupName: !Ref RdsParameterGroup
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      DeleteAutomatedBackups: false
+      DeletionProtection: false
+      Engine: postgres
+      EngineVersion: !Ref DatabaseEngineVersion
+      ManageMasterUserPassword: !If [ManagedDatabasePassword, true, false]
+      MasterUserPassword: !If
+        - SsmDatabasePassword
+        - !Sub '{{resolve:ssm-secure:${DatabasePasswordSsmParameter}:${DatabasePasswordSsmVersion}}}'
+        - !Ref AWS::NoValue
+      MasterUsername: fitzza_admin
+      MaxAllocatedStorage: 100
+      MultiAZ: false
+      Port: 5432
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      StorageType: gp3
+      VPCSecurityGroups:
+        - !Ref RdsSecurityGroup
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  EksClusterRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: EKS control plane role with only the AWS-managed cluster policy
+        must:
+          - trust only eks.amazonaws.com
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: eks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EksCluster:
+    Type: AWS::EKS::Cluster
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: standard EKS control plane for app deployments and batch Jobs; provisioned mode rejected for cost
+        must:
+          - use private control-plane networking and restrict public endpoint to operator CIDRs
+          - use STANDARD version support to avoid extended-support hourly charges
+        mutable: review-required
+    Properties:
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
+        BootstrapClusterCreatorAdminPermissions: true
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+      Name: !Sub '${ProjectName}-${Environment}'
+      ResourcesVpcConfig:
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: true
+        PublicAccessCidrs: !Ref ClusterPublicAccessCidrs
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetC
+      RoleArn: !GetAtt EksClusterRole.Arn
+      UpgradePolicy:
+        SupportType: STANDARD
+      Version: !Ref KubernetesVersion
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  EksNodeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: baseline worker role for node registration, image pulls, and VPC CNI during bootstrap
+        must:
+          - application AWS access must use Pod Identity instead of this node role
+          - remove CNI policy after migrating aws-node to Pod Identity
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EksNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: one larger ARM64 worker for pilot application and system Pod capacity; starts at zero to avoid accidental spend
+        must:
+          - maxSize stays 1 for the approved estimate
+          - desiredSize returns to 0 outside approved hours, including the dated crawler exception
+          - workloads must publish linux/arm64 images
+        mutable: change-with-constraints
+        mutability:
+          InstanceTypes: review-required
+          ScalingConfig: review-required
+    Properties:
+      AmiType: AL2023_ARM_64_STANDARD
+      CapacityType: ON_DEMAND
+      ClusterName: !Ref EksCluster
+      InstanceTypes: [t4g.large]
+      Labels:
+        fitzza.io/capacity: general
+      # Instance-type replacement needs a distinct name; retain AZ-c for existing EBS volumes.
+      NodegroupName: !Sub '${ProjectName}-${Environment}-arm64-c-large'
+      NodeRole: !GetAtt EksNodeRole.Arn
+      NodeRepairConfig:
+        Enabled: true
+      ScalingConfig:
+        DesiredSize: 0
+        MaxSize: 1
+        MinSize: 0
+      Subnets:
+        # Keep the sole worker in AZ-c so the retained Qdrant EBS volume can attach.
+        - !Ref PrivateSubnetC
+      Tags:
+        Project: !Ref ProjectName
+        Environment: !Ref Environment
+        Owner: !Ref Owner
+        CostCenter: !Ref CostCenter
+      UpdateConfig:
+        MaxUnavailable: 1
+
+  NodeScalerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: least-privilege runtime role for scheduled EKS node-group scaling
+        must:
+          - update only this stack's managed node group
+          - never grant EC2 or Auto Scaling mutation permissions
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: update-nodegroup-capacity
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: eks:UpdateNodegroupConfig
+                Resource: !GetAtt EksNodeGroup.Arn
+        - PolicyName: write-node-scaler-logs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${NodeScalerLogGroup.Arn}:*'
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NodeScalerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: retain scheduled scale-up/down results for operations and cost audits
+        must:
+          - logs must not include credentials or application secrets
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ProjectName}-${Environment}-node-scaler'
+      RetentionInDays: 14
+
+  NodeScalerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: NodeScalerLogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: validate desired capacity and operating date before calling EKS instead of mutating the backing ASG directly
+        must:
+          - accept only integer desiredSize 0 or 1
+          - reject scale-up on weekends and blocked dates except the approved 2026-10-24 through 26 window
+          - exception window never changes node count or starts crawler Jobs
+          - preserve min=0 and max=1 budget limits
+        mutable: change-with-constraints
+    Properties:
+      Architectures: [arm64]
+      Code:
+        ZipFile: |
+          import os
+          from datetime import datetime, timedelta, timezone
+
+          import boto3
+
+          eks = boto3.client("eks")
+          operating_time_zone = timezone(timedelta(hours=9))
+
+
+          def is_scale_up_blocked(now):
+              if "2026-10-24" <= now.date().isoformat() <= "2026-10-26":
+                  return not 12 <= now.hour < 23
+              blocked_dates = {
+                  value.strip()
+                  for value in os.environ["BLOCKED_SCALE_UP_DATES"].split(",")
+                  if value.strip()
+              }
+              return now.weekday() >= 5 or now.date().isoformat() in blocked_dates
+
+
+          def handler(event, context):
+              desired_size = event["desiredSize"]
+              if type(desired_size) is not int or desired_size not in (0, 1):
+                  raise ValueError("desiredSize must be integer 0 or 1")
+
+              now = datetime.now(operating_time_zone)
+              exception_shutdown = (
+                  desired_size == 0 and event.get("scheduledWeekdayShutdown") is True
+                  and "2026-10-24" <= now.date().isoformat() <= "2026-10-26"
+                  and 12 <= now.hour < 23
+              )
+              if exception_shutdown or (desired_size == 1 and is_scale_up_blocked(now)):
+                  return {
+                      "desiredSize": desired_size,
+                      "date": now.date().isoformat(),
+                      "status": "SKIPPED",
+                  }
+
+              response = eks.update_nodegroup_config(
+                  clusterName=os.environ["CLUSTER_NAME"],
+                  nodegroupName=os.environ["NODE_GROUP_NAME"],
+                  scalingConfig={"minSize": 0, "maxSize": 1, "desiredSize": desired_size},
+              )
+              return {
+                  "desiredSize": desired_size,
+                  "updateId": response["update"]["id"],
+                  "status": response["update"]["status"],
+              }
+      Environment:
+        Variables:
+          BLOCKED_SCALE_UP_DATES: !Ref NodeScaleUpBlockedDates
+          CLUSTER_NAME: !GetAtt EksNodeGroup.ClusterName
+          NODE_GROUP_NAME: !GetAtt EksNodeGroup.NodegroupName
+      FunctionName: !Sub '${ProjectName}-${Environment}-node-scaler'
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt NodeScalerRole.Arn
+      Runtime: python3.12
+      Timeout: 30
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  NodeSchedulerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: allow only this stack's schedules to invoke the node scaler
+        must:
+          - trust only EventBridge Scheduler from this account
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: invoke-node-scaler
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt NodeScalerFunction.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  NodeScaleUpSchedule:
+    Type: AWS::Scheduler::Schedule
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: request one worker at 09:00 Korea time on weekdays; Lambda enforces weekends and blocked-date exclusions
+        must:
+          - desiredSize stays 1
+          - timezone stays Asia/Seoul
+    Properties:
+      Description: Start one Fitzza EKS worker on weekdays
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Name: !Sub '${ProjectName}-${Environment}-nodes-up'
+      ScheduleExpression: cron(0 9 ? * MON-FRI *)
+      ScheduleExpressionTimezone: Asia/Seoul
+      State: ENABLED
+      Target:
+        Arn: !GetAtt NodeScalerFunction.Arn
+        Input: '{"desiredSize":1}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        RoleArn: !GetAtt NodeSchedulerRole.Arn
+
+  NodeScaleDownSchedule:
+    Type: AWS::Scheduler::Schedule
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: return worker capacity to zero at 18:00 Korea time on project workdays
+        must:
+          - desiredSize stays 0
+          - timezone stays Asia/Seoul
+    Properties:
+      Description: Stop Fitzza EKS workers on weekdays
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      Name: !Sub '${ProjectName}-${Environment}-nodes-down'
+      ScheduleExpression: cron(0 18 ? * MON-FRI *)
+      ScheduleExpressionTimezone: Asia/Seoul
+      State: ENABLED
+      Target:
+        Arn: !GetAtt NodeScalerFunction.Arn
+        Input: '{"desiredSize":0,"scheduledWeekdayShutdown":true}'
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        RoleArn: !GetAtt NodeSchedulerRole.Arn
+
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: enforce Kubernetes NetworkPolicy for internal-only services such as Qdrant
+        must:
+          - keep network policy enforcement enabled before applying restricted service policies
+        mutable: change-with-constraints
+    Properties:
+      AddonName: vpc-cni
+      ClusterName: !Ref EksCluster
+      ConfigurationValues: '{"enableNetworkPolicy":"true"}'
+      ResolveConflicts: OVERWRITE
+
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: kube-proxy
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: coredns
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  PodIdentityAgentAddon:
+    Type: AWS::EKS::Addon
+    Properties:
+      AddonName: eks-pod-identity-agent
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  EbsCsiRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolated Pod Identity role for Qdrant and Redis EBS volume operations
+        must:
+          - trust only the EKS Pod Identity service
+          - don't attach this storage policy to the node role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EbsCsiPodIdentityAssociation:
+    Type: AWS::EKS::PodIdentityAssociation
+    Properties:
+      ClusterName: !Ref EksCluster
+      Namespace: kube-system
+      RoleArn: !GetAtt EbsCsiRole.Arn
+      ServiceAccount: ebs-csi-controller-sa
+
+  EbsCsiAddon:
+    Type: AWS::EKS::Addon
+    DependsOn:
+      - PodIdentityAgentAddon
+      - EbsCsiPodIdentityAssociation
+    Properties:
+      AddonName: aws-ebs-csi-driver
+      ClusterName: !Ref EksCluster
+      ResolveConflicts: OVERWRITE
+
+  LoadBalancerControllerPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: AWS-published v3.6.0 controller permissions for reconciling ALB resources from Kubernetes Ingress
+        must:
+          - keep request/resource tag conditions from the upstream policy
+          - review against the pinned controller release before upgrades
+        mutable: review-required
+    Properties:
+      Description: AWS Load Balancer Controller v3.6.0 permissions
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: iam:CreateServiceLinkedRole
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: elasticloadbalancing.amazonaws.com
+          - Effect: Allow
+            Action:
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeAddresses
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeVpcs
+              - ec2:DescribeVpcPeeringConnections
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeInstances
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeTags
+              - ec2:GetCoipPoolUsage
+              - ec2:DescribeCoipPools
+              - ec2:GetSecurityGroupsForVpc
+              - ec2:DescribeIpamPools
+              - ec2:DescribeRouteTables
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeListenerCertificates
+              - elasticloadbalancing:DescribeSSLPolicies
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetGroupAttributes
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeTags
+              - elasticloadbalancing:DescribeTrustStores
+              - elasticloadbalancing:DescribeListenerAttributes
+              - elasticloadbalancing:DescribeCapacityReservation
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - cognito-idp:DescribeUserPoolClient
+              - acm:ListCertificates
+              - acm:DescribeCertificate
+              - iam:ListServerCertificates
+              - iam:GetServerCertificate
+              - waf-regional:GetWebACL
+              - waf-regional:GetWebACLForResource
+              - waf-regional:AssociateWebACL
+              - waf-regional:DisassociateWebACL
+              - wafv2:GetWebACL
+              - wafv2:GetWebACLForResource
+              - wafv2:AssociateWebACL
+              - wafv2:DisassociateWebACL
+              - shield:GetSubscriptionState
+              - shield:DescribeProtection
+              - shield:CreateProtection
+              - shield:DeleteProtection
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateSecurityGroup
+            Resource: '*'
+          - Effect: Allow
+            Action: ec2:CreateTags
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateSecurityGroup
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: !Sub 'arn:${AWS::Partition}:ec2:*:*:security-group/*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:DeleteSecurityGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:CreateTargetGroup
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:CreateRule
+              - elasticloadbalancing:DeleteRule
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
+            Condition:
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'true'
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:RemoveTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/net/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener/app/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/net/*/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:listener-rule/app/*/*/*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:SetIpAddressType
+              - elasticloadbalancing:SetSecurityGroups
+              - elasticloadbalancing:SetSubnets
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:ModifyTargetGroup
+              - elasticloadbalancing:ModifyTargetGroupAttributes
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:ModifyListenerAttributes
+              - elasticloadbalancing:ModifyCapacityReservation
+              - elasticloadbalancing:ModifyIpPools
+            Resource: '*'
+            Condition:
+              'Null':
+                aws:ResourceTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action: elasticloadbalancing:AddTags
+            Resource:
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/net/*/*'
+              - !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:loadbalancer/app/*/*'
+            Condition:
+              StringEquals:
+                elasticloadbalancing:CreateAction:
+                  - CreateTargetGroup
+                  - CreateLoadBalancer
+              'Null':
+                aws:RequestTag/elbv2.k8s.aws/cluster: 'false'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:RegisterTargets
+              - elasticloadbalancing:DeregisterTargets
+            Resource: !Sub 'arn:${AWS::Partition}:elasticloadbalancing:*:*:targetgroup/*/*'
+          - Effect: Allow
+            Action:
+              - elasticloadbalancing:SetWebAcl
+              - elasticloadbalancing:ModifyListener
+              - elasticloadbalancing:AddListenerCertificates
+              - elasticloadbalancing:RemoveListenerCertificates
+              - elasticloadbalancing:ModifyRule
+              - elasticloadbalancing:SetRulePriorities
+            Resource: '*'
+
+  LoadBalancerControllerRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolate ALB reconciliation permissions behind EKS Pod Identity
+        must:
+          - trust only pods.eks.amazonaws.com
+          - attach only the pinned controller policy
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      ManagedPolicyArns:
+        - !Ref LoadBalancerControllerPolicy
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  LoadBalancerControllerPodIdentityAssociation:
+    Type: AWS::EKS::PodIdentityAssociation
+    DependsOn: PodIdentityAgentAddon
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: bind the controller service account to its dedicated AWS role without node credentials
+        must:
+          - namespace stays kube-system
+          - service account matches the Helm release
+    Properties:
+      ClusterName: !Ref EksCluster
+      Namespace: kube-system
+      RoleArn: !GetAtt LoadBalancerControllerRole.Arn
+      ServiceAccount: aws-load-balancer-controller
+
+  'Fn::ForEach::EcrRepositories':
+    - RepositoryIdentifier
+    - - ConfigService
+      - DiscoveryService
+      - GatewayService
+      - UserService
+      - ProductService
+      - OrderService
+      - CommunityService
+      - ReviewService
+      - NotificationService
+      - RecommendationService
+      - VirtualTryOnService
+      - VtonService
+      - Crawler
+      - FashionClip
+    - '${RepositoryIdentifier}Repository':
+        Type: AWS::ECR::Repository
+        Properties:
+          EmptyOnDelete: true
+          EncryptionConfiguration: { EncryptionType: AES256 }
+          ImageTagMutability: IMMUTABLE
+          LifecyclePolicy:
+            LifecyclePolicyText: >-
+              {"rules":[{"rulePriority":1,"description":"expire untagged images","selection":{"tagStatus":"untagged","countType":"sinceImagePushed","countUnit":"days","countNumber":1},"action":{"type":"expire"}},{"rulePriority":2,"description":"keep latest three images for rollback within the 5 GB budget","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":3},"action":{"type":"expire"}}]}
+          RepositoryName:
+            Fn::Sub:
+              - '${EcrRepositoryPrefix}/${RepositoryPath}'
+              - RepositoryPath:
+                  Fn::FindInMap:
+                    - EcrRepositoryNames
+                    - Ref: RepositoryIdentifier
+                    - Name
+          Tags:
+            - { Key: Project, Value: !Ref ProjectName }
+            - { Key: Environment, Value: !Ref Environment }
+
+Outputs:
+  VpcId:
+    Description: Fitzza VPC ID
+    Value: !Ref Vpc
+  PublicSubnetIds:
+    Description: Public subnet IDs for internet-facing load balancers
+    Value: !Join [',', [!Ref PublicSubnetA, !Ref PublicSubnetC]]
+  PrivateSubnetIds:
+    Description: Private subnet IDs for EKS nodes and data services
+    Value: !Join [',', [!Ref PrivateSubnetA, !Ref PrivateSubnetC]]
+  NatGatewayId:
+    Description: Single project NAT Gateway ID
+    Value: !Ref NatGateway
+  AlbSecurityGroupId:
+    Description: Security group for the AWS Load Balancer Controller internet-facing ALB
+    Value: !Ref AlbSecurityGroup
+  RdsSecurityGroupId:
+    Description: Private RDS security group allowing PostgreSQL only from EKS workloads
+    Value: !Ref RdsSecurityGroup
+  ManagedRedisSecurityGroupId:
+    Description: Private managed Redis security group allowing Redis only from EKS workloads
+    Value: !Ref ManagedRedisSecurityGroup
+  RdsEndpointAddress:
+    Description: Private PostgreSQL endpoint for the production Kubernetes overlay
+    Value: !GetAtt RdsInstance.Endpoint.Address
+  RdsPort:
+    Description: PostgreSQL listener port
+    Value: !GetAtt RdsInstance.Endpoint.Port
+  RdsMasterSecretArn:
+    Condition: ManagedDatabasePassword
+    Description: Secrets Manager ARN holding the generated PostgreSQL master credentials
+    Value: !GetAtt RdsInstance.MasterUserSecret.SecretArn
+  RdsPasswordSsmParameter:
+    Condition: SsmDatabasePassword
+    Description: Password-only SSM parameter path; never the resolved password
+    Value: !Ref DatabasePasswordSsmParameter
+  EksClusterName:
+    Description: EKS cluster name
+    Value: !Ref EksCluster
+  EksClusterSecurityGroupId:
+    Description: EKS-created cluster security group for private API and workload access
+    Value: !GetAtt EksCluster.ClusterSecurityGroupId
+  EksNodeGroupName:
+    Description: Scale-to-zero ARM64 managed node group name
+    Value: !Ref EksNodeGroup
+  DataBucketName:
+    Description: Private pipeline data bucket name
+    Value: !Ref DataBucket
+  EcrRepositoryPrefixUri:
+    Description: Registry URI prefix used by buildspec.yml
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepositoryPrefix}'
+  NodeScaleUpScheduleName:
+    Description: Weekday 09:00 Asia/Seoul node scale-up schedule with Lambda date exclusions
+    Value: !Ref NodeScaleUpSchedule
+  NodeScaleDownScheduleName:
+    Description: Weekday 18:00 Asia/Seoul node scale-down schedule
+    Value: !Ref NodeScaleDownSchedule
+  LoadBalancerControllerRoleArn:
+    Description: EKS Pod Identity role for AWS Load Balancer Controller v3.6.0
+    Value: !GetAtt LoadBalancerControllerRole.Arn

@@ -1,0 +1,131 @@
+package com.fitzza.community.client;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.headerDoesNotExist;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.LongStream;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.RequestMatcher;
+import org.springframework.web.client.RestClient;
+
+class UserServiceClientTest {
+
+    private static final String NICKNAME_API = "http://user-service/users";
+    private static final String SERVICE_TOKEN = "test-community-service-token";
+
+    private RestClient.Builder builder;
+    private MockRestServiceServer server;
+    private UserServiceClient client;
+
+    @BeforeEach
+    void setUp() {
+        builder = RestClient.builder();
+        server = MockRestServiceServer.bindTo(builder).build();
+        client = new UserServiceClient(builder, "http://user-service", SERVICE_TOKEN);
+    }
+
+    @Test
+    void returnsNicknamesKeyedByUserId() {
+        server.expect(requestTo(startsWith(NICKNAME_API + "?userIds=")))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header(UserServiceClient.SERVICE_TOKEN_HEADER, SERVICE_TOKEN))
+                .andRespond(withSuccess(
+                        "[{\"userId\":7,\"nickname\":\"fitzza\"},{\"userId\":8,\"nickname\":\"coordi\"}]",
+                        MediaType.APPLICATION_JSON));
+
+        Map<Long, String> nicknames = client.findNicknames(Arrays.asList(7L, 8L, 7L, null));
+
+        assertThat(nicknames).containsOnly(Map.entry(7L, "fitzza"), Map.entry(8L, "coordi"));
+        server.verify();
+    }
+
+    // 공용 빌더 빈에 토큰이 남으면 다른 서비스로 가는 요청에도 community 토큰이 실린다.
+    @Test
+    void doesNotLeaveItsServiceTokenOnTheSharedBuilder() {
+        server.expect(requestTo("http://product-service/anything"))
+                .andExpect(headerDoesNotExist(UserServiceClient.SERVICE_TOKEN_HEADER))
+                .andRespond(withSuccess());
+
+        builder.build().get().uri("http://product-service/anything").retrieve().toBodilessEntity();
+
+        server.verify();
+    }
+
+    @Test
+    void returnsNothingInsteadOfFailingWhenUserServiceIsDown() {
+        server.expect(requestTo(startsWith(NICKNAME_API))).andRespond(withServerError());
+
+        Map<Long, String> nicknames = client.findNicknames(List.of(7L));
+
+        assertThat(nicknames).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void splitsLookupsSoEachRequestStaysWithinTheUserServiceLimit() {
+        server.expect(requestTo(startsWith(NICKNAME_API)))
+                .andExpect(userIdCount(UserServiceClient.LOOKUP_BATCH_SIZE))
+                .andRespond(withSuccess("[{\"userId\":1,\"nickname\":\"first\"}]", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(startsWith(NICKNAME_API)))
+                .andExpect(userIdCount(UserServiceClient.LOOKUP_BATCH_SIZE))
+                .andRespond(withSuccess("[{\"userId\":101,\"nickname\":\"second\"}]", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(startsWith(NICKNAME_API)))
+                .andExpect(userIdCount(50))
+                .andRespond(withSuccess("[{\"userId\":201,\"nickname\":\"third\"}]", MediaType.APPLICATION_JSON));
+
+        Map<Long, String> nicknames =
+                client.findNicknames(LongStream.rangeClosed(1, 250).boxed().toList());
+
+        assertThat(nicknames)
+                .containsOnly(Map.entry(1L, "first"), Map.entry(101L, "second"), Map.entry(201L, "third"));
+        server.verify();
+    }
+
+    @Test
+    void keepsNicknamesAlreadyFetchedAndStopsAskingWhenALaterLookupFails() {
+        server.expect(requestTo(startsWith(NICKNAME_API)))
+                .andRespond(withSuccess("[{\"userId\":1,\"nickname\":\"first\"}]", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(startsWith(NICKNAME_API))).andRespond(withServerError());
+
+        Map<Long, String> nicknames =
+                client.findNicknames(LongStream.rangeClosed(1, 250).boxed().toList());
+
+        assertThat(nicknames).containsOnly(Map.entry(1L, "first"));
+        server.verify();
+    }
+
+    @Test
+    void doesNotCallUserServiceWhenThereIsNobodyToLookUp() {
+        Map<Long, String> nicknames = client.findNicknames(List.of());
+
+        assertThat(nicknames).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void refusesToStartWithoutAnInternalToken() {
+        assertThatThrownBy(() -> new UserServiceClient(RestClient.builder(), "http://user-service", " "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static RequestMatcher userIdCount(int expected) {
+        return request -> {
+            String userIds = request.getURI().getQuery().substring("userIds=".length());
+            assertThat(userIds.split(",")).hasSize(expected);
+        };
+    }
+}

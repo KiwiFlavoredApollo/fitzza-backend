@@ -1,0 +1,26 @@
+[
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "fitzza"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "prod"
+  },
+  {
+    "ParameterKey": "Owner",
+    "ParameterValue": "team3"
+  },
+  {
+    "ParameterKey": "CostCenter",
+    "ParameterValue": "lgcns5-retail"
+  },
+  {
+    "ParameterKey": "KubernetesVersion",
+    "ParameterValue": "1.36"
+  },
+  {
+    "ParameterKey": "ClusterPublicAccessCidrs",
+    "ParameterValue": "203.0.113.10/32"
+  }
+]

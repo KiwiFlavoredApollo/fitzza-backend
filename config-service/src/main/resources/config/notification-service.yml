@@ -1,0 +1,24 @@
+server:
+  port: 8086
+spring:
+  datasource:
+    # 서비스 전용 DB 계정(notification_service_app)이 있으면 그걸 쓰고, 없으면 공용 계정(POSTGRES_USER)을 쓴다.
+    username: ${NOTIFICATION_SERVICE_DB_USER:${POSTGRES_USER:fitzza}}
+    password: ${NOTIFICATION_SERVICE_DB_PASSWORD:${POSTGRES_PASSWORD:fitzza_local}}
+    hikari:
+      schema: notification_service
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 테이블은 Flyway가 만든다. Hibernate는 엔티티와 테이블이 맞는지만 확인하고, 다르면 서비스가 뜨지 않는다.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: notification_service
+  flyway:
+    # 스키마가 없으면(RDS 등) Flyway가 만들고, 기록 테이블(flyway_schema_history)도 이 스키마에 둔다.
+    schemas: notification_service
+    default-schema: notification_service
+    create-schemas: true
+    # 테이블이 이미 있는 DB(ddl-auto: update로 만든 로컬 DB)는 지금 상태를 V1로 보고 V2부터 실행한다.
+    baseline-on-migrate: true

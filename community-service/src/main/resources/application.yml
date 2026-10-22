@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: community-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+
+# user·notification·product의 서비스 전용 API를 호출할 때 붙이는 이 서비스의 토큰
+fitzza:
+  service-token: ${COMMUNITY_SERVICE_TOKEN}
+  # 추천 코디(공유·투표 선택지)와 가상 피팅 결과(공유)를 확인할 서비스 주소. 둘 다 Eureka에 없는 FastAPI라 주소로 부른다.
+  # 비워 두면 그 서비스를 거쳐야 하는 공유·선택지만 503이고, 나머지 기능은 그대로 동작한다.
+  recommendation-service:
+    base-url: ${RECOMMENDATION_SERVICE_URL:}
+  vton-service:
+    base-url: ${VTON_SERVICE_URL:}
+  # 투표글 댓글이 추천하는 선택지를 판정하는 TypeSafe Jev. 키가 비어 있으면 판정하지 않아 supportedOptionId는 늘 null이다.
+  # 고른 선택지의 확신이 support-threshold 이상일 때만 저장한다.
+  jev:
+    base-url: ${TYPESAFE_API_URL:https://api.typesafe.ai}
+    api-key: ${TYPESAFE_API_KEY:}
+    support-threshold: ${JEV_SUPPORT_THRESHOLD:0.6}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        exclude: "*"
+
+# 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"

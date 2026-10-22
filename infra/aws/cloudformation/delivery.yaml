@@ -1,0 +1,719 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Fitzza develop delivery pipeline - GitHub connection, CodePipeline V2, and an
+  ARM64 CodeBuild project that tests then publishes commit-tagged images to ECR.
+  The EKS deploy stage stays disabled until EnableDeployStage is true.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: GitHub Connection -> CodePipeline V2 -> CodeBuild (ARM small) test + image publish -> optional VPC CodeBuild EKS deploy
+    must:
+      - source branch stays develop for the shared environment
+      - tests finish before any ECR login or image push
+      - image tags remain immutable 12-character Git commit SHAs
+      - stay inside the approved project budget; no customer-managed KMS key and no x86 large build hosts
+    ref:
+      - at: infra/aws/cloudformation/README.md
+        has: pipeline deployment, GitHub authorization, cost notes, validation, and rollback procedure
+        scope: shared
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+  Owner:
+    Type: String
+    Default: team3
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  CostCenter:
+    Type: String
+    Default: lgcns5-retail
+    AllowedPattern: '^[A-Za-z0-9._-]{1,32}$'
+  GitHubRepository:
+    Type: String
+    Default: duckfairy-wak/fitzza_msa_finalproject
+    AllowedPattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+  SourceBranch:
+    Type: String
+    Default: develop
+    AllowedPattern: '^[A-Za-z0-9._/-]+$'
+  EcrRepositoryPrefix:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z0-9]+(?:[._/-][a-z0-9]+)*$'
+  EksClusterName:
+    Type: String
+    Default: fitzza-prod
+    AllowedPattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$'
+  EnableDeployStage:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Keep false until RDS, the Kubernetes Secret, and the Load Balancer Controller are ready.
+  VpcId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^vpc-[0-9a-f]+$'
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    AllowedPattern: '^(10|172|192)\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$'
+  PrivateSubnetIds:
+    Type: CommaDelimitedList
+    Default: ''
+  EksClusterSecurityGroupId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^sg-[0-9a-f]+$'
+  AlbSecurityGroupId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^sg-[0-9a-f]+$'
+  RdsEndpointAddress:
+    Type: String
+    Default: ''
+    AllowedPattern: '^[A-Za-z0-9.-]*$'
+  FrontendOrigin:
+    Type: String
+    Default: http://localhost:5173
+    AllowedPattern: '^https?://[^ ]+$'
+  ApiDomain:
+    Type: String
+    Default: ''
+  AcmCertificateArn:
+    Type: String
+    Default: ''
+
+Rules:
+  DeployStageInputs:
+    RuleCondition: !Equals [!Ref EnableDeployStage, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref VpcId, '']]
+        AssertDescription: VpcId is required when EnableDeployStage is true.
+      - Assert:
+          Fn::Not:
+            - Fn::EachMemberEquals: [!Ref PrivateSubnetIds, '']
+        AssertDescription: PrivateSubnetIds is required when EnableDeployStage is true.
+      - Assert: !Not [!Equals [!Ref EksClusterSecurityGroupId, '']]
+        AssertDescription: EksClusterSecurityGroupId is required when EnableDeployStage is true.
+      - Assert: !Not [!Equals [!Ref AlbSecurityGroupId, '']]
+        AssertDescription: AlbSecurityGroupId is required when EnableDeployStage is true.
+      - Assert: !Not [!Equals [!Ref RdsEndpointAddress, '']]
+        AssertDescription: RdsEndpointAddress is required when EnableDeployStage is true.
+      - Assert: !Or
+          - !And
+            - !Equals [!Ref ApiDomain, '']
+            - !Equals [!Ref AcmCertificateArn, '']
+          - !And
+            - !Not [!Equals [!Ref ApiDomain, '']]
+            - !Not [!Equals [!Ref AcmCertificateArn, '']]
+        AssertDescription: ApiDomain and AcmCertificateArn must both be provided or both be empty.
+
+Conditions:
+  DeployEnabled: !Equals [!Ref EnableDeployStage, 'true']
+  HasTlsConfiguration: !And
+    - !Not [!Equals [!Ref ApiDomain, '']]
+    - !Not [!Equals [!Ref AcmCertificateArn, '']]
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: private hand-off between source, build, and deploy stages
+        must:
+          - block all public access
+          - require TLS
+          - expire artifacts quickly so storage stays negligible
+        mutable: review-required
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldArtifacts
+            Status: Enabled
+            ExpirationInDays: 14
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+          - Id: AbortIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: prevent unencrypted transport to the pipeline artifact store
+        must:
+          - keep aws:SecureTransport deny on bucket and objects
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Sub '${ArtifactBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  SourceConnection:
+    Type: AWS::CodeStarConnections::Connection
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: GitHub App connection avoids long-lived personal access tokens
+        must:
+          - authorize the pending connection in AWS Console as the repository owner
+          - grant repository access only to the Fitzza repository
+        mutable: review-required
+    Properties:
+      ConnectionName: !Sub '${ProjectName}-${Environment}-github'
+      ProviderType: GitHub
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  BuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: keep test, image build, and push evidence for a week without growing log charges
+        must:
+          - never print credentials or application secrets
+    Properties:
+      LogGroupName: !Sub '/aws/codebuild/${ProjectName}-${Environment}-build'
+      RetentionInDays: 7
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolate test and ECR publish permissions from deployment permissions
+        must:
+          - read and write only repositories under the configured Fitzza prefix
+          - no EKS, IAM, or source-connection permissions
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: publish-images
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Sid: PublishFitzzaImages
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub 'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${EcrRepositoryPrefix}/*'
+              - Sid: WriteBuildLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt BuildLogGroup.Arn
+              - Sid: ReadWritePipelineArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub '${ArtifactBucket.Arn}/*'
+              - Sid: LocatePipelineArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: !GetAtt ArtifactBucket.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: run Java/Python tests then publish native linux/arm64 images on the free-tier eligible ARM small host
+        must:
+          - privileged mode stays enabled for BuildKit
+          - source comes only from CodePipeline
+          - tests finish before any image push
+          - one build at a time and a 60-minute ceiling to cap cost
+        mutable: change-with-constraints
+    Properties:
+      Artifacts: { Type: CODEPIPELINE }
+      Cache:
+        Type: LOCAL
+        Modes: [LOCAL_DOCKER_LAYER_CACHE]
+      ConcurrentBuildLimit: 1
+      Description: Test Fitzza services and publish ARM64 images
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux-aarch64-standard:3.0
+        PrivilegedMode: true
+        Type: ARM_CONTAINER
+        EnvironmentVariables:
+          - Name: ECR_REPOSITORY_PREFIX
+            Type: PLAINTEXT
+            Value: !Ref EcrRepositoryPrefix
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName: !Ref BuildLogGroup
+          Status: ENABLED
+      Name: !Sub '${ProjectName}-${Environment}-build'
+      ServiceRole: !GetAtt BuildRole.Arn
+      Source:
+        BuildSpec: buildspec.yml
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 60
+      QueuedTimeoutInMinutes: 30
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  DeployLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: DeployEnabled
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: retain Kubernetes apply, rollout, and endpoint evidence
+        must:
+          - never print Kubernetes Secret values
+    Properties:
+      LogGroupName: !Sub '/aws/codebuild/${ProjectName}-${Environment}-deploy'
+      RetentionInDays: 7
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  DeploySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: DeployEnabled
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            # Empty defaults never reach these resources: the DeployStageInputs rule requires real IDs.
+            - W1030
+      com.aws.cloudformation.Context:
+        why: VPC-attached deploy worker reaches the private EKS endpoint and AWS APIs through NAT
+        must:
+          - no ingress rules
+          - egress limited to DNS and HTTPS
+          - attach only to the deploy CodeBuild project
+        mutable: change-with-constraints
+    Properties:
+      GroupDescription: Fitzza CodeBuild deploy egress
+      SecurityGroupEgress:
+        - Description: HTTPS to EKS private endpoint and AWS APIs via NAT
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - Description: DNS over UDP to the VPC resolver
+          IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !Ref VpcCidr
+        - Description: DNS over TCP to the VPC resolver
+          IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: !Ref VpcCidr
+      VpcId: !Ref VpcId
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  EksControlPlaneIngressFromDeploy:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: DeployEnabled
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            # Empty defaults never reach these resources: the DeployStageInputs rule requires real IDs.
+            - W1030
+      com.aws.cloudformation.Context:
+        why: allow only the deploy project's VPC ENIs to call the EKS private API
+        must:
+          - source stays DeploySecurityGroup
+          - expose only TCP 443
+    Properties:
+      Description: Kubernetes API from CodeBuild deploy
+      GroupId: !Ref EksClusterSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref DeploySecurityGroup
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Condition: DeployEnabled
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: apply commit-pinned manifests to EKS without image push or source access permissions
+        must:
+          - EKS access belongs only to this role
+          - no secrets-manager or SSM read; Kubernetes Secret is pre-provisioned out of band
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codebuild.amazonaws.com }
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ProjectName}-${Environment}-deploy'
+      Policies:
+        - PolicyName: deploy-to-eks
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: eks:DescribeCluster
+                Resource: !Sub 'arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EksClusterName}'
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                Resource: '*'
+              - Effect: Allow
+                Action: ec2:CreateNetworkInterfacePermission
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*'
+                Condition:
+                  StringEquals:
+                    ec2:AuthorizedService: codebuild.amazonaws.com
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt DeployLogGroup.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub '${ArtifactBucket.Arn}/*'
+              - Effect: Allow
+                Action:
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                Resource: !GetAtt ArtifactBucket.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  DeployAccessEntry:
+    Type: AWS::EKS::AccessEntry
+    Condition: DeployEnabled
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: authenticate the deploy project to a namespace-only Kubernetes role instead of granting cluster administration
+        must:
+          - principal stays DeployRole
+          - access is used only by the develop delivery pipeline
+          - bind fitzza-delivery group only through the bootstrap RoleBinding in namespace fitzza
+        mutable: review-required
+    Properties:
+      KubernetesGroups: [fitzza-delivery]
+      ClusterName: !Ref EksClusterName
+      PrincipalArn: !GetAtt DeployRole.Arn
+      Type: STANDARD
+
+  DeployProject:
+    Type: AWS::CodeBuild::Project
+    Condition: DeployEnabled
+    DependsOn:
+      - DeployAccessEntry
+      - EksControlPlaneIngressFromDeploy
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            # Empty defaults never reach these resources: the DeployStageInputs rule requires real IDs.
+            - W1030
+      com.aws.cloudformation.Context:
+        why: render environment values and apply build artifacts through the EKS private API
+        must:
+          - run in private subnets
+          - abort when fitzza-app-secrets is absent
+          - verify every rollout before reporting success
+        mutable: change-with-constraints
+    Properties:
+      Artifacts: { Type: CODEPIPELINE }
+      ConcurrentBuildLimit: 1
+      Description: Deploy commit-pinned Fitzza manifests to EKS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: false
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - { Name: EKS_CLUSTER_NAME, Type: PLAINTEXT, Value: !Ref EksClusterName }
+          - { Name: RDS_ENDPOINT, Type: PLAINTEXT, Value: !Ref RdsEndpointAddress }
+          - { Name: FRONTEND_ORIGIN, Type: PLAINTEXT, Value: !Ref FrontendOrigin }
+          - { Name: ALB_SECURITY_GROUP_ID, Type: PLAINTEXT, Value: !Ref AlbSecurityGroupId }
+          - Name: API_DOMAIN
+            Type: PLAINTEXT
+            Value: !If [HasTlsConfiguration, !Ref ApiDomain, '']
+          - Name: ACM_CERTIFICATE_ARN
+            Type: PLAINTEXT
+            Value: !If [HasTlsConfiguration, !Ref AcmCertificateArn, '']
+      LogsConfig:
+        CloudWatchLogs:
+          GroupName: !Ref DeployLogGroup
+          Status: ENABLED
+      Name: !Sub '${ProjectName}-${Environment}-deploy'
+      ServiceRole: !GetAtt DeployRole.Arn
+      Source:
+        BuildSpec: deployspec.yml
+        Type: CODEPIPELINE
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 30
+      VpcConfig:
+        VpcId: !Ref VpcId
+        Subnets: !Ref PrivateSubnetIds
+        SecurityGroupIds:
+          - !Ref DeploySecurityGroup
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: orchestrate only the configured source connection and this stack's CodeBuild projects
+        must:
+          - repository condition keys stay on UseConnection
+          - start only this stack's CodeBuild projects
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: codepipeline.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: orchestrate-delivery
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Connections created by CloudFormation may carry either service prefix in their ARN.
+              - Sid: UseGitHubConnection
+                Effect: Allow
+                Action: codestar-connections:UseConnection
+                Resource: !Ref SourceConnection
+                Condition:
+                  StringEquals:
+                    codestar-connections:FullRepositoryId: !Ref GitHubRepository
+              - Sid: UseGitHubCodeConnection
+                Effect: Allow
+                Action: codeconnections:UseConnection
+                Resource: !Ref SourceConnection
+                Condition:
+                  StringEquals:
+                    codeconnections:FullRepositoryId: !Ref GitHubRepository
+              - Sid: RunDeliveryBuilds
+                Effect: Allow
+                Action:
+                  - codebuild:BatchGetBuilds
+                  - codebuild:StartBuild
+                  - codebuild:StopBuild
+                Resource: !If
+                  - DeployEnabled
+                  - [!GetAtt BuildProject.Arn, !GetAtt DeployProject.Arn]
+                  - [!GetAtt BuildProject.Arn]
+              - Sid: ReadWritePipelineArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                Resource: !Sub '${ArtifactBucket.Arn}/*'
+              - Sid: InspectArtifactBucket
+                Effect: Allow
+                Action:
+                  - s3:GetBucketVersioning
+                  - s3:GetBucketLocation
+                Resource: !GetAtt ArtifactBucket.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  DeliveryPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: build only the newest develop revision and pass its exact commit SHA to CodeBuild
+        must:
+          - execution mode stays SUPERSEDED so queued pushes do not each consume build minutes
+          - the Build stage must succeed before any later stage runs
+          - deploy consumes BuildOutput, never refetches source
+        mutable: change-with-constraints
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      ExecutionMode: SUPERSEDED
+      Name: !Sub '${ProjectName}-${Environment}-delivery'
+      PipelineType: V2
+      RestartExecutionOnUpdate: false
+      RoleArn: !GetAtt PipelineRole.Arn
+      Triggers:
+        - ProviderType: CodeStarSourceConnection
+          GitConfiguration:
+            SourceActionName: Source
+            Push:
+              - Branches:
+                  Includes:
+                    - !Ref SourceBranch
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: '1'
+              Configuration:
+                BranchName: !Ref SourceBranch
+                ConnectionArn: !Ref SourceConnection
+                # The push trigger above starts the pipeline; change detection would start it twice.
+                DetectChanges: 'false'
+                FullRepositoryId: !Ref GitHubRepository
+                OutputArtifactFormat: CODE_ZIP
+              Namespace: SourceVariables
+              OutputArtifacts:
+                - { Name: SourceOutput }
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: TestAndPublish
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: '1'
+              Configuration:
+                ProjectName: !Ref BuildProject
+                EnvironmentVariables: '[{"name":"SOURCE_COMMIT_ID","value":"#{SourceVariables.CommitId}","type":"PLAINTEXT"}]'
+              InputArtifacts:
+                - { Name: SourceOutput }
+              Namespace: BuildVariables
+              OutputArtifacts:
+                - { Name: BuildOutput }
+              RunOrder: 1
+        - !If
+          - DeployEnabled
+          - Name: Deploy
+            Actions:
+              - Name: DeployToEks
+                ActionTypeId:
+                  Category: Build
+                  Owner: AWS
+                  Provider: CodeBuild
+                  Version: '1'
+                Configuration:
+                  ProjectName: !Ref DeployProject
+                InputArtifacts:
+                  - { Name: BuildOutput }
+                Namespace: DeployVariables
+                OutputArtifacts:
+                  - { Name: DeployOutput }
+                RunOrder: 1
+          - !Ref AWS::NoValue
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+Outputs:
+  ConnectionArn:
+    Description: GitHub connection ARN; authorize it in AWS Console while status is PENDING
+    Value: !Ref SourceConnection
+  PipelineName:
+    Description: CodePipeline V2 delivery pipeline
+    Value: !Ref DeliveryPipeline
+  BuildProjectName:
+    Description: CodeBuild test and image publishing project
+    Value: !Ref BuildProject
+  DeployProjectName:
+    Condition: DeployEnabled
+    Description: VPC-attached CodeBuild EKS deployment project
+    Value: !Ref DeployProject
+  ArtifactBucketName:
+    Description: Pipeline artifact bucket
+    Value: !Ref ArtifactBucket

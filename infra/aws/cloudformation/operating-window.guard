@@ -1,0 +1,16 @@
+rule operating_window_preserves_capacity_and_runtime {
+  Resources.EksNodeGroup.Properties.ScalingConfig {
+    MinSize == 0
+    MaxSize == 1
+    DesiredSize == 0
+  }
+  Resources.NodeScalerFunction.Properties {
+    Architectures.* == 'arm64'
+    Timeout <= 30
+  }
+  Resources.NodeScaleDownSchedule.Properties {
+    ScheduleExpression == 'cron(0 18 ? * MON-FRI *)'
+    ScheduleExpressionTimezone == 'Asia/Seoul'
+    Target.Input == '{"desiredSize":0,"scheduledWeekdayShutdown":true}'
+  }
+}

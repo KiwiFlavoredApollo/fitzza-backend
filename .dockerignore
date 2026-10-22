@@ -1,0 +1,15 @@
+.git
+.github
+.gradle
+.gradle-cache
+.idea
+.vscode
+**/build
+**/target
+**/__pycache__
+**/.pytest_cache
+**/.venv
+.data
+*.log
+.env
+**/.env

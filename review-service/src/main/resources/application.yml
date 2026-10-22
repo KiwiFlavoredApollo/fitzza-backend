@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: review-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+  # 별점은 정수(#65). 4.5 같은 소수를 4로 바꿔 받지 않고 400으로 거절한다.
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+
+# order-service의 서비스 전용 API(주문 항목 확인)를 호출할 때 붙이는 이 서비스의 토큰.
+# order-service가 review-service 토큰을 허용하기 전에는 비워 둘 수 있고, 그동안 설문·리뷰 작성은 503이다.
+fitzza:
+  service-token: ${REVIEW_SERVICE_TOKEN:}
+  # 사이즈 설문 결과를 보낼 추천 서비스 주소(POST /recommendations/size-feedback). 비워 두면 보내지 않고,
+  # 그동안 쓴 설문은 '보내지 않음'으로 남았다가 주소를 설정하면 재시도(기본 5분 간격)에서 보내진다.
+  recommendation-service:
+    base-url: ${RECOMMENDATION_SERVICE_URL:}
+
+# 로그 줄마다 Gateway가 붙인 요청 ID(X-Request-Id)를 함께 찍는다.
+logging:
+  pattern:
+    level: "%5p [%X{requestId:-}]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        exclude: "*"

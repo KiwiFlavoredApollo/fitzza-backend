@@ -1,0 +1,18 @@
+{
+  "BudgetName": "fitzza-project-20261015-20261105",
+  "BudgetType": "COST",
+  "TimeUnit": "CUSTOM",
+  "TimePeriod": {
+    "Start": "2026-10-15T00:00:00Z",
+    "End": "2026-11-06T00:00:00Z"
+  },
+  "BudgetLimit": {"Amount": "124", "Unit": "USD"},
+  "CostFilters": {"LinkedAccount": ["414901227428"]},
+  "CostTypes": {
+    "IncludeCredit": false,
+    "IncludeRefund": false,
+    "IncludeTax": true,
+    "UseBlended": false,
+    "UseAmortized": false
+  }
+}

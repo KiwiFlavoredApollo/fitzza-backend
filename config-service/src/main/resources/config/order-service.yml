@@ -1,0 +1,23 @@
+server:
+  port: 8083
+spring:
+  datasource:
+    # 서비스 전용 DB 계정(order_service_app)이 있으면 그걸 쓰고, 없으면 공용 계정(POSTGRES_USER)을 쓴다.
+    username: ${ORDER_SERVICE_DB_USER:${POSTGRES_USER:fitzza}}
+    password: ${ORDER_SERVICE_DB_PASSWORD:${POSTGRES_PASSWORD:fitzza_local}}
+    hikari:
+      schema: order_service
+  flyway:
+    enabled: true
+    schemas: order_service
+    default-schema: order_service
+    create-schemas: true
+    baseline-on-migrate: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: order_service
+        hbm2ddl:
+          create_namespaces: true

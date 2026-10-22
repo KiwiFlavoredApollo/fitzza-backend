@@ -1,0 +1,71 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    ECR_REPOSITORY_PREFIX: fitzza
+  exported-variables:
+    - ECR_REGISTRY
+    - IMAGE_TAG
+    - SOURCE_COMMIT
+
+phases:
+  install:
+    on-failure: ABORT
+    runtime-versions:
+      java: corretto21
+      python: 3.12
+    commands:
+      # The managed ARM image starts Docker in privileged mode, so images build natively without QEMU.
+      # The default docker builder keeps LOCAL_DOCKER_LAYER_CACHE effective and avoids pulling a BuildKit image.
+      - '[[ "$(uname -m)" == "aarch64" ]]'
+      - docker buildx version
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - export SOURCE_COMMIT="${SOURCE_COMMIT_ID:-${CODEBUILD_RESOLVED_SOURCE_VERSION:-}}"
+      - '[[ "${SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || { echo "A full Git commit SHA is required" >&2; exit 1; }'
+      - export IMAGE_TAG="${SOURCE_COMMIT:0:12}"
+      - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+      - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      # Every test runs before ECR login; a failure aborts the build before any image is pushed.
+      - ./gradlew test --no-daemon
+      - python -m pip install --quiet -r recommendation-service/requirements.txt -r vton-service/requirements.txt
+      - (cd recommendation-service && python -m pytest tests)
+      - (cd vton-service && python -m pytest tests)
+      - python -m pytest tests
+      - aws ecr get-login-password --region "${AWS_DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+  build:
+    on-failure: ABORT
+    commands:
+      - bash scripts/publish_images.sh
+  post_build:
+    on-failure: ABORT
+    commands:
+      - '[[ "${CODEBUILD_BUILD_SUCCEEDING}" == "1" ]]'
+      - printf '{"commit":"%s","imageTag":"%s","registry":"%s","repositoryPrefix":"%s"}\n' "${SOURCE_COMMIT}" "${IMAGE_TAG}" "${ECR_REGISTRY}" "${ECR_REPOSITORY_PREFIX}" > image-definitions.json
+      - |
+        python - <<'PY'
+        import json
+        from pathlib import Path
+
+        images = json.loads(Path("image-definitions.json").read_text())
+        overlay = Path("infra/k8s/overlays/prod/kustomization.yaml")
+        content = overlay.read_text()
+        for placeholder, value in {
+            "CHANGE_ME_ECR_REGISTRY": images["registry"],
+            "CHANGE_ME_ECR_REPOSITORY_PREFIX": images["repositoryPrefix"],
+            "CHANGE_ME_COMMIT_TAG": images["imageTag"],
+        }.items():
+            content = content.replace(placeholder, value)
+        overlay.write_text(content)
+        PY
+
+artifacts:
+  files:
+    - deployspec.yml
+    - image-definitions.json
+    - image-publish-report.json
+    - infra/k8s/**/*
+    - scripts/render_production_manifests.py
+    - scripts/deploy_eks.py
