@@ -288,7 +288,6 @@ services:
         - *service-urls
         - *jwt-environment
         - *redis-environment
-      RECOMMENDATION_URL: http://recommendation-service:8000
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       config-service: { condition: service_healthy }
