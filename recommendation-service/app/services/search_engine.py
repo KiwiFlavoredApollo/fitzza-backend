@@ -422,6 +422,7 @@ class FashionSearchEngine:
         )
 
         # 갯수 제한 없이 유사도 0.75 이상을 모두 추출 (색상 부스팅 고려하여 하한선 설정)
+        # 참고: max_limit이 None일 때 1,000개 상한(fetch_limit)은 실시간 API의 메모리 고갈(OOM) 방지 및 DoS 보호를 위한 안전 상한선(Safety Ceiling)입니다.
         fetch_limit = (max_limit * 3) if max_limit is not None else 1000
         score_threshold = max(0.0, min_similarity - color_boost)
         response = self.client.query_points(

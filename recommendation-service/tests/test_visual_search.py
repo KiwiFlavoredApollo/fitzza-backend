@@ -126,6 +126,21 @@ def test_visual_search_corrupted_image(client):
     assert response.json()["code"] == "CORRUPTED_IMAGE"
 
 
+def test_visual_search_disguised_unsupported_format(client):
+    """헤더는 image/png이나 실제 바이너리가 GIF 등 미지원 포맷인 경우 400 INVALID_IMAGE_TYPE 반환."""
+    buf = io.BytesIO()
+    img = Image.new("RGB", (32, 32), color=(255, 0, 0))
+    img.save(buf, format="GIF")
+    gif_bytes = buf.getvalue()
+
+    response = client.post(
+        "/api/recommendations/search/image",
+        files={"file": ("fake_png.png", gif_bytes, "image/png")},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "INVALID_IMAGE_TYPE"
+
+
 def test_visual_search_engine_caching():
     """FashionSearchEngine.search_by_image 가 CacheService와 정상 연동되는지 검증."""
     from app.services.cache_service import CacheService

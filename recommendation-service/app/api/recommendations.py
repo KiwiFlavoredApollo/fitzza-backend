@@ -13,6 +13,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -549,7 +550,7 @@ ALLOWED_SEARCH_IMAGE_TYPES = {
     summary="의류 이미지 기반 유사 상품 검색 (Visual Search)",
     description=(
         "업로드된 의류 사진을 Fashion-CLIP 비전 인코더로 분석하여, "
-        "유사도 0.6 이상으로 시각적으로 일치하는 상품 목록을 유사도 순으로 추천 및 반환합니다.\n\n"
+        "유사도 0.75 이상으로 시각적으로 일치하는 상품 목록을 유사도 순으로 추천 및 반환합니다.\n\n"
         "- 지원 이미지 형식: PNG, JPEG, JPG, WebP (최대 15MB)\n"
         "- 별도 옵션 입력 없이 오로지 의류 사진 파일 하나만 첨부하면 됩니다."
     ),
@@ -580,12 +581,14 @@ async def search_products_by_image(
             message="이미지 파일 크기는 최대 15MB까지 가능합니다.",
         )
 
-    # 유효한 이미지인지 바이트 검증
+    # 유효한 이미지인지 및 실제 포맷/애니메이션 검증
     try:
         import io
         from PIL import Image
 
         with Image.open(io.BytesIO(image_bytes)) as img:
+            image_format = (img.format or "").upper()
+            is_animated = bool(getattr(img, "is_animated", False))
             img.verify()
     except Exception as exc:
         raise RecommendationApiError(
@@ -594,9 +597,17 @@ async def search_products_by_image(
             message="손상되었거나 유효하지 않은 이미지 파일입니다.",
         ) from exc
 
+    if image_format not in {"PNG", "JPEG", "WEBP"} or is_animated:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_IMAGE_TYPE",
+            message="지원하지 않는 이미지 형식입니다. PNG, JPEG, WebP 정지 이미지만 업로드할 수 있습니다.",
+        )
+
     engine = _get_search_engine(request.app)
     try:
-        detected_category, detected_color, raw_results = engine.search_by_image(
+        detected_category, detected_color, raw_results = await run_in_threadpool(
+            engine.search_by_image,
             image_input=image_bytes,
         )
     except ValueError as val_err:
