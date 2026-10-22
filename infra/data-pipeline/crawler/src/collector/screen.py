@@ -120,6 +120,8 @@ async def run() -> None:
                         print("REJECT category")
                         continue
 
+                    product = await crawler.attach_essential_material(product)
+
                     accepted_path.write_text(
                         json.dumps(product, ensure_ascii=False, indent=2),
                         encoding="utf-8",

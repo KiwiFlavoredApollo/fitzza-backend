@@ -203,6 +203,7 @@ async def screen_category(
                     print("REJECT category")
 
                 else:
+                    product = await crawler.attach_essential_material(product)
                     (screened_dir / f"{product_id}.json").write_text(
                         json.dumps(product, ensure_ascii=False, indent=2),
                         encoding="utf-8",
