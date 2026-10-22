@@ -10,7 +10,8 @@ def write_manifests(root: Path) -> None:
     base.mkdir(parents=True)
     (base / "configmap.yaml").write_text(
         "POSTGRES_HOST: CHANGE_ME_RDS_ENDPOINT\n"
-        "CORS_ALLOWED_ORIGINS: CHANGE_ME_FRONTEND_ORIGIN\n",
+        "CORS_ALLOWED_ORIGINS: CHANGE_ME_FRONTEND_ORIGIN\n"
+        "REFRESH_COOKIE_SECURE: CHANGE_ME_REFRESH_COOKIE_SECURE\n",
         encoding="utf-8",
     )
     (base / "ingress.yaml").write_text(
@@ -42,6 +43,7 @@ def test_render_http_only(tmp_path: Path) -> None:
     ingress = (tmp_path / "infra/k8s/base/ingress.yaml").read_text()
     assert "fitzza.abc.ap-northeast-2.rds.amazonaws.com" in configmap
     assert "https://app.example.com" in configmap
+    assert 'REFRESH_COOKIE_SECURE: "false"' in configmap
     assert 'listen-ports: \'[{"HTTP": 80}]\'' in ingress
     assert "ssl-redirect" not in ingress
     assert "certificate-arn" not in ingress
@@ -64,7 +66,9 @@ def test_render_https(tmp_path: Path) -> None:
         ),
     )
 
+    configmap = (tmp_path / "infra/k8s/base/configmap.yaml").read_text()
     ingress = (tmp_path / "infra/k8s/base/ingress.yaml").read_text()
+    assert 'REFRESH_COOKIE_SECURE: "true"' in configmap
     assert "api.example.com" in ingress
     assert "arn:aws:acm:ap-northeast-2:123456789012:certificate/" in ingress
     assert "ssl-redirect" in ingress

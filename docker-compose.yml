@@ -244,6 +244,11 @@ services:
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: ${VTON_QUEUE_BACKEND:-sqs}
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -252,6 +257,31 @@ services:
     healthcheck:
       <<: *app-healthcheck
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+
+  vton-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args: { SERVICE_DIR: vton-service }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *java-environment
+      POSTGRES_SCHEMA: vton
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: sqs
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
 
   recommendation-service:
     build:
@@ -273,6 +303,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      qdrant: { condition: service_started }
     ports: ["8092:8000"]
     healthcheck:
       <<: *app-healthcheck

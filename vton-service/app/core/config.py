@@ -99,7 +99,7 @@ class Settings:
         default_factory=lambda: os.getenv("VTON_STORAGE_BACKEND", "local")
     )
     aws_s3_bucket_name: str = field(
-        default_factory=lambda: os.getenv("AWS_S3_BUCKET_NAME", "fitzza-assets")
+        default_factory=lambda: os.getenv("AWS_S3_BUCKET_NAME", "fitzza-prod-assets-vton")
     )
     aws_endpoint_url: str = field(
         default_factory=lambda: os.getenv("AWS_ENDPOINT_URL", "")

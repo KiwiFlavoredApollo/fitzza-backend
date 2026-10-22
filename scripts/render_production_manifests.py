@@ -75,6 +75,13 @@ def render(
     configmap = replace_once(
         configmap, "CHANGE_ME_FRONTEND_ORIGIN", frontend_origin, "frontend origin"
     )
+    # Browsers drop Secure cookies over plain HTTP, so the flag follows the TLS inputs.
+    configmap = replace_once(
+        configmap,
+        "CHANGE_ME_REFRESH_COOKIE_SECURE",
+        '"true"' if has_domain else '"false"',
+        "refresh cookie security",
+    )
 
     ingress = ingress_path.read_text(encoding="utf-8")
     ingress = replace_once(

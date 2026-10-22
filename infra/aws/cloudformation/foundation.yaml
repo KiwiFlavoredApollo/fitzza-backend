@@ -11,7 +11,7 @@ Metadata:
     arch: public ALB subnets -> private EKS nodes; Scheduler -> Lambda -> node desired 1/0; S3 bypasses NAT; one NAT for cost
     must:
       - deploy only in ap-northeast-2 for the approved estimate
-      - keep worker desired=0 outside approved operating hours, on weekends, and on blocked dates
+      - keep worker desired=0 outside approved hours; 2026-10-24 through 26 permit 12:00-23:00 KST
       - never store credentials or application secrets in this template
     ref:
       - at: infra/aws/cloudformation/README.md
@@ -708,7 +708,7 @@ Resources:
         why: one larger ARM64 worker for pilot application and system Pod capacity; starts at zero to avoid accidental spend
         must:
           - maxSize stays 1 for the approved estimate
-          - desiredSize returns to 0 outside weekday 09:00-18:00 operating windows and on blocked dates
+          - desiredSize returns to 0 outside approved hours, including the dated crawler exception
           - workloads must publish linux/arm64 images
         mutable: change-with-constraints
         mutability:
@@ -797,7 +797,8 @@ Resources:
         why: validate desired capacity and operating date before calling EKS instead of mutating the backing ASG directly
         must:
           - accept only integer desiredSize 0 or 1
-          - reject scale-up on Asia/Seoul weekends and configured blocked dates
+          - reject scale-up on weekends and blocked dates except the approved 2026-10-24 through 26 window
+          - exception window never changes node count or starts crawler Jobs
           - preserve min=0 and max=1 budget limits
         mutable: change-with-constraints
     Properties:
@@ -814,6 +815,8 @@ Resources:
 
 
           def is_scale_up_blocked(now):
+              if "2026-10-24" <= now.date().isoformat() <= "2026-10-26":
+                  return not 12 <= now.hour < 23
               blocked_dates = {
                   value.strip()
                   for value in os.environ["BLOCKED_SCALE_UP_DATES"].split(",")
@@ -828,7 +831,12 @@ Resources:
                   raise ValueError("desiredSize must be integer 0 or 1")
 
               now = datetime.now(operating_time_zone)
-              if desired_size == 1 and is_scale_up_blocked(now):
+              exception_shutdown = (
+                  desired_size == 0 and event.get("scheduledWeekdayShutdown") is True
+                  and "2026-10-24" <= now.date().isoformat() <= "2026-10-26"
+                  and 12 <= now.hour < 23
+              )
+              if exception_shutdown or (desired_size == 1 and is_scale_up_blocked(now)):
                   return {
                       "desiredSize": desired_size,
                       "date": now.date().isoformat(),
@@ -931,7 +939,7 @@ Resources:
       State: ENABLED
       Target:
         Arn: !GetAtt NodeScalerFunction.Arn
-        Input: '{"desiredSize":0}'
+        Input: '{"desiredSize":0,"scheduledWeekdayShutdown":true}'
         RetryPolicy:
           MaximumEventAgeInSeconds: 3600
           MaximumRetryAttempts: 2

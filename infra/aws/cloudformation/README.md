@@ -14,12 +14,33 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - One ARM64 `t4g.large` managed node group with `min=0`, `desired=0`, `max=1` for pilot workload capacity; the size increase was approved on 2026-10-21 while the usage plan is being revised.
 - The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
+- Approved exception: 2026-10-24 through 2026-10-26, each day 12:00 start / 23:00 scale-down request KST. Six one-time schedules call only the existing node scaler; no crawler Job or service-maintenance automation is installed.
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
 - An EKS Pod Identity role for AWS Load Balancer Controller v3.6.0
 - A private, encrypted, versioned S3 bucket for crawler and AI pipeline data
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
 
 The single NAT Gateway is a temporary cost decision for this project. It is a single-AZ outbound dependency and must be reconsidered before production use.
+
+### Approved crawler operating-window exception
+
+`scripts/configure_approved_crawler_window.py` defaults to no AWS calls. An explicitly approved
+`--apply-approved-window --backup <new-directory>` operation checks the live Lambda source against the
+reviewed baseline, backs up its package and both weekday schedules, then applies only its code and six
+one-time Scheduler entries. It preserves all weekday schedule options and the existing execution role.
+Shutdowns are installed before starts. A partial API failure must be inspected; do not blindly rerun.
+
+The 10/26 09:00 request is rejected by the date/time guard. The existing weekday 18:00 payload carries
+`scheduledWeekdayShutdown=true` so it is skipped during this exception only. Manual `desiredSize=0`
+remains usable at any time. Weekend/blocked-date exclusions resume after 10/26 with no follow-up automation.
+The six exception schedules self-delete after execution. Node count/size, IAM roles, app replicas, CD and
+all crawler/AI Job suspend flags remain unchanged. Startup and termination take additional time;
+23:00 is a scale-down request, not proof that EC2 billing has stopped. Finish data work/checkpoints earlier.
+
+This narrow service-API patch intentionally creates Lambda code drift until the foundation template is
+next deployed through normal review; do not deploy the whole foundation just to change these hours.
+Future foundation deployment must retain the exception guard while these dates are in effect. If the
+template exceeds 51,200 bytes, use S3 template upload/`--template-url` rather than inline `--template-body`.
 
 The ALB itself is created from `infra/k8s/base/ingress.yaml` by AWS Load Balancer Controller. Replace `CHANGE_ME_ALB_SECURITY_GROUP_ID` with the stack output `AlbSecurityGroupId`. The controller manages the matching backend rule for pod targets; do not attach the public ALB security group to EKS nodes or data stores.
 
@@ -117,7 +138,7 @@ Set foundation parameter `DeliveryArtifactBucketName` to the delivery stack's `A
 
 The deploy access entry maps only to Kubernetes group `fitzza-delivery`, bound to a Role in namespace `fitzza`. It cannot read Secrets, mutate PVCs/StatefulSets, create RBAC or manage cluster resources. The role can modify application workloads, which inherently use the pre-provisioned application credentials; do not attach privileged workload service accounts in this namespace.
 
-Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
+Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The renderer sets `REFRESH_COOKIE_SECURE` to `true` only when both TLS values are supplied and to `false` for HTTP-only reachability tests, because browsers drop Secure cookies over plain HTTP. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
 
 ### Rollback
 

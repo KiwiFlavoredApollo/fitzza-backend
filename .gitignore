@@ -88,7 +88,6 @@ vton-service/data/fittings/*.png
 vton-service/data/photos/
 
 # Musinsa Crawled Dataset
-**/product-service/src/main/resources/final_products/
-**/product-service/src/main/resources/final_products.*/
+**/product-service/src/main/resources/final_products.old/
 
 .run/
