@@ -2,7 +2,7 @@ name: fitzza
 
 x-java-environment: &java-environment
   CONFIG_SERVER_URL: http://config-service:8888
-  EUREKA_URL: http://discovery-service:8761/eureka/
+  DISCOVERY_SERVICE_URL: http://discovery-service:8761/eureka/
   POSTGRES_HOST: postgres
   POSTGRES_PORT: 5432
   POSTGRES_DB: ${POSTGRES_DB:-fitzza}

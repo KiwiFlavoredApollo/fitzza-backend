@@ -28,6 +28,8 @@ docker compose up --build -d
 
 Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
+서비스 디스커버리 주소 환경변수는 `DISCOVERY_SERVICE_URL`입니다. Compose와 Kubernetes에서는 `http://discovery-service:8761/eureka/`를 주입하며, IDE에서 직접 실행할 때는 기본값 `http://localhost:8761/eureka/`를 사용합니다. 직접 실행 시 `.env`는 자동으로 로드되지 않으므로 주소 변경이 필요하면 실행 설정의 환경변수에 지정합니다.
+
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
 서비스끼리 호출하는 API는 `/api` 없이 시작하며(예: user-service `GET /users`, product-service `GET /products`, `GET /product-options`, order-service `GET /order-items/{orderItemId}`, notification-service `POST /notifications/events`) Gateway 라우트가 없습니다. Gateway에 `/api`로 시작하지 않는 라우트를 추가하지 않습니다. 호출하는 서비스는 자기 토큰을 `X-Service-Token` 헤더로 보내고, 받는 서비스는 API마다 허용한 서비스의 토큰인지 확인합니다. 현재 요청의 `X-User-Id`는 다른 서비스로 그대로 전달합니다. 토큰은 서비스마다 다른 32바이트 이상 값입니다.
