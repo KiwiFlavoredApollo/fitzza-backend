@@ -13,6 +13,11 @@ x-aws-environment: &aws-environment
   AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
   AWS_ENDPOINT_URL: http://localstack:4566
 
+x-redis-environment: &redis-environment
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
+
 x-java-environment: &java-environment
   CONFIG_SERVICE_URL: http://config-service:8888
   DISCOVERY_SERVICE_URL: http://discovery-service:8761/eureka/
@@ -21,9 +26,6 @@ x-java-environment: &java-environment
   NOTIFICATION_SERVICE_URL: http://notification-service:8086
   RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
   VTON_SERVICE_URL: ${VTON_SERVICE_URL:-http://vton-service:8000}
-  REDIS_HOST: redis
-  REDIS_PORT: 6379
-  REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
   JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
   JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
@@ -63,7 +65,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-fitzza_local}"]
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
+      <<: *redis-environment
     ports:
       - "6379:6379"
     volumes:
@@ -126,6 +128,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *redis-environment
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
       USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
@@ -141,6 +144,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *redis-environment
         - *aws-environment
       PRODUCT_SERVICE_DB_USER: ${PRODUCT_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
       PRODUCT_SERVICE_DB_PASSWORD: ${PRODUCT_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
@@ -230,6 +234,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *redis-environment
         - *aws-environment
       POSTGRES_SCHEMA: vton
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
@@ -254,6 +259,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *redis-environment
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/1
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -275,7 +281,9 @@ services:
       dockerfile: Dockerfile.java
       args: { MODULE: gateway-service }
     environment:
-      <<: *java-environment
+      <<:
+        - *java-environment
+        - *redis-environment
       RECOMMENDATION_URL: http://recommendation-service:8000
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
