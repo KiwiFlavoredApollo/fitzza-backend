@@ -19,6 +19,12 @@ The FashionCLIP Jev implementation reads the crawler's product JSON directory di
 - every `color_image_mappings[].color_raw`
 - all sibling colors on the same product
 
+The cloud crawler now emits explicit COLOR_CHIP option/image relationships only when an active
+option item confirms the same product and option value IDs. It preserves raw color names and
+records option-ID evidence; it never falls back to product-name guesses, generic swatches, or
+another product's image. This is metadata evidence, not image-content or human quality approval.
+OtherColorGoods-only products remain unsupported pending an observed non-empty source fixture.
+
 `scripts/validate_jev_data.py` validates the files before any paid Jev request. Color keys follow the Jev implementation's `strip().lower()` rule. It does not create an intermediate input file.
 
 ## Local usage

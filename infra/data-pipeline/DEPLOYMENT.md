@@ -45,8 +45,14 @@ indexer/report.json                # 적재 후 보고서, 서빙 전환 아님
 ```
 
 raw→curated 연결 코드·이미지·전용 IAM·정지 Job 대기 배포를 완료했다. 실제 실행 검증은 아직 하지 않았다.
-현재 크롤러 parser는 color_image_mappings를 만들지 않으므로 신규 screened 결과는 정제 입력에 합격하지 못한다.
-이 필드의 실제 근거 기반 수집 연결과 이미지 내용 검증 및 전체 단계 오케스트레이션은 완료되지 않았다.
+10/22 parser에 실제 Options.basic COLOR_CHIP → 활성 optionItem의 동일 goodsNo/optionValueNos 연결을 추가했다.
+이 연결이 증명되는 imageUrl만 color_image_mappings로 보존하며 원래 색상 이름은 변경하지 않는다.
+삭제/비활성/타 상품 옵션·크기 옵션·공통 색상칩·공유 placeholder·허용되지 않은 이미지 URL은 제외한다.
+요청 상품 ID와 반환 Detail ID가 다르면 수집은 실패한다. 상품명·대표 썸네일 추측은 하지 않는다.
+로컬 HTML 3개(동일 상품 7213384의 저장본)에서 각각 6개 연결을 오프라인 확인했다.
+OtherColorGoods의 비어 있지 않은 실제 원본 fixture가 없어 그 경로는 아직 구현하지 않았다.
+따라서 명시적 COLOR_CHIP 이미지가 없는 상품은 정제 입력으로 승격되지 않는다.
+이 변경의 ECR/정지 Job 반영, 실제 이미지 내용 검증 및 전체 단계 오케스트레이션은 아직 하지 않았다.
 FITZZA-219 완료나 전체 end-to-end 검증 완료로 기록하지 않는다. 운영자 입력 없이 raw를 Jev에 바로 넘기지 않는다.
 checkpoint는 같은 실행에서 직렬 Job으로만 갱신한다. ETag 충돌은 실패이며 강제로 덮어쓰지 않는다.
 새 worker는 이전 pilot 경로를 자동 합치지 않는다.

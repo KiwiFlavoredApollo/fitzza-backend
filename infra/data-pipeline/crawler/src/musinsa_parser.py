@@ -5,6 +5,8 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
+from src.color_image_mappings import extract_color_image_mappings
+
 
 def _full_image_url(url: str | None) -> str | None:
     if not url:
@@ -139,6 +141,8 @@ def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
 
     detail = _query_data(next_data, ["Detail", product_id]) or {}
     options = _query_data(next_data, ["Options", product_id]) or {}
+    if type(detail.get("goodsNo")) is not int or detail["goodsNo"] != product_id:
+        raise ValueError("Detail product identity mismatch")
 
     brand_info = detail.get("brandInfo") or {}
     price = detail.get("goodsPrice") or {}
@@ -247,6 +251,7 @@ def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
 
         "options": option_groups,
         "option_items": option_items,
+        "color_image_mappings": extract_color_image_mappings(product_id, options),
 
         "review": {
             "rating": review.get("satisfactionScore"),

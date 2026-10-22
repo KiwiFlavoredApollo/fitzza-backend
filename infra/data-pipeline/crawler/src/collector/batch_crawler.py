@@ -57,6 +57,8 @@ class BatchProductCrawler:
         html = await self.page.content()
 
         product = normalize_musinsa_product(html, url)
+        if product["product_id"] != product_id:
+            raise ValueError("Requested product identity mismatch")
 
         await asyncio.sleep(self.delay_seconds)
         return product

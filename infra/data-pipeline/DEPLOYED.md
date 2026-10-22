@@ -38,7 +38,10 @@ create-only 조건을 완화하지 않았다. 시뮬레이터에서 조건부 Pu
 - 기존 추천·가상피팅 앱 1/1, Redis 1/1, Qdrant PVC UID 90f1a70b-702d-4e42-97cc-8f69d29c3d95 유지.
 
 SSM 키는 사용자 등록 완료, describe-parameters로 SecureString version 1만 확인(값 조회 없음).
-미완료: 신규 크롤러의 근거 기반 color_image_mappings 생성, seed 본문 객체 게시, 실제 이미지 내용 검증,
+10/22 후속 코드(아직 ECR/Job 미반영): COLOR_CHIP 기반 color_image_mappings 생성 및 상품 ID 연계 보완.
+오프라인 unit test 61개 통과(crawler 44 / 배포·복구·인덱서 계약·키 등록 17).
+저장 HTML 3개는 동일 상품의 서로 다른 저장본이며, 각각 명시적 이미지 연결 6개 확인(품질/도달성 검증 아님).
+미완료: OtherColorGoods 원본 fixture 기반 추가 경로, 새 크롤러 이미지 반영, seed 본문 객체 게시, 실제 이미지 내용 검증,
 사람 검수 승인본, 모델 revision 결정 및 단계별 실제 end-to-end 검증.
 기존 500개 오프라인 실측 계약 검사에서는 488개 통과·12개 미달. 원본은 변경하지 않았다.
 이는 전체 크롤링 파이프라인의 완전 자동화나 3000개 적재 완료 증거가 아니다.
