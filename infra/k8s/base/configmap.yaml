@@ -4,7 +4,7 @@ metadata:
   name: fitzza-app-config
 data:
   AWS_DEFAULT_REGION: ap-northeast-2
-  CONFIG_SERVER_URL: http://config-service:8888
+  CONFIG_SERVICE_URL: http://config-service:8888
   DISCOVERY_SERVICE_URL: http://discovery-service:8761/eureka/
   POSTGRES_HOST: CHANGE_ME_RDS_ENDPOINT
   POSTGRES_PORT: "5432"
