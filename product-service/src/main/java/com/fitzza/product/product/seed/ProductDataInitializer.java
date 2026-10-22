@@ -72,12 +72,17 @@ public class ProductDataInitializer implements CommandLineRunner {
 
         int imported = 0;
         int skipped = 0;
+        int updated = 0;
         int failed = 0;
         for (Resource resource : sortedResources) {
             try {
                 MusinsaProductDocument document = readDocument(resource);
                 if (savedProductIds.contains(document.productId())) {
-                    skipped++;
+                    if (productSeedService.fillColorImageMappingsIfMissing(document)) {
+                        updated++;
+                    } else {
+                        skipped++;
+                    }
                     continue;
                 }
                 productSeedService.saveProduct(document);
@@ -87,6 +92,9 @@ public class ProductDataInitializer implements CommandLineRunner {
                 failed++;
                 log.warn("무신사 상품 시딩 실패: {} ({})", resource.getDescription(), exception.getMessage());
             }
+        }
+        if (updated > 0) {
+            log.info("무신사 상품 색상 매핑 백필: {}건", updated);
         }
         return new ProductSeedResult(imported, skipped, failed);
     }

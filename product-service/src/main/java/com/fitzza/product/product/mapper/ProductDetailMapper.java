@@ -1,10 +1,12 @@
 package com.fitzza.product.product.mapper;
 
+import com.fitzza.product.product.dto.ColorImageMappingResponse;
 import com.fitzza.product.product.dto.ProductDetailOptionResponse;
 import com.fitzza.product.product.dto.ProductDetailResponse;
 import com.fitzza.product.product.dto.SizeGuideResponse;
 import com.fitzza.product.product.dto.SizeMeasurementResponse;
 import com.fitzza.product.product.entity.BrandEntity;
+import com.fitzza.product.product.entity.ColorImageMappingValue;
 import com.fitzza.product.product.entity.OptionMeasurementEntity;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductImageEntity;
@@ -57,6 +59,7 @@ public final class ProductDetailMapper {
                 product.getMaterial(),
                 product.getFitType(),
                 product.getFeatures(),
+                toColorImageMappings(product.getColorImageMappings()),
                 product.getDescription(),
                 product.getImageUrl(),
                 toImageUrls(product, images),
@@ -66,6 +69,13 @@ public final class ProductDetailMapper {
                 product.getCreatedAt(),
                 product.getUpdatedAt(),
                 wished);
+    }
+
+    private static List<ColorImageMappingResponse> toColorImageMappings(List<ColorImageMappingValue> mappings) {
+        if (mappings == null || mappings.isEmpty()) {
+            return List.of();
+        }
+        return mappings.stream().map(ColorImageMappingResponse::from).toList();
     }
 
     /** 이미지 행이 없는 상품은 대표 이미지만 노출한다. */
