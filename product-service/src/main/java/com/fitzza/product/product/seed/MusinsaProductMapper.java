@@ -2,6 +2,7 @@ package com.fitzza.product.product.seed;
 
 import com.fitzza.product.product.entity.BrandEntity;
 import com.fitzza.product.product.entity.CategoryEntity;
+import com.fitzza.product.product.entity.ColorImageMappingValue;
 import com.fitzza.product.product.entity.Gender;
 import com.fitzza.product.product.entity.OptionMeasurementEntity;
 import com.fitzza.product.product.entity.ProductEntity;
@@ -119,9 +120,26 @@ public class MusinsaProductMapper {
                 .season(toSeason(document))
                 .fitType(document.fitType())
                 .features(document.features())
+                .colorImageMappings(toColorImageMappings(document))
                 .imageUrl(imageUrls(document).stream().findFirst().orElse(null))
                 .status(hasActiveOption(document) ? ProductStatus.ON_SALE : ProductStatus.SOLD_OUT)
                 .build();
+    }
+
+    /** API·DB에 저장할 색상-이미지 매핑. null 항목과 색 이름 없는 항목은 제외한다. */
+    public List<ColorImageMappingValue> toColorImageMappings(MusinsaProductDocument document) {
+        if (document.colorImageMappings() == null || document.colorImageMappings().isEmpty()) {
+            return List.of();
+        }
+        Long fallbackProductId = document.productId();
+        return document.colorImageMappings().stream()
+                .filter(Objects::nonNull)
+                .filter(mapping -> StringUtils.hasText(mapping.colorRaw()))
+                .map(mapping -> new ColorImageMappingValue(
+                        mapping.productId() != null ? mapping.productId() : fallbackProductId,
+                        mapping.colorRaw().trim(),
+                        blankToNull(mapping.imageUrl())))
+                .toList();
     }
 
     public List<ProductImageEntity> toImages(MusinsaProductDocument document, ProductEntity product) {

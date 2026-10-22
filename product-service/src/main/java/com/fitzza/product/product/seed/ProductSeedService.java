@@ -1,6 +1,7 @@
 package com.fitzza.product.product.seed;
 
 import com.fitzza.product.product.entity.BrandEntity;
+import com.fitzza.product.product.entity.ColorImageMappingValue;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductOptionEntity;
 import com.fitzza.product.product.repository.BrandRepository;
@@ -14,6 +15,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
 /**
  * 크롤링 문서 한 건을 하나의 트랜잭션으로 저장한다. 한 상품의 저장 실패가 다른 상품에 영향을 주지 않도록
@@ -42,6 +44,30 @@ public class ProductSeedService {
         mapper.toSizeGuide(document, product).ifPresent(productSizeGuideRepository::save);
         List<ProductOptionEntity> options = productOptionRepository.saveAll(mapper.toOptions(document, product));
         optionMeasurementRepository.saveAll(mapper.toOptionMeasurements(document, options));
+    }
+
+    /**
+     * 이미 저장된 상품에 color_image_mappings가 비어 있으면 문서 값으로 채운다.
+     * 기존 500건 시드 뒤에도 한 번 재기동하면 상세 API에 색 매핑이 채워지도록 한다.
+     *
+     * @return 실제로 갱신했으면 true
+     */
+    @Transactional
+    public boolean fillColorImageMappingsIfMissing(MusinsaProductDocument document) {
+        if (document.productId() == null) {
+            return false;
+        }
+        List<ColorImageMappingValue> mappings = mapper.toColorImageMappings(document);
+        if (mappings.isEmpty()) {
+            return false;
+        }
+        return productRepository.findById(document.productId())
+                .filter(product -> CollectionUtils.isEmpty(product.getColorImageMappings()))
+                .map(product -> {
+                    product.replaceColorImageMappings(mappings);
+                    return true;
+                })
+                .orElse(false);
     }
 
     /** 브랜드명은 유일하므로 같은 이름의 브랜드가 이미 있으면 재사용한다. */

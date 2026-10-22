@@ -65,4 +65,29 @@ class MusinsaColorImageMappingTest {
         assertThat(product.getMaterial()).isEqualTo("면");
         assertThat(product.getFitType()).isEqualTo(FitType.OVERSIZED);
     }
+
+    @Test
+    void toColorImageMappingsKeepsProductColorRawAndImageUrl() throws Exception {
+        MusinsaProductDocument document = objectMapper.readValue("""
+                {
+                  "product_id": 3086667,
+                  "color_image_mappings": [
+                    null,
+                    {
+                      "product_id": 3086667,
+                      "color_raw": "베이지",
+                      "image_url": "https://img.example/beige.jpg"
+                    },
+                    {"color_raw": "  ", "image_url": "https://img.example/blank.jpg"}
+                  ]
+                }
+                """, MusinsaProductDocument.class);
+
+        assertThat(mapper.toColorImageMappings(document)).singleElement()
+                .extracting(
+                        mapping -> mapping.productId(),
+                        mapping -> mapping.colorRaw(),
+                        mapping -> mapping.imageUrl())
+                .containsExactly(3086667L, "베이지", "https://img.example/beige.jpg");
+    }
 }

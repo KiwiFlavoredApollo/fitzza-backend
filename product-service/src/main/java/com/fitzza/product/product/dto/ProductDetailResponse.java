@@ -35,6 +35,8 @@ public record ProductDetailResponse(
         @Schema(description = "핏") FitType fitType,
         @Schema(description = "상품 특징(항목명-값 목록)", example = "{\"깊이\": [\"깊음\"]}")
         Map<String, List<String>> features,
+        @Schema(description = "상품 색상-이미지 매핑(무신사 color_image_mappings). 없으면 빈 목록")
+        List<ColorImageMappingResponse> colorImageMappings,
         @Schema(description = "상품 설명") String description,
         @Schema(description = "대표 이미지 URL") String thumbnailUrl,
         @Schema(description = "상품 이미지 URL 목록(노출 순서). 첫 번째가 대표 이미지") List<String> images,

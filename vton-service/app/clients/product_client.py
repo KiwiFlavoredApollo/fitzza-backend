@@ -95,10 +95,18 @@ class ProductServiceClient:
         product_id: int,
         fallback_category: str | None = None,
         request_id_header: str | None = None,
+        override_image_url: str | None = None,
     ) -> dict[str, Any]:
         """
         product-service에서 상품 정보 및 이미지를 조회하고,
         조회 실패 또는 이미지 다운로드 실패 시 로컬 샘플 에셋으로 자연스럽게 폴백합니다.
+
+        Args:
+            product_id: 상품 ID
+            fallback_category: 카테고리 폴백값 (기본 "상의")
+            request_id_header: 추적용 Request ID
+            override_image_url: 추천 서비스 등에서 전달받은 특정 색상의 상품 이미지 URL.
+                                제공 시 product-service의 기본 대표 썸네일 대신 이 이미지를 우선 다운로드하여 사용합니다.
 
         반환 dict:
         {
@@ -125,13 +133,26 @@ class ProductServiceClient:
             cat_l1 = str(product_info.get("categoryL1Name") or "").strip()
             if cat_l1 in SUPPORTED_CATEGORIES:
                 category_name = cat_l1
-
-            if image_url:
-                image_bytes = self.fetch_product_image_bytes(image_url)
         else:
             product_name = f"상품 #{product_id}"
 
-        # 이미지 다운로드 실패 또는 미제공 시 카테고리별 샘플 의류 PNG로 폴백
+        # 1. 특정 색상 이미지 URL(override_image_url)이 제공된 경우 우선 다운로드
+        if override_image_url and override_image_url.strip():
+            downloaded = self.fetch_product_image_bytes(override_image_url.strip())
+            if downloaded:
+                image_bytes = downloaded
+                image_url = override_image_url.strip()
+                logger.info(
+                    "추천 색상 의류 이미지 다운로드 적용 (productId=%s, url=%s)",
+                    product_id,
+                    image_url,
+                )
+
+        # 2. override_image_url이 없거나 다운로드 실패 시 product-service 기본 썸네일 다운로드
+        if image_bytes is None and image_url:
+            image_bytes = self.fetch_product_image_bytes(image_url)
+
+        # 3. 이미지 다운로드 실패 또는 미제공 시 카테고리별 샘플 의류 PNG로 폴백
         if image_bytes is None:
             safe_category = category_name if category_name in SUPPORTED_CATEGORIES else "상의"
             category_name = safe_category

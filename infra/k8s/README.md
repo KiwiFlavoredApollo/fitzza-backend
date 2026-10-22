@@ -23,6 +23,7 @@ Before deployment, replace the following placeholders through an environment-spe
 - `CHANGE_ME_ACM_CERTIFICATE_ARN`
 - `CHANGE_ME_ALB_SECURITY_GROUP_ID` (CloudFormation output `AlbSecurityGroupId`)
 - `CHANGE_ME_API_DOMAIN`
+- `CHANGE_ME_REFRESH_COOKIE_SECURE` (set by `scripts/render_production_manifests.py`: `true` with TLS, `false` without)
 
 The production overlay contains image mappings for all 11 application services. CodeBuild's `post_build` step fills `CHANGE_ME_ECR_REGISTRY`, `CHANGE_ME_ECR_REPOSITORY_PREFIX`, and `CHANGE_ME_COMMIT_TAG` from `image-definitions.json`, using the same ECR paths and 12-character Git commit tag as the image build. CodeBuild requires a resolved Git commit SHA; there is no `local` tag fallback.
 

@@ -5,18 +5,28 @@ spring:
   application:
     name: order-service
   config:
-    import:
-      - "optional:file:${FITZZA_ENV_FILE:../.env}[.properties]"
-      - "optional:file:${FITZZA_ENV_FILE:./.env}[.properties]"
-      - "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fitzza}
     username: ${POSTGRES_USER:postgres}
     password: ${POSTGRES_PASSWORD}
+    hikari:
+      schema: order_service
+  flyway:
+    enabled: true
+    schemas: order_service
+    default-schema: order_service
+    create-schemas: true
+    baseline-on-migrate: true
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     open-in-view: false
+    properties:
+      hibernate:
+        default_schema: order_service
+        hbm2ddl:
+          create_namespaces: true
   cloud:
     openfeign:
       client:

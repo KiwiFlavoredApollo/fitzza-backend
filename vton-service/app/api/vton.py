@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.clients.sqs_client import SqsClient
 from app.clients.storage_client import StorageClient
 from app.core.config import Settings, get_settings
 from app.core.database import VtonRepository
@@ -59,6 +60,7 @@ _REPO: VtonRepository | None = None
 _PRODUCT_CLIENT: ProductServiceClient | None = None
 _NOTIFICATION_CLIENT: NotificationServiceClient | None = None
 _STORAGE_CLIENT: StorageClient | None = None
+_SQS_CLIENT: SqsClient | None = None
 
 
 def get_repo() -> VtonRepository:
@@ -94,17 +96,27 @@ def get_storage_client() -> StorageClient:
     return _STORAGE_CLIENT
 
 
+def get_sqs_client() -> SqsClient:
+    global _SQS_CLIENT
+    if _SQS_CLIENT is None:
+        _SQS_CLIENT = SqsClient()
+    return _SQS_CLIENT
+
+
 def set_dependencies_for_tests(
     repo: VtonRepository | None = None,
     product_client: ProductServiceClient | None = None,
     notification_client: NotificationServiceClient | None = None,
     storage_client: StorageClient | None = None,
+    sqs_client: SqsClient | None = None,
 ) -> None:
-    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT
+    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT, _SQS_CLIENT
     _REPO = repo
     _PRODUCT_CLIENT = product_client
     _NOTIFICATION_CLIENT = notification_client
     _STORAGE_CLIENT = storage_client
+    _SQS_CLIENT = sqs_client
+
 
 
 def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
@@ -134,6 +146,7 @@ def _run_background_vton(
     result_image_url: str,
     request_id_header: str | None = None,
     user_face_bytes: bytes | None = None,
+    item_image_urls: dict[int, str] | None = None,
 ) -> None:
     """백그라운드에서 상품 조회, AI 피팅 합성, 결과 이미지 저장, DB 업데이트 및 FCM 알림을 수행합니다."""
     settings = get_settings()
@@ -154,10 +167,12 @@ def _run_background_vton(
                 (c for c in SUPPORTED_CATEGORIES if c not in used_categories),
                 "상의",
             )
+            override_url = (item_image_urls or {}).get(pid)
             item = prod_client.resolve_product_item(
                 pid,
                 fallback_category=fallback_category,
                 request_id_header=request_id_header,
+                override_image_url=override_url,
             )
             cat = item.get("categoryName") or "상의"
             if cat in used_categories:
@@ -332,26 +347,44 @@ def list_user_fittings(
     openapi_extra={
         "requestBody": {
             "required": True,
-            "description": "JSON 본문(상품 ID 목록) 또는 multipart/form-data(상품 ID 목록 + 사용자 얼굴 이미지)",
+            "description": "JSON 본문(피팅할 상품 items 목록) 또는 multipart/form-data(상품 items 목록 + 사용자 얼굴/상반신 이미지)",
             "content": {
                 "application/json": {
                     "schema": {
                         "type": "object",
-                        "required": ["productIds"],
+                        "required": ["items"],
                         "properties": {
                             "photoId": {
                                 "type": "integer",
                                 "nullable": True,
-                                "description": "사용자 사진 ID (선택)",
+                                "description": "사용자 사진 ID (마네킹 아바타로 피팅 시 null)",
                                 "example": None,
                             },
-                            "productIds": {
+                            "items": {
                                 "type": "array",
-                                "items": {"type": "integer"},
+                                "items": {
+                                    "type": "object",
+                                    "required": ["productId"],
+                                    "properties": {
+                                        "productId": {
+                                            "type": "integer",
+                                            "description": "상품 ID",
+                                            "example": 101,
+                                        },
+                                        "imageUrl": {
+                                            "type": "string",
+                                            "description": "추천된 특정 색상의 상품 이미지 URL",
+                                            "example": "https://image.msscdn.net/images/goods_img/green.jpg",
+                                        },
+                                    },
+                                },
                                 "minItems": 1,
                                 "maxItems": 5,
-                                "description": "피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
-                                "example": [101, 102],
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (최소 1개, 최대 5개)",
+                                "example": [
+                                    {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},
+                                    {"productId": 201, "imageUrl": "https://image.msscdn.net/images/goods_img/black.jpg"},
+                                ],
                             },
                         },
                     }
@@ -359,12 +392,12 @@ def list_user_fittings(
                 "multipart/form-data": {
                     "schema": {
                         "type": "object",
-                        "required": ["productIds"],
+                        "required": ["items"],
                         "properties": {
-                            "productIds": {
+                            "items": {
                                 "type": "string",
-                                "description": "피팅할 상품 ID 목록 (예: '[101, 102]' 또는 '101,102')",
-                                "example": "[101, 102]",
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 JSON 문자열 (예: '[{\"productId\": 101, \"imageUrl\": \"https://...\"}]')",
+                                "example": '[{"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"}]',
                             },
                             "userImage": {
                                 "type": "string",
@@ -394,42 +427,60 @@ async def request_fitting(
     product_ids: list[int] = []
     photo_id: int | None = None
     user_face_bytes: bytes | None = None
+    item_image_urls: dict[int, str] = {}
 
-    # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds 동시 수신)
+    # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds/items 동시 수신)
     if "multipart/form-data" in content_type:
         form = await request.form()
+        raw_items_str = form.get("items")
         raw_values = form.getlist("productIds")
-        if not raw_values:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="productIds가 누락되었습니다.",
-            )
 
-        parsed_pids: list[Any] = []
-        try:
-            for raw in raw_values:
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("["):
-                        loaded = json.loads(cleaned)
-                        if not isinstance(loaded, list):
-                            raise ValueError("JSON 배열 형식이어야 합니다.")
-                        parsed_pids.extend(loaded)
+        if raw_items_str and isinstance(raw_items_str, str) and raw_items_str.strip():
+            try:
+                loaded_items = json.loads(raw_items_str.strip())
+                if not isinstance(loaded_items, list):
+                    raise ValueError("items는 JSON 배열이어야 합니다.")
+                validated_req = FittingCreateRequest(items=loaded_items)
+                product_ids = validated_req.productIds or []
+                for it in (validated_req.items or []):
+                    if it.imageUrl and it.imageUrl.strip():
+                        item_image_urls[it.productId] = it.imageUrl.strip()
+            except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="items는 유효한 JSON 배열 형식이어야 합니다.",
+                ) from exc
+        elif raw_values:
+            parsed_pids: list[Any] = []
+            try:
+                for raw in raw_values:
+                    if isinstance(raw, str):
+                        cleaned = raw.strip()
+                        if cleaned.startswith("["):
+                            loaded = json.loads(cleaned)
+                            if not isinstance(loaded, list):
+                                raise ValueError("JSON 배열 형식이어야 합니다.")
+                            parsed_pids.extend(loaded)
+                        else:
+                            parsed_pids.extend(
+                                [x.strip() for x in cleaned.split(",") if x.strip()]
+                            )
                     else:
-                        parsed_pids.extend(
-                            [x.strip() for x in cleaned.split(",") if x.strip()]
-                        )
-                else:
-                    raise TypeError("productIds는 문자열이어야 합니다.")
+                        raise TypeError("productIds는 문자열이어야 합니다.")
 
-            # Pydantic 모델로 productIds 유효성 및 개수 제약(1~5개 정수) 검증
-            validated_req = FittingCreateRequest(productIds=parsed_pids)
-            product_ids = validated_req.productIds
-        except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                # Pydantic 모델로 productIds 유효성 및 개수 제약(1~5개 정수) 검증
+                validated_req = FittingCreateRequest(productIds=parsed_pids)
+                product_ids = validated_req.productIds or []
+            except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
+                ) from exc
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
-            ) from exc
+                detail="productIds 또는 items가 누락되었습니다.",
+            )
 
         # 상품 검증 선행: 중복 제거 및 최대 개수 확인 (실패 시 이미지 I/O 자체를 방지)
         unique_product_ids = list(dict.fromkeys(product_ids))
@@ -505,8 +556,12 @@ async def request_fitting(
 
         try:
             req = FittingCreateRequest.model_validate(body)
-            product_ids = req.productIds
+            product_ids = req.productIds or []
             photo_id = req.photoId
+            if req.items:
+                for it in req.items:
+                    if it.imageUrl and it.imageUrl.strip():
+                        item_image_urls[it.productId] = it.imageUrl.strip()
         except ValidationError as exc:
             raise RequestValidationError(exc.errors()) from exc
 
@@ -540,19 +595,40 @@ async def request_fitting(
 
     result_image_url = _resolve_result_image_url(fitting_id, request)
 
-    # 백그라운드 태스크 등록
-    background_tasks.add_task(
-        _run_background_vton,
-        fitting_id=fitting_id,
-        user_id=x_user_id,
-        photo_id=photo_id,
-        product_ids=unique_product_ids,
-        result_image_url=result_image_url,
-        request_id_header=x_request_id,
-        user_face_bytes=user_face_bytes,
-    )
+    settings = get_settings()
+    if settings.queue_backend == "sqs":
+        sqs_client = get_sqs_client()
+        sqs_payload = {
+            "fitting_id": fitting_id,
+            "user_id": x_user_id,
+            "photo_id": photo_id,
+            "product_ids": unique_product_ids,
+            "result_image_url": result_image_url,
+            "request_id_header": x_request_id,
+            "item_image_urls": item_image_urls,
+        }
+        sqs_client.send_message(sqs_payload)
+        logger.info(
+            "SQS 피팅 작업 발행 완료 (queue_backend=sqs, fittingId=%s, userId=%s)",
+            fitting_id,
+            x_user_id,
+        )
+    else:
+        # 백그라운드 태스크 등록 (QUEUE_BACKEND=memory)
+        background_tasks.add_task(
+            _run_background_vton,
+            fitting_id=fitting_id,
+            user_id=x_user_id,
+            photo_id=photo_id,
+            product_ids=unique_product_ids,
+            result_image_url=result_image_url,
+            request_id_header=x_request_id,
+            user_face_bytes=user_face_bytes,
+            item_image_urls=item_image_urls,
+        )
 
     return FittingCreateResponse(fittingId=fitting_id, status="PENDING")
+
 
 
 @router.get(

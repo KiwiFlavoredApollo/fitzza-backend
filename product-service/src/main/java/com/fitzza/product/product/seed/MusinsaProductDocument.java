@@ -78,6 +78,7 @@ public record MusinsaProductDocument(
     /** 색 이름과 그 색의 썸네일. 색이 없는 상품에는 없다. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ColorImageMapping(
+            @JsonProperty("product_id") Long productId,
             @JsonProperty("color_raw") String colorRaw,
             @JsonProperty("image_url") String imageUrl) {
     }

@@ -81,3 +81,23 @@ class SizeFeedbackRequest(BaseModel):
     productId: int = Field(..., gt=0)
     optionId: int = Field(..., gt=0)
     sizeFeedback: Literal["SMALL", "FIT", "BIG"]
+
+
+class VisualSearchResultItem(BaseModel):
+    productId: int = Field(..., description="상품 고유 식별자")
+    productName: str = Field(..., description="상품명")
+    brandName: Optional[str] = Field(None, description="브랜드명")
+    category: Optional[str] = Field(None, description="대분류 카테고리 (상의, 아우터, 하의 등)")
+    subcategory: Optional[str] = Field(None, description="중분류/소분류 카테고리")
+    price: int = Field(..., description="상품 가격 (원)")
+    imageUrl: Optional[str] = Field(None, description="상품 대표 이미지 URL")
+    color: Optional[str] = Field(None, description="대표 색상")
+    similarityScore: float = Field(..., description="Fashion-CLIP 시각적 유사도 점수 (0.0 ~ 1.0)")
+    productUrl: Optional[str] = Field(None, description="상품 상세 페이지 URL")
+
+
+class VisualSearchResponse(BaseModel):
+    detectedCategory: Optional[str] = Field(None, description="AI가 이미지에서 자동 감지한 상위 카테고리 (상의, 아우터, 하의, 신발, 모자)")
+    detectedColor: Optional[str] = Field(None, description="AI가 이미지에서 자동 감지한 대표 색상 (black, white, navy 등)")
+    items: list[VisualSearchResultItem] = Field(default_factory=list, description="유사도 순 정렬된 상품 목록")
+    totalCount: int = Field(..., description="검색된 유사 상품 총 개수")

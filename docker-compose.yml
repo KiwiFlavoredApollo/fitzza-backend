@@ -64,6 +64,14 @@ services:
       timeout: 3s
       retries: 10
 
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage:z
+
   localstack:
     image: localstack/localstack:3.8
     environment:
@@ -111,6 +119,8 @@ services:
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
       JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
       REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
+      USER_SERVICE_DB_USER: ${USER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      USER_SERVICE_DB_PASSWORD: ${USER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     healthcheck:
       <<: *app-healthcheck
@@ -120,6 +130,8 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: product-service } }
     environment:
       <<: *java-environment
+      PRODUCT_SERVICE_DB_USER: ${PRODUCT_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      PRODUCT_SERVICE_DB_PASSWORD: ${PRODUCT_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
       RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
@@ -134,6 +146,8 @@ services:
     build: { context: ., dockerfile: Dockerfile.java, args: { MODULE: order-service } }
     environment:
       <<: *java-environment
+      ORDER_SERVICE_DB_USER: ${ORDER_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      ORDER_SERVICE_DB_PASSWORD: ${ORDER_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
       ORDER_SERVICE_TOKEN: ${ORDER_SERVICE_TOKEN:?ORDER_SERVICE_TOKEN must be set}
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:?REVIEW_SERVICE_TOKEN must be set}
     depends_on: *domain-dependencies
@@ -152,6 +166,8 @@ services:
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       TYPESAFE_API_URL: ${TYPESAFE_API_URL:-https://api.typesafe.ai}
       JEV_SUPPORT_THRESHOLD: ${JEV_SUPPORT_THRESHOLD:-0.6}
+      COMMUNITY_SERVICE_DB_USER: ${COMMUNITY_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      COMMUNITY_SERVICE_DB_PASSWORD: ${COMMUNITY_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8084"]
     healthcheck:
@@ -164,6 +180,8 @@ services:
       <<: *java-environment
       REVIEW_SERVICE_TOKEN: ${REVIEW_SERVICE_TOKEN:-}
       RECOMMENDATION_SERVICE_URL: ${RECOMMENDATION_SERVICE_URL:-http://recommendation-service:8000}
+      REVIEW_SERVICE_DB_USER: ${REVIEW_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      REVIEW_SERVICE_DB_PASSWORD: ${REVIEW_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8085"]
     healthcheck:
@@ -178,6 +196,8 @@ services:
       RECOMMENDATION_SERVICE_TOKEN: ${RECOMMENDATION_SERVICE_TOKEN:-}
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
       FIREBASE_CREDENTIALS: ${FIREBASE_CREDENTIALS:-}
+      NOTIFICATION_SERVICE_DB_USER: ${NOTIFICATION_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
     depends_on: *domain-dependencies
     expose: ["8086"]
     healthcheck:
@@ -198,6 +218,11 @@ services:
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: ${VTON_QUEUE_BACKEND:-sqs}
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -207,6 +232,31 @@ services:
       <<: *app-healthcheck
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
+  vton-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+      args: { SERVICE_DIR: vton-service }
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *java-environment
+      POSTGRES_SCHEMA: vton
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
+      COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/0
+      QUEUE_BACKEND: sqs
+      AWS_SQS_QUEUE_URL: ${AWS_SQS_QUEUE_URL:-http://localstack:4566/000000000000/vton-jobs}
+      AWS_SQS_DLQ_URL: ${AWS_SQS_DLQ_URL:-http://localstack:4566/000000000000/vton-jobs-dlq}
+      VTON_STORAGE_BACKEND: ${VTON_STORAGE_BACKEND:-s3}
+      AWS_S3_BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-fitzza-prod-assets-vton}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
   recommendation-service:
     build:
       context: .
@@ -215,7 +265,7 @@ services:
     environment:
       <<: *java-environment
       REDIS_URL: redis://:${REDIS_PASSWORD:-fitzza_local}@redis:6379/1
-      QDRANT_URL: ${QDRANT_URL:-http://host.docker.internal:6333}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       USER_SERVICE_URL: http://user-service:8081
       PRODUCT_SERVICE_URL: http://product-service:8082
@@ -227,6 +277,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      qdrant: { condition: service_started }
     ports: ["8092:8000"]
     healthcheck:
       <<: *app-healthcheck
@@ -257,3 +308,4 @@ volumes:
   postgres-data:
   redis-data:
   localstack-data:
+  qdrant_storage:
