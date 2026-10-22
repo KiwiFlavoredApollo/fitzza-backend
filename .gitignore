@@ -84,8 +84,7 @@ logs/
 *.sqlite3
 *.dump
 *.backup
-vton-service/data/fittings/*.png
-!vton-service/data/fittings/2.png
+vton-service/data/fittings/
 vton-service/data/photos/
 
 
