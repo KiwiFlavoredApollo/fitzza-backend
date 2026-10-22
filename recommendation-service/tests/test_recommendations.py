@@ -584,3 +584,62 @@ def test_coordinator_empty_coordination_fallback_logic(monkeypatch: pytest.Monke
     coordinator.responder.generate_coordination_response.assert_not_called()
     coordinator.responder.generate_single_response.assert_not_called()
 
+
+def test_extract_sizes_list_logic() -> None:
+    from app.api.recommendations import _extract_sizes_list
+
+    # 1. Qdrant payload 구조 (sequence 순서대로 리스트 추출)
+    qdrant_sizes = [
+        {"size": "small", "sequence": 0, "measurements": {"top_length": 70}},
+        {"size": "medium", "sequence": 1, "measurements": {"top_length": 75}},
+        {"size": "large", "sequence": 2, "measurements": {"top_length": 78}},
+    ]
+    assert _extract_sizes_list({"sizes": qdrant_sizes}) == ["small", "medium", "large"]
+
+    # 2. 원사이즈 (FREE)
+    free_sizes = [{"size": "FREE", "sequence": 0}]
+    assert _extract_sizes_list({"sizes": free_sizes}) == ["FREE"]
+
+    # 3. 신발 사이즈 목록
+    shoes_sizes = [{"size": "260"}, {"size": "265"}, {"size": "270"}]
+    assert _extract_sizes_list({"sizes": shoes_sizes}) == ["260", "265", "270"]
+
+    # 4. 문자열 리스트로 들어온 경우도 정상 지원
+    assert _extract_sizes_list({"sizes": ["S", "M", "L"]}) == ["S", "M", "L"]
+
+    # 5. 빈 리스트이거나 None이거나 없는 경우 -> None 반환
+    assert _extract_sizes_list({"sizes": []}) is None
+    assert _extract_sizes_list({"sizes": None}) is None
+    assert _extract_sizes_list({}) is None
+    assert _extract_sizes_list({"sizes": [{"size": "  "}, {"size": None}]}) is None
+
+
+def test_map_product_item_includes_sizes() -> None:
+    from app.api.recommendations import _map_product_item
+
+    # sizes가 있는 경우
+    item_with_sizes = {
+        "product_id": 101,
+        "product_name": "테스트 셔츠",
+        "price": 30000,
+        "size_recommendation": {"size_label": "medium"},
+        "sizes": [
+            {"size": "small", "sequence": 0},
+            {"size": "medium", "sequence": 1},
+            {"size": "large", "sequence": 2},
+        ],
+    }
+    mapped = _map_product_item(item_with_sizes)
+    assert mapped["size"] == "medium"
+    assert mapped["sizes"] == ["small", "medium", "large"]
+
+    # sizes가 없는 경우
+    item_without_sizes = {
+        "product_id": 102,
+        "product_name": "사이즈 없는 모자",
+        "price": 20000,
+    }
+    mapped_none = _map_product_item(item_without_sizes)
+    assert mapped_none["size"] is None
+    assert mapped_none["sizes"] is None
+

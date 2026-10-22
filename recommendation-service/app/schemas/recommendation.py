@@ -25,6 +25,7 @@ class RecommendedProductItem(BaseModel):
     imageUrl: Optional[str] = None
     color: Optional[str] = None
     size: Optional[str] = None
+    sizes: Optional[list[str]] = None
     fitPercent: Optional[float] = None
     evidence: Optional[str] = None
 
