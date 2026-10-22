@@ -3,6 +3,7 @@ package com.fitzza.product.product.seed;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fitzza.product.product.entity.FitType;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductOptionEntity;
 import com.fitzza.product.product.entity.ProductStatus;
@@ -41,5 +42,27 @@ class MusinsaColorImageMappingTest {
         assertThat(options).singleElement()
                 .extracting(ProductOptionEntity::getColor, ProductOptionEntity::getImageUrl)
                 .containsExactly("BLACK", "https://img.example/black.jpg");
+    }
+
+    @Test
+    void toProductMapsCrawlerMaterialAndFitType() throws Exception {
+        MusinsaProductDocument document = objectMapper.readValue("""
+                {
+                  "product_id": 123,
+                  "name": "오버핏 코튼 셔츠",
+                  "brand": {"name": "브랜드"},
+                  "category": {"categoryDepth1Code": "001", "categoryDepth1Name": "상의"},
+                  "price": {"sale": 10000},
+                  "material": "면",
+                  "fit_type": "OVERSIZED",
+                  "features": {"핏": ["오버 사이즈"]},
+                  "option_items": [{"id": 1, "activated": true, "values": ["M"]}]
+                }
+                """, MusinsaProductDocument.class);
+
+        ProductEntity product = mapper.toProduct(document, mapper.toBrand(document));
+
+        assertThat(product.getMaterial()).isEqualTo("면");
+        assertThat(product.getFitType()).isEqualTo(FitType.OVERSIZED);
     }
 }

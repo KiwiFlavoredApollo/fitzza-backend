@@ -8,6 +8,29 @@ from bs4 import BeautifulSoup
 from src.color_image_mappings import extract_color_image_mappings
 
 
+FIT_TYPE_BY_RAW = {
+    "레귤러": "REGULAR",
+    "루즈": "RELAXED",
+    "오버 사이즈": "OVERSIZED",
+    "오버사이즈": "OVERSIZED",
+    "슬림": "SLIM",
+    "크롭": "CROPPED",
+}
+
+FIT_TEXT_PATTERNS = (
+    ("오버핏", "OVERSIZED"),
+    ("오버 사이즈", "OVERSIZED"),
+    ("루즈핏", "RELAXED"),
+    ("루즈 핏", "RELAXED"),
+    ("레귤러핏", "REGULAR"),
+    ("레귤러 핏", "REGULAR"),
+    ("슬림핏", "SLIM"),
+    ("슬림 핏", "SLIM"),
+    ("크롭핏", "CROPPED"),
+    ("크롭 핏", "CROPPED"),
+)
+
+
 def _full_image_url(url: str | None) -> str | None:
     if not url:
         return url
@@ -114,6 +137,36 @@ def _normalize_collection(
     }
 
 
+def _first_feature(features: dict[str, list[str]], names: set[str]) -> str | None:
+    for key, values in features.items():
+        if key.strip() in names and values:
+            return values[0].strip() or None
+    return None
+
+
+def _normalize_fit(
+    features: dict[str, list[str]], goods_contents: object
+) -> tuple[str | None, dict[str, str] | None]:
+    raw_fit = _first_feature(features, {"핏"})
+    if raw_fit:
+        normalized = FIT_TYPE_BY_RAW.get(raw_fit)
+        return normalized, {
+            "raw": raw_fit,
+            "source": "goodsMaterial",
+        }
+
+    if not isinstance(goods_contents, str):
+        return None, None
+    text = BeautifulSoup(goods_contents, "html.parser").get_text(" ", strip=True)
+    for phrase, normalized in FIT_TEXT_PATTERNS:
+        if phrase in text:
+            return normalized, {
+                "raw": phrase,
+                "source": "goodsContents_explicit_text",
+            }
+    return None, None
+
+
 def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
     soup = BeautifulSoup(html, "html.parser")
     next_script = soup.find("script", id="__NEXT_DATA__")
@@ -159,6 +212,8 @@ def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
             features[group.get("name", "")] = selected
 
     original_seasons = features.get("계절", [])
+    material = _first_feature(features, {"소재", "재질", "주요 소재"})
+    fit_type, fit_evidence = _normalize_fit(features, detail.get("goodsContents"))
 
     option_groups = []
     for group in options.get("basic", []):
@@ -236,6 +291,16 @@ def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
 
         "images": images,
         "features": features,
+        "material": material,
+        "fit_type": fit_type,
+        "attribute_evidence": {
+            "material": (
+                {"raw": material, "source": "goodsMaterial"}
+                if material is not None
+                else None
+            ),
+            "fit": fit_evidence,
+        },
 
         # actual-size API 병합 전 기본값.
         # V4 crawler가 이후 실제 실측 데이터로 교체한다.
