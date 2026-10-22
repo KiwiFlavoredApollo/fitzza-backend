@@ -604,12 +604,12 @@ async def search_products_by_image(
             message="지원하지 않는 이미지 형식입니다. PNG, JPEG, WebP 정지 이미지만 업로드할 수 있습니다.",
         )
 
-    engine = _get_search_engine(request.app)
+    def _execute_search():
+        engine = _get_search_engine(request.app)
+        return engine.search_by_image(image_input=image_bytes)
+
     try:
-        detected_category, detected_color, raw_results = await run_in_threadpool(
-            engine.search_by_image,
-            image_input=image_bytes,
-        )
+        detected_category, detected_color, raw_results = await run_in_threadpool(_execute_search)
     except ValueError as val_err:
         raise RecommendationApiError(
             status_code=status.HTTP_400_BAD_REQUEST,
