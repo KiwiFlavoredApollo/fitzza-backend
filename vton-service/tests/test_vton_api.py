@@ -796,4 +796,59 @@ def test_clothing_transfer_exceeds_max_images() -> None:
     assert "최대 5개" in body["message"]
 
 
+def test_post_vton_with_custom_items_and_image_urls() -> None:
+    client = TestClient(app)
+    custom_url = "https://image.msscdn.net/images/goods_img/green_sample.jpg"
+
+    with patch("app.api.vton._run_background_vton") as mock_bg:
+        resp = client.post(
+            "/api/vton",
+            json={
+                "items": [
+                    {"productId": 101, "imageUrl": custom_url},
+                    {"productId": 201, "imageUrl": "https://image.msscdn.net/black.jpg"},
+                ]
+            },
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        data = resp.json()
+        assert "fittingId" in data
+        assert data["status"] == "PENDING"
+
+        mock_bg.assert_called_once()
+        kwargs = mock_bg.call_args.kwargs
+        assert kwargs["product_ids"] == [101, 201]
+        assert kwargs["item_image_urls"] == {
+            101: custom_url,
+            201: "https://image.msscdn.net/black.jpg",
+        }
+
+
+def test_resolve_product_item_prefers_override_image_url() -> None:
+    client = ProductServiceClient()
+    override_url = "https://image.msscdn.net/images/goods_img/green.jpg"
+    fake_png = _create_sample_png()
+
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png) as mock_fetch, \
+         patch.object(client, "get_product", return_value={
+             "productName": "무신사 스탠다드 후드티",
+             "price": 45000,
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "상의",
+         }):
+        item = client.resolve_product_item(
+            product_id=101,
+            override_image_url=override_url,
+        )
+
+        assert item["productId"] == 101
+        assert item["productName"] == "무신사 스탠다드 후드티"
+        assert item["price"] == 45000
+        assert item["imageUrl"] == override_url
+        assert item["imageBytes"] == fake_png
+        mock_fetch.assert_called_once_with(override_url)
+
+
+
 
