@@ -78,7 +78,9 @@ public class ProductDataInitializer implements CommandLineRunner {
             try {
                 MusinsaProductDocument document = readDocument(resource);
                 if (savedProductIds.contains(document.productId())) {
-                    if (productSeedService.fillColorImageMappingsIfMissing(document)) {
+                    boolean colorUpdated = productSeedService.fillColorImageMappingsIfMissing(document);
+                    boolean attributesUpdated = productSeedService.fillMaterialAndFitIfMissing(document);
+                    if (colorUpdated || attributesUpdated) {
                         updated++;
                     } else {
                         skipped++;
@@ -94,7 +96,7 @@ public class ProductDataInitializer implements CommandLineRunner {
             }
         }
         if (updated > 0) {
-            log.info("무신사 상품 색상 매핑 백필: {}건", updated);
+            log.info("무신사 상품 누락 속성(색상 매핑·소재·핏) 백필: {}건", updated);
         }
         return new ProductSeedResult(imported, skipped, failed);
     }

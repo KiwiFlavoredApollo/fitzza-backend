@@ -116,7 +116,7 @@ public class MusinsaProductMapper {
                 .price(document.price().sale())
                 .normalPrice(document.price().normal())
                 .discountRate(document.price().discountRate())
-                .material(blankToNull(document.material()))
+                .material(toMaterial(document))
                 .season(toSeason(document))
                 .fitType(document.fitType())
                 .features(document.features())
@@ -341,6 +341,11 @@ public class MusinsaProductMapper {
             case "겨울" -> Season.WINTER;
             default -> null;
         };
+    }
+
+    /** 시드 문서의 소재(상품정보제공고시 원문을 정리한 값). 비어 있으면 null. */
+    public String toMaterial(MusinsaProductDocument document) {
+        return blankToNull(document.material());
     }
 
     private String blankToNull(String value) {

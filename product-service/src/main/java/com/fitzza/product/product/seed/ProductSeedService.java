@@ -2,6 +2,7 @@ package com.fitzza.product.product.seed;
 
 import com.fitzza.product.product.entity.BrandEntity;
 import com.fitzza.product.product.entity.ColorImageMappingValue;
+import com.fitzza.product.product.entity.FitType;
 import com.fitzza.product.product.entity.ProductEntity;
 import com.fitzza.product.product.entity.ProductOptionEntity;
 import com.fitzza.product.product.repository.BrandRepository;
@@ -67,6 +68,27 @@ public class ProductSeedService {
                     product.replaceColorImageMappings(mappings);
                     return true;
                 })
+                .orElse(false);
+    }
+
+    /**
+     * 이미 저장된 상품의 소재·핏이 비어 있으면 문서 값으로 채운다. 이미 있는 값은 덮어쓰지 않는다.
+     * 기존 500건 시드도 재기동 한 번으로 상품정보제공고시 소재와 핏이 채워지도록 한다.
+     *
+     * @return 실제로 갱신했으면 true
+     */
+    @Transactional
+    public boolean fillMaterialAndFitIfMissing(MusinsaProductDocument document) {
+        if (document.productId() == null) {
+            return false;
+        }
+        String material = mapper.toMaterial(document);
+        FitType fitType = document.fitType();
+        if (material == null && fitType == null) {
+            return false;
+        }
+        return productRepository.findById(document.productId())
+                .map(product -> product.fillMissingMaterialAndFit(material, fitType))
                 .orElse(false);
     }
 
