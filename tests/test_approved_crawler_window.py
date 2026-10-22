@@ -74,12 +74,24 @@ class ApprovedWindowTests(unittest.TestCase):
         specs = schedule_specs(target)
         self.assertEqual(len(specs), 6)
         self.assertEqual(len({s["Name"] for s in specs}), 6)
+        expected_sizes = {
+            "at(2026-10-24T12:00:00)": 1,
+            "at(2026-10-24T23:00:00)": 0,
+            "at(2026-10-25T12:00:00)": 1,
+            "at(2026-10-25T23:00:00)": 0,
+            "at(2026-10-26T12:00:00)": 1,
+            "at(2026-10-26T23:00:00)": 0,
+        }
+        self.assertEqual({spec["ScheduleExpression"] for spec in specs}, set(expected_sizes))
         for spec in specs:
             self.assertEqual(spec["ScheduleExpressionTimezone"], "Asia/Seoul")
             self.assertEqual(spec["ActionAfterCompletion"], "DELETE")
             self.assertEqual(spec["Target"]["Arn"], "lambda-arn")
             self.assertEqual(spec["Target"]["RoleArn"], "existing-role")
-            self.assertIn(json.loads(spec["Target"]["Input"])["desiredSize"], (0, 1))
+            self.assertEqual(json.loads(spec["Target"]["Input"])["desiredSize"],
+                             expected_sizes[spec["ScheduleExpression"]])
+            self.assertEqual(spec["Target"]["RetryPolicy"],
+                             {"MaximumEventAgeInSeconds": 300, "MaximumRetryAttempts": 2})
         self.assertEqual(target["Input"], "old")
 
     def test_default_makes_no_aws_calls(self):
