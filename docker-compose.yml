@@ -7,6 +7,12 @@ x-postgres-environment: &postgres-environment
   POSTGRES_USER: ${POSTGRES_USER:-fitzza}
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fitzza_local}
 
+x-aws-environment: &aws-environment
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+  AWS_ENDPOINT_URL: http://localstack:4566
+
 x-java-environment: &java-environment
   CONFIG_SERVICE_URL: http://config-service:8888
   DISCOVERY_SERVICE_URL: http://discovery-service:8761/eureka/
@@ -18,10 +24,6 @@ x-java-environment: &java-environment
   REDIS_HOST: redis
   REDIS_PORT: 6379
   REDIS_PASSWORD: ${REDIS_PASSWORD:-fitzza_local}
-  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
-  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
-  AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
-  AWS_ENDPOINT_URL: http://localstack:4566
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
   JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-900}
   JWT_REFRESH_EXPIRATION_SECONDS: ${JWT_REFRESH_EXPIRATION_SECONDS:-2592000}
@@ -139,6 +141,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *aws-environment
       PRODUCT_SERVICE_DB_USER: ${PRODUCT_SERVICE_DB_USER:-${POSTGRES_USER:-fitzza}}
       PRODUCT_SERVICE_DB_PASSWORD: ${PRODUCT_SERVICE_DB_PASSWORD:-${POSTGRES_PASSWORD:-fitzza_local}}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
@@ -227,6 +230,7 @@ services:
       <<:
         - *java-environment
         - *postgres-environment
+        - *aws-environment
       POSTGRES_SCHEMA: vton
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
