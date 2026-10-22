@@ -1,7 +1,18 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    Header,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +35,8 @@ from app.schemas.recommendation import (
     RecommendedComboItem,
     RecommendedProductItem,
     SizeFeedbackRequest,
+    VisualSearchResultItem,
+    VisualSearchResponse,
 )
 
 FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
@@ -133,6 +146,15 @@ def _get_coordinator(app: Any) -> Any:
         coordinator = FashionPipelineCoordinator(cache_service=cache_service)
         app.state.coordinator = coordinator
     return coordinator
+
+
+def _get_search_engine(app: Any) -> Any:
+    search_engine = getattr(app.state, "search_engine", None)
+    if search_engine is None:
+        coordinator = _get_coordinator(app)
+        search_engine = coordinator.engine
+        app.state.search_engine = search_engine
+    return search_engine
 
 
 
@@ -508,6 +530,112 @@ def get_recommendation_detail(
         items=[RecommendedProductItem(**item) for item in record["items"]],
         combos=[RecommendedComboItem(**combo) for combo in record["combos"]],
         message=record["message"],
+    )
+
+
+MAX_SEARCH_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
+ALLOWED_SEARCH_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+}
+
+
+@public_router.post(
+    "/search/image",
+    response_model=VisualSearchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="의류 이미지 기반 유사 상품 검색 (Visual Search)",
+    description=(
+        "업로드된 의류 사진을 Fashion-CLIP 비전 인코더로 분석하여, "
+        "유사도 0.6 이상으로 시각적으로 일치하는 상품 목록을 유사도 순으로 추천 및 반환합니다.\n\n"
+        "- 지원 이미지 형식: PNG, JPEG, JPG, WebP (최대 15MB)\n"
+        "- 별도 옵션 입력 없이 오로지 의류 사진 파일 하나만 첨부하면 됩니다."
+    ),
+)
+async def search_products_by_image(
+    request: Request,
+    file: UploadFile = File(..., description="유사 상품을 검색할 의류/스타일 사진 파일"),
+) -> VisualSearchResponse:
+    content_type = (file.content_type or "").lower().strip()
+    if content_type and content_type not in ALLOWED_SEARCH_IMAGE_TYPES:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_IMAGE_TYPE",
+            message="지원하지 않는 이미지 형식입니다. PNG, JPEG, WebP 파일만 업로드할 수 있습니다.",
+        )
+
+    image_bytes = await file.read(MAX_SEARCH_IMAGE_SIZE_BYTES + 1)
+    if not image_bytes:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="EMPTY_IMAGE",
+            message="이미지 파일 내용이 비어 있습니다.",
+        )
+    if len(image_bytes) > MAX_SEARCH_IMAGE_SIZE_BYTES:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="IMAGE_TOO_LARGE",
+            message="이미지 파일 크기는 최대 15MB까지 가능합니다.",
+        )
+
+    # 유효한 이미지인지 바이트 검증
+    try:
+        import io
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img.verify()
+    except Exception as exc:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="CORRUPTED_IMAGE",
+            message="손상되었거나 유효하지 않은 이미지 파일입니다.",
+        ) from exc
+
+    engine = _get_search_engine(request.app)
+    try:
+        detected_category, detected_color, raw_results = engine.search_by_image(
+            image_input=image_bytes,
+        )
+    except ValueError as val_err:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_SEARCH_PARAMS",
+            message=str(val_err),
+        ) from val_err
+    except Exception as exc:
+        logger.error("이미지 유사 상품 검색 중 오류 발생: %s", exc, exc_info=True)
+        raise RecommendationApiError(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="SEARCH_ERROR",
+            message="이미지 유사 상품 검색 처리 중 서버 오류가 발생했습니다.",
+        ) from exc
+
+    items = [
+        VisualSearchResultItem(
+            productId=item.get("product_id") or 0,
+            productName=item.get("product_name") or "",
+            brandName=item.get("brand_name"),
+            category=item.get("category"),
+            subcategory=item.get("subcategory"),
+            price=item.get("price") or 0,
+            imageUrl=item.get("image_url"),
+            color=(
+                item.get("color_raw")
+                or (item.get("color_normalized")[0] if item.get("color_normalized") else None)
+            ),
+            similarityScore=item.get("similarity_score", 0.0),
+            productUrl=item.get("product_url"),
+        )
+        for item in raw_results
+    ]
+    return VisualSearchResponse(
+        detectedCategory=detected_category,
+        detectedColor=detected_color,
+        items=items,
+        totalCount=len(items),
     )
 
 

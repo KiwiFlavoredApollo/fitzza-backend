@@ -73,6 +73,25 @@ class CacheService:
         ttl = ttl_seconds if ttl_seconds is not None else self.embedding_ttl
         return self.redis.set(cache_key, vector, ttl_seconds=ttl)
 
+    # 2-1. Fashion-CLIP 이미지 임베딩 벡터 캐시
+    def get_image_embedding(self, image_hash: str) -> Optional[list[float]]:
+        cache_key = f"embed:img:{image_hash}"
+        cached = self.redis.get(cache_key)
+        if isinstance(cached, list):
+            logger.debug("이미지 임베딩 캐시 적중: %s", image_hash)
+            return cached
+        return None
+
+    def set_image_embedding(
+        self,
+        image_hash: str,
+        vector: list[float],
+        ttl_seconds: Optional[int] = None,
+    ) -> bool:
+        cache_key = f"embed:img:{image_hash}"
+        ttl = ttl_seconds if ttl_seconds is not None else self.embedding_ttl
+        return self.redis.set(cache_key, vector, ttl_seconds=ttl)
+
     # 3. Qdrant 벡터 검색 결과 캐시
     def get_search_result(
         self,

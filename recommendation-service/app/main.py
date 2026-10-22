@@ -24,6 +24,7 @@ def _mount_router_routes(
     target_app: FastAPI,
     router: APIRouter,
     prefix: str = "",
+    include_in_schema: bool = True,
 ) -> None:
     for route in router.routes:
         if isinstance(route, APIRoute):
@@ -35,6 +36,7 @@ def _mount_router_routes(
                 tags=route.tags,
                 summary=route.summary,
                 methods=list(route.methods or []),
+                include_in_schema=include_in_schema,
             )
 
 
@@ -124,5 +126,10 @@ def health(request: Request, response: Response) -> HealthResponse:
     )
 
 
-_mount_router_routes(app, public_router, prefix="/api/v1/recommendations")
-_mount_router_routes(app, internal_router)
+# 표준 마이크로서비스 경로 (/api/recommendations) -> Swagger 문서 노출
+_mount_router_routes(app, public_router, prefix="/api/recommendations", include_in_schema=True)
+
+# 게이트웨이 하위 호환 경로 (/api/v1/recommendations) -> 정상 동작하되 Swagger 중복 방지를 위해 문서에서 숨김
+_mount_router_routes(app, public_router, prefix="/api/v1/recommendations", include_in_schema=False)
+
+_mount_router_routes(app, internal_router, include_in_schema=True)
