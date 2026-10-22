@@ -233,7 +233,8 @@ def test_post_recommendations_returns_accepted_and_triggers_fcm_notification() -
         assert combo["harmonyScore"] == 92.0
         assert len(combo["items"]) == 2
         assert combo["items"][0]["productId"] == 201
-        assert combo["items"][0]["size"] == "L"
+        assert combo["items"][0]["recommendedSize"] == "L"
+        assert combo["items"][0]["availableSizes"] is None
         assert combo["items"][0]["fitPercent"] == 95.0
 
 
@@ -260,7 +261,8 @@ def test_single_item_recommendation_saves_items_and_notifies_fcm() -> None:
         assert len(detail["items"]) == 1
         assert detail["items"][0]["productId"] == 101
         assert detail["items"][0]["color"] == "블랙"
-        assert detail["items"][0]["size"] == "L"
+        assert detail["items"][0]["recommendedSize"] == "L"
+        assert detail["items"][0]["availableSizes"] is None
         assert detail["items"][0]["fitPercent"] == 92.0
         assert detail["combos"] == []
 
@@ -617,7 +619,7 @@ def test_extract_sizes_list_logic() -> None:
 def test_map_product_item_includes_sizes() -> None:
     from app.api.recommendations import _map_product_item
 
-    # sizes가 있는 경우
+    # availableSizes가 있는 경우
     item_with_sizes = {
         "product_id": 101,
         "product_name": "테스트 셔츠",
@@ -630,8 +632,8 @@ def test_map_product_item_includes_sizes() -> None:
         ],
     }
     mapped = _map_product_item(item_with_sizes)
-    assert mapped["size"] == "medium"
-    assert mapped["sizes"] == ["small", "medium", "large"]
+    assert mapped["recommendedSize"] == "medium"
+    assert mapped["availableSizes"] == ["small", "medium", "large"]
 
     # sizes가 없는 경우
     item_without_sizes = {
@@ -640,6 +642,6 @@ def test_map_product_item_includes_sizes() -> None:
         "price": 20000,
     }
     mapped_none = _map_product_item(item_without_sizes)
-    assert mapped_none["size"] is None
-    assert mapped_none["sizes"] is None
+    assert mapped_none["recommendedSize"] is None
+    assert mapped_none["availableSizes"] is None
 

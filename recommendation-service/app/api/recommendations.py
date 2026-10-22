@@ -249,7 +249,11 @@ def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
     size_rec = item.get("size_recommendation") or {}
     source_type = str(item.get("fit_source_type") or "none")
 
-    recommended_size = size_rec.get("size_label") or item.get("size")
+    recommended_size = (
+        size_rec.get("size_label")
+        or item.get("recommendedSize")
+        or item.get("size")
+    )
     raw_fit_score = size_rec.get("predicted_fit_score")
     fit_percent: float | None = None
     if isinstance(raw_fit_score, (int, float)):
@@ -279,8 +283,8 @@ def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
         price=price,
         imageUrl=item.get("image_url") or item.get("imageUrl"),
         color=item.get("color") or _extract_color_text(item),
-        size=recommended_size,
-        sizes=_extract_sizes_list(item),
+        recommendedSize=recommended_size,
+        availableSizes=_extract_sizes_list(item),
         fitPercent=fit_percent,
         evidence=evidence,
     ).model_dump()
