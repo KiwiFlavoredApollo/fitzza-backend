@@ -70,6 +70,17 @@
       "가벼움"
     ]
   },
+  "material": "ZEROVITY",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "ZEROVITY",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

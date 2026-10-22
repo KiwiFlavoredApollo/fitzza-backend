@@ -64,6 +64,17 @@
       "겨울"
     ]
   },
+  "material": "NYLON 55% POLYESTER 45%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "NYLON 55% POLYESTER 45%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "헤비아우터",

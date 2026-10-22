@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20240809/4313380/4313380_17234425841214_500.jpg"
   ],
   "features": {},
+  "material": "폴리에스터 54%, 코튼 40%, 레이온 6%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리에스터 54%, 코튼 40%, 레이온 6%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

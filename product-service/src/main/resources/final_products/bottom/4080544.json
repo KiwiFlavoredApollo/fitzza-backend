@@ -92,6 +92,20 @@
       "겨울"
     ]
   },
+  "material": "COTTON40%, POLYESTER60%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTON40%, POLYESTER60%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

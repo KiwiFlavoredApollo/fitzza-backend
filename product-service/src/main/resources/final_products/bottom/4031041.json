@@ -92,6 +92,20 @@
       "겨울"
     ]
   },
+  "material": "POLYESTER 94%, POLYURETHANE 6%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "POLYESTER 94%, POLYURETHANE 6%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

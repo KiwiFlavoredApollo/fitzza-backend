@@ -79,6 +79,17 @@
       "겨울"
     ]
   },
+  "material": "Cotton35%,poly65% (텐타덤블워싱)",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton35%,poly65% (텐타덤블워싱)",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

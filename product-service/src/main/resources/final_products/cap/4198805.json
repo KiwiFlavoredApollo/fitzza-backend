@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20240614/4198805/detail_4198805_17186163412062_500.jpg"
   ],
   "features": {},
+  "material": "100% 면",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "100% 면",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

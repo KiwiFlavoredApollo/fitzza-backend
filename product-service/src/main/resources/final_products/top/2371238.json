@@ -87,6 +87,20 @@
       "겨울"
     ]
   },
+  "material": "Shell : Cotton 100%Trim : Cotton 70%, Polyester 30%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "Shell : Cotton 100%Trim : Cotton 70%, Polyester 30%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

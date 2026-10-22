@@ -66,6 +66,17 @@
     "https://image.msscdn.net/images/prd_img/20230215/3086656/detail_3086656_16765143655061_500.jpg"
   ],
   "features": {},
+  "material": "Polyester 65% Cotton 35%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Polyester 65% Cotton 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

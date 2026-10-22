@@ -83,6 +83,17 @@
       "겨울"
     ]
   },
+  "material": "폴리에스터100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리에스터100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

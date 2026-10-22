@@ -64,6 +64,17 @@
     "https://image.msscdn.net/images/prd_img/20260512/6459184/detail_6459184_17790885077073_500.jpg"
   ],
   "features": {},
+  "material": "겉감-에바 폼 100% / 밑창-고무 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감-에바 폼 100%<br />\n밑창-고무 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

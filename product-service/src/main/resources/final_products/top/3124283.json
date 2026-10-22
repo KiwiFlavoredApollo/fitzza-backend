@@ -60,6 +60,17 @@
     "https://image.msscdn.net/images/prd_img/20230306/3124283/detail_3124283_16789544380259_500.jpg"
   ],
   "features": {},
+  "material": "코튼(Cotton) 80% 폴리에스터 20%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "코튼(Cotton) 80% 폴리에스터 20%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

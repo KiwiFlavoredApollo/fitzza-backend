@@ -72,6 +72,17 @@
     "https://image.msscdn.net/images/prd_img/20240807/4306872/detail_4306872_17588509597922_500.jpg"
   ],
   "features": {},
+  "material": "라이트핑크 : 폴리에스터 67% 코튼 29% 레이온 4% / 옐로우, 블루그린 : 폴리에스터 75% 코튼 21% 레이온 4% / 스카이블루, 그린 : 폴리에스터 82.8%, 레이온 16%, 폴리우레탄 1.2%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "라이트핑크 : 폴리에스터 67% 코튼 29% 레이온 4%<br />\n옐로우, 블루그린 : 폴리에스터 75% 코튼 21% 레이온 4%<br />\n스카이블루, 그린 : 폴리에스터 82.8%, 레이온 16%, 폴리우레탄 1.2%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

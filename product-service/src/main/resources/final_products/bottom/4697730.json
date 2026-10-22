@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20250103/4697730/detail_4697730_17566861691024_500.jpg"
   ],
   "features": {},
+  "material": "COTTON 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTON 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

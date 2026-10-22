@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20260526/6546798/6546798_17896964041614_500.jpg"
   ],
   "features": {},
+  "material": "Shell : Polyester 100% / Lining : Polyester 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Shell : Polyester 100%<br />\nLining : Polyester 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

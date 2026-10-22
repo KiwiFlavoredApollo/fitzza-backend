@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/prd_img/20250205/4758435/detail_4758435_17387125375842_500.jpg"
   ],
   "features": {},
+  "material": "겉감1 : 천연가죽(소) / 겉감2: 합성가죽 / 안감 : 폴리에스터 / 겉창 : 고무",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감1 : 천연가죽(소)<br />\n겉감2: 합성가죽<br />\n안감 : 폴리에스터 <br />\n겉창 : 고무",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

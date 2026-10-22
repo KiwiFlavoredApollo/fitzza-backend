@@ -78,6 +78,17 @@
       "보통"
     ]
   },
+  "material": "겉감 - 스웨이드 (소가죽) / 안감 - 인조가죽 (합성피혁)",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감 - 스웨이드 (소가죽)  /  안감 - 인조가죽 (합성피혁)",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

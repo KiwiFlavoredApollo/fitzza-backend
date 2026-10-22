@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20250723/5268033/detail_5268033_17551328699482_500.jpg"
   ],
   "features": {},
+  "material": null,
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세페이지 참조",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

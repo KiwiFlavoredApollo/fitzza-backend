@@ -85,6 +85,20 @@
       "겨울"
     ]
   },
+  "material": null,
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세페이지 참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

@@ -91,6 +91,20 @@
       "겨울"
     ]
   },
+  "material": "26년 7월 이후 생산 제품 혼용율 : POLY 75% RAYON 20% SPAN 5% / 26년 7월 이전 생산 제품 혼용율 : RAYON 65% POLY 35%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "26년 7월 이후 생산 제품 혼용율 : POLY 75% RAYON 20% SPAN 5%<br />\n<br />\n26년 7월 이전 생산 제품 혼용율 : RAYON 65% POLY 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

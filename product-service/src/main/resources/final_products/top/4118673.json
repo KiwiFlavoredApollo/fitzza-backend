@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20240509/4118673/detail_4118673_17442713900356_500.jpg"
   ],
   "features": {},
+  "material": "면 60%, 폴리에스터 30%, 레이온 10%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면 60%, 폴리에스터 30%, 레이온 10%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

@@ -53,6 +53,17 @@
     "https://image.msscdn.net/images/goods_img/20250507/5090146/5090146_17467519946905_500.jpg"
   ],
   "features": {},
+  "material": "100% Nylon",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "100% Nylon",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20250218/4798760/4798760_17398591846330_500.jpg"
   ],
   "features": {},
+  "material": "cotton 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "cotton 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

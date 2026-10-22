@@ -81,6 +81,17 @@
       "겨울"
     ]
   },
+  "material": "기모:면 84% / 폴리 16% / 논기모:면 62% / 폴리 38%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "기모:면 84% / 폴리 16%<br />\n논기모:면 62% / 폴리 38%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

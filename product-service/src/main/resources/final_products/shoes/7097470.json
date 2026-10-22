@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20260818/7097470/detail_7097470_17888506182071_500.jpg"
   ],
   "features": {},
+  "material": "UPPER : 신세틱 스웨이드 / INNER : 합성피혁",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "UPPER : 신세틱 스웨이드<br />\nINNER : 합성피혁",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

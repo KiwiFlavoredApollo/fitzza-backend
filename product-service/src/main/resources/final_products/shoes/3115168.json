@@ -57,6 +57,17 @@
     "https://image.msscdn.net/images/prd_img/20230301/3115168/detail_3115168_16776327284167_500.jpg"
   ],
   "features": {},
+  "material": "upper : cow leather / linning : pig skin , mesh / sole : rubber",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "upper : cow leather<br />\nlinning : pig skin , mesh<br />\nsole : rubber",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

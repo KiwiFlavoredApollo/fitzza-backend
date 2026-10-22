@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20250522/5139211/5139211_17908270110485_500.jpg"
   ],
   "features": {},
+  "material": "C 75%/P 25%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "C 75%/P 25%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

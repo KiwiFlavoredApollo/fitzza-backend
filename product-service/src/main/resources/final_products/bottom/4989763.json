@@ -87,6 +87,20 @@
       "가을"
     ]
   },
+  "material": "대한민국 : 코튼(Cotton)75%, TR 25% / 중국 : 코튼(Cotton)95%, 폴리 5%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "대한민국 : 코튼(Cotton)75%, TR 25%<br />\n중국 : 코튼(Cotton)95%, 폴리 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반바지",
