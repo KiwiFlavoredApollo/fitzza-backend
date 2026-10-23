@@ -31,6 +31,17 @@ def test_artifact_endpoint_is_opt_in_and_account_scoped():
     assert "s3:::${DeliveryArtifactBucketName}/*" in template
 
 
+def test_product_images_use_private_s3_origin_and_prefix_scoped_cloudfront_access():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "Type: AWS::CloudFront::OriginAccessControl" in template
+    assert "SigningBehavior: always" in template
+    assert "OriginPath: /public/product-images" in template
+    assert "ViewerProtocolPolicy: redirect-to-https" in template
+    assert "Resource: !Sub '${DataBucket.Arn}/public/product-images/*'" in template
+    assert "AWS:SourceAccount: !Ref AWS::AccountId" in template
+    assert "AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${ProductImageDistribution}'" in template
+
+
 def test_vton_runtime_endpoint_access_is_role_and_bucket_scoped():
     template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
     assert "Sid: AllowVtonRuntimeAssets" in template
