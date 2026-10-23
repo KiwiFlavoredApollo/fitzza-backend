@@ -32,11 +32,17 @@ patches:
         value:
           httpGet: { path: /health, port: http }
           periodSeconds: 20
-          timeoutSeconds: 3
-          failureThreshold: 3
+          timeoutSeconds: 5
+          failureThreshold: 5
       - op: add
         path: /spec/template/spec/containers/0/resources
         value:
           requests: { cpu: 100m, memory: 192Mi }
           limits: { cpu: "1", memory: 1Gi }
-
+  - target:
+      kind: Deployment
+      name: recommendation-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 2Gi

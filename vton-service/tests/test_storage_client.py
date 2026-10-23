@@ -287,7 +287,7 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
     assert mock_s3.put_object.call_count == 2
     first_call_args = mock_s3.put_object.call_args_list[0][1]
     assert first_call_args["Bucket"] == "fitzza-test-bucket"
-    assert first_call_args["Key"].startswith("photos/100/user_100_")
+    assert first_call_args["Key"].startswith("user-images/100/user_100_")
 
     second_call_args = mock_s3.put_object.call_args_list[1][1]
     assert second_call_args["Bucket"] == "fitzza-test-bucket"
