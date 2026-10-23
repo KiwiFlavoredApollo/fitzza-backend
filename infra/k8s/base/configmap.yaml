@@ -19,6 +19,8 @@ data:
   PRODUCT_SERVICE_URL: http://product-service:8082
   NOTIFICATION_SERVICE_URL: http://notification-service:8086
   SPRING_PROFILES_ACTIVE: prod
+  # Java 서비스 10개가 동시에 기동할 때 JIT(C2) 컴파일 CPU를 줄인다. 처리량보다 기동 부하를 우선한다(Python 서비스는 무시).
+  JAVA_TOOL_OPTIONS: -XX:TieredStopAtLevel=1 -XX:+UseSerialGC
   SPRINGDOC_API_DOCS_ENABLED: "false"
   SPRINGDOC_SWAGGER_UI_ENABLED: "false"
   CORS_ALLOWED_ORIGINS: CHANGE_ME_FRONTEND_ORIGIN
