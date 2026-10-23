@@ -77,6 +77,45 @@ class CrawledReviewImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "grade must be between 1 and 5"):
             load_rows(self.data, self.report, False)
 
+    def test_rejects_psql_copy_terminator_in_content(self):
+        self.write_product(
+            [
+                {
+                    "source_review_id": 77,
+                    "grade": "5",
+                    "content": "safe prefix\n\\.\nDROP TABLE reviews;",
+                    "created_at": "2026-10-22T12:00:00+09:00",
+                }
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "line consisting"):
+            load_rows(self.data, self.report, False)
+
+    def test_skips_psql_copy_terminator_when_explicitly_requested(self):
+        self.write_product(
+            [
+                {
+                    "source_review_id": 77,
+                    "grade": "5",
+                    "content": "safe prefix\n\\.\nDROP TABLE reviews;",
+                    "created_at": "2026-10-22T12:00:00+09:00",
+                },
+                {
+                    "source_review_id": 78,
+                    "grade": "5",
+                    "content": "valid review",
+                    "created_at": "2026-10-22T12:01:00+09:00",
+                },
+            ]
+        )
+
+        rows, skipped = load_rows(self.data, self.report, True)
+
+        self.assertEqual([row.source_review_id for row in rows], [78])
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("line consisting of \\.", skipped[0])
+
     def test_skip_invalid_requires_at_least_one_valid_review(self):
         self.write_product(
             [

@@ -48,6 +48,8 @@ def parse_review(product_id: int, value: object) -> ImportRow:
         raise ValueError("content must not be blank")
     if len(content) > 1000:
         raise ValueError("content must not exceed 1000 characters")
+    if any(line == "\\." for line in content.splitlines()):
+        raise ValueError("content must not contain a line consisting of \\.")
 
     image_urls = value.get("image_urls", [])
     if not isinstance(image_urls, list):
