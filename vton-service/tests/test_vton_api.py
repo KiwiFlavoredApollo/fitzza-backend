@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -848,6 +849,67 @@ def test_resolve_product_item_prefers_override_image_url() -> None:
         assert item["imageUrl"] == override_url
         assert item["imageBytes"] == fake_png
         mock_fetch.assert_called_once_with(override_url)
+
+
+def test_post_vton_with_request_id_json_and_get_detail() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    with patch("app.api.vton._run_background_vton"):
+        resp = client.post(
+            "/api/vton",
+            json={
+                "items": [{"productId": 101}],
+                "requestId": 6,
+            },
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        fitting_id = resp.json()["fittingId"]
+
+        # 상세 조회 검증
+        detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+        assert detail_resp.status_code == 200
+        detail_data = detail_resp.json()
+        assert detail_data["fittingId"] == fitting_id
+        assert detail_data["requestId"] == 6
+
+        # 목록 조회 검증
+        list_resp = client.get("/api/vton", headers={"X-User-Id": "7"})
+        assert list_resp.status_code == 200
+        list_data = list_resp.json()
+        assert len(list_data["items"]) >= 1
+        assert list_data["items"][0]["requestId"] == 6
+
+
+def test_post_vton_with_request_id_multipart_and_get_detail() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    fake_png = _create_sample_png()
+    files = {"userImage": ("face.png", fake_png, "image/png")}
+    data = {
+        "items": json.dumps([{"productId": 101}]),
+        "requestId": "15",
+    }
+
+    with patch("app.api.vton._run_background_vton"):
+        resp = client.post(
+            "/api/vton",
+            data=data,
+            files=files,
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        fitting_id = resp.json()["fittingId"]
+
+        detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+        assert detail_resp.status_code == 200
+        detail_data = detail_resp.json()
+        assert detail_data["fittingId"] == fitting_id
+        assert detail_data["requestId"] == 15
 
 
 
