@@ -28,6 +28,8 @@ docker compose up --build -d
 
 Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
 
+VTON API와 SQS 워커는 `docker compose up --build -d vton-service vton-worker`로 실행합니다. 두 서비스는 각각 빌드·의존성을 정의하고 서비스 URL·PostgreSQL·Redis·AWS 환경변수 확장 필드를 직접 참조하며, 워커는 `python -m app.worker`로 실행하고 HTTP 포트를 공개하지 않습니다. 기존 `.env`를 사용할 때는 `VTON_QUEUE_BACKEND`를 `sqs`, `VTON_STORAGE_BACKEND`를 `s3`로 설정하고 큐·DLQ 주소를 `.env.example`의 LocalStack 주소에 맞추세요. API와 워커가 서로 다른 컨테이너이므로 이미지는 공통 S3 저장소를 사용해야 합니다. `memory` 큐 모드는 API 내부에서 처리하며 별도 워커에 작업을 전달하지 않습니다.
+
 Config Server 주소 환경변수는 `CONFIG_SERVICE_URL`입니다. Compose와 Kubernetes에서는 `http://config-service:8888`을 주입하며, IDE에서 직접 실행할 때는 기본값 `http://localhost:8888`을 사용합니다. 직접 실행 시 주소를 변경하려면 실행 설정의 환경변수에 지정합니다.
 
 서비스 디스커버리 주소 환경변수는 `DISCOVERY_SERVICE_URL`입니다. Compose와 Kubernetes에서는 `http://discovery-service:8761/eureka/`를 주입하며, IDE에서 직접 실행할 때는 기본값 `http://localhost:8761/eureka/`를 사용합니다. 직접 실행 시 `.env`는 자동으로 로드되지 않으므로 주소 변경이 필요하면 실행 설정의 환경변수에 지정합니다.
