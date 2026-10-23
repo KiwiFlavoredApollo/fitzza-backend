@@ -74,7 +74,9 @@ class VtonWorker:
             }
             if item_image_urls:
                 vton_kwargs["item_image_urls"] = item_image_urls
-            _run_background_vton(**vton_kwargs)
+            completed = _run_background_vton(**vton_kwargs)
+            if not completed:
+                raise RuntimeError("VTON background pipeline reported failure")
 
             # 2. 작업 성공 시 SQS 대기열에서 메시지 삭제
             if receipt_handle:

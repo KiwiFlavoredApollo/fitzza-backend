@@ -147,7 +147,7 @@ def _run_background_vton(
     request_id_header: str | None = None,
     user_face_bytes: bytes | None = None,
     item_image_urls: dict[int, str] | None = None,
-) -> None:
+) -> bool:
     """백그라운드에서 상품 조회, AI 피팅 합성, 결과 이미지 저장, DB 업데이트 및 FCM 알림을 수행합니다."""
     settings = get_settings()
     repo = get_repo()
@@ -266,6 +266,7 @@ def _run_background_vton(
             request_id_header=request_id_header,
         )
         logger.info("비동기 가상 피팅 성공 완료 (fittingId=%s)", fitting_id)
+        return True
 
     except Exception as exc:
         err_msg = str(exc) or type(exc).__name__
@@ -288,6 +289,7 @@ def _run_background_vton(
             fitting_id=fitting_id,
             request_id_header=request_id_header,
         )
+        return False
 
 
 MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
