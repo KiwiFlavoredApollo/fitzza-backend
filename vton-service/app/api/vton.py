@@ -511,7 +511,7 @@ async def request_fitting(
 
                 storage = get_storage_client()
                 photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
-                photo_key = f"photos/{x_user_id}/{photo_filename}"
+                photo_key = f"user-images/{x_user_id}/{photo_filename}"
 
                 # S3 또는 로컬 스토리지 업로드
                 try:
