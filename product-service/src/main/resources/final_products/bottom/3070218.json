@@ -111,6 +111,17 @@
       "겨울"
     ]
   },
+  "material": "BLACK, LGRAY, IVORY, MILDBLUE, STNGRAY, ASHBLUE : COTTON 100% / DBLUE, CRDBLUE : COTTON 77%+RAYON 13%+POLYESTER 10% / R.BLACK, R.INDIGO, BROWN, SBBLACK, : COTTON 65%+POLYESTER 35%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "BLACK, LGRAY, IVORY, MILDBLUE, STNGRAY, ASHBLUE : COTTON 100%<br />\nDBLUE, CRDBLUE : COTTON 77%+RAYON 13%+POLYESTER 10%<br />\nR.BLACK, R.INDIGO, BROWN, SBBLACK, : COTTON 65%+POLYESTER 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

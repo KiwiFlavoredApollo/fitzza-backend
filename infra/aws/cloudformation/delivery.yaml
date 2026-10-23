@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  Fitzza develop delivery pipeline - GitHub connection, CodePipeline V2, and an
+  Fitzza main delivery pipeline - GitHub connection, CodePipeline V2, and an
   ARM64 CodeBuild project that tests then publishes commit-tagged images to ECR.
   The EKS deploy stage stays disabled until EnableDeployStage is true.
 
@@ -10,7 +10,7 @@ Metadata:
   com.aws.cloudformation.Context:
     arch: GitHub Connection -> CodePipeline V2 -> CodeBuild (ARM small) test + image publish -> optional VPC CodeBuild EKS deploy
     must:
-      - source branch stays develop for the shared environment
+      - source branch stays main for the production delivery environment
       - tests finish before any ECR login or image push
       - image tags remain immutable 12-character Git commit SHAs
       - stay inside the approved project budget; no customer-managed KMS key and no x86 large build hosts
@@ -42,7 +42,7 @@ Parameters:
     AllowedPattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
   SourceBranch:
     Type: String
-    Default: develop
+    Default: main
     AllowedPattern: '^[A-Za-z0-9._/-]+$'
   EcrRepositoryPrefix:
     Type: String
@@ -478,7 +478,7 @@ Resources:
         why: authenticate the deploy project to a namespace-only Kubernetes role instead of granting cluster administration
         must:
           - principal stays DeployRole
-          - access is used only by the develop delivery pipeline
+          - access is used only by the main delivery pipeline
           - bind fitzza-delivery group only through the bootstrap RoleBinding in namespace fitzza
         mutable: review-required
     Properties:
@@ -615,7 +615,7 @@ Resources:
     Type: AWS::CodePipeline::Pipeline
     Metadata:
       com.aws.cloudformation.Context:
-        why: build only the newest develop revision and pass its exact commit SHA to CodeBuild
+        why: build only the newest main revision and pass its exact commit SHA to CodeBuild
         must:
           - execution mode stays SUPERSEDED so queued pushes do not each consume build minutes
           - the Build stage must succeed before any later stage runs

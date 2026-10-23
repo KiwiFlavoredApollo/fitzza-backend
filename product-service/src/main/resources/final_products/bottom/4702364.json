@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20250107/4702364/detail_4702364_17532446400986_500.jpg"
   ],
   "features": {},
+  "material": "NYLON 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "NYLON 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

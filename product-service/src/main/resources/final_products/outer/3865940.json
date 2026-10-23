@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20240214/3865940/detail_3865940_17745086199252_500.jpg"
   ],
   "features": {},
+  "material": "나일론 100",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "나일론 100",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

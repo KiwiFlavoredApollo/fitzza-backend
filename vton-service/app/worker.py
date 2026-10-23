@@ -46,6 +46,7 @@ class VtonWorker:
         product_ids = payload.get("product_ids") or []
         result_image_url = payload.get("result_image_url") or f"/api/vton/{fitting_id}/image"
         request_id_header = payload.get("request_id_header")
+        item_image_urls = payload.get("item_image_urls")
 
         if fitting_id is None or user_id is None:
             logger.error("필수 식별자 누락 (fitting_id=%s, user_id=%s)", fitting_id, user_id)
@@ -62,15 +63,18 @@ class VtonWorker:
 
         try:
             # 1. 실제 비동기 피팅 파이프라인 수행 (OpenAI 이미지 생성 -> S3 업로드 -> DB 상태 갱신 -> FCM 알림)
-            _run_background_vton(
-                fitting_id=fitting_id,
-                user_id=user_id,
-                photo_id=photo_id,
-                product_ids=product_ids,
-                result_image_url=result_image_url,
-                request_id_header=request_id_header,
-                user_face_bytes=None,  # 워커 프로세스는 저장된 S3/로컬 파일 참조
-            )
+            vton_kwargs: dict[str, Any] = {
+                "fitting_id": fitting_id,
+                "user_id": user_id,
+                "photo_id": photo_id,
+                "product_ids": product_ids,
+                "result_image_url": result_image_url,
+                "request_id_header": request_id_header,
+                "user_face_bytes": None,  # 워커 프로세스는 저장된 S3/로컬 파일 참조
+            }
+            if item_image_urls:
+                vton_kwargs["item_image_urls"] = item_image_urls
+            _run_background_vton(**vton_kwargs)
 
             # 2. 작업 성공 시 SQS 대기열에서 메시지 삭제
             if receipt_handle:

@@ -95,6 +95,20 @@
       "겨울"
     ]
   },
+  "material": "POLY 97% SPAN 3%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "POLY 97% SPAN 3%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

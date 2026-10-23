@@ -85,6 +85,20 @@
       "겨울"
     ]
   },
+  "material": "Cotton 72%+Polyester 28%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 72%+Polyester 28%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

@@ -17,6 +17,13 @@ def test_delivery_template_does_not_grant_cluster_admin():
     assert "get secret" not in spec
 
 
+def test_production_delivery_uses_main_branch():
+    template = (ROOT / "infra/aws/cloudformation/delivery.yaml").read_text()
+    parameters = (ROOT / "infra/aws/cloudformation/delivery-parameters.example.json").read_text()
+    assert "SourceBranch:\n    Type: String\n    Default: main" in template
+    assert '"SourceBranch", "ParameterValue": "main"' in parameters
+
+
 def test_artifact_endpoint_is_opt_in_and_account_scoped():
     template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
     assert "HasDeliveryArtifactBucket: !Not" in template

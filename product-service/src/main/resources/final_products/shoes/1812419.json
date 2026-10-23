@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20210224/1812419/detail_1812419_17828803932416_500.jpg"
   ],
   "features": {},
+  "material": "10S 3PLY Canvas cotton 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "10S 3PLY Canvas cotton 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

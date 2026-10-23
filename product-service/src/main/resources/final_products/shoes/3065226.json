@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20230207/3065226/detail_3065226_16842123624174_500.jpg"
   ],
   "features": {},
+  "material": "ZEROVITY",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "ZEROVITY",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

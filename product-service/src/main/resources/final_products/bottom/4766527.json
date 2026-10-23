@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20250207/4766527/detail_4766527_17394245584878_500.jpg"
   ],
   "features": {},
+  "material": "35% Cotton, 65% Poly",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "35% Cotton, 65% Poly",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

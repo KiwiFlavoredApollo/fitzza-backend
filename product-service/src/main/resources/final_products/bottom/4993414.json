@@ -90,6 +90,20 @@
       "가을"
     ]
   },
+  "material": "대한민국 COTTON 100% / 중국 COTTON68% POLY32%, COTTON 92% POLY 8%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "대한민국 COTTON 100% / 중국 COTTON68% POLY32%, COTTON 92% POLY 8%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "바지",

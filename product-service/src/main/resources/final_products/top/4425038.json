@@ -62,6 +62,17 @@
     "https://image.msscdn.net/images/prd_img/20240910/4425038/detail_4425038_17429700237813_500.jpg"
   ],
   "features": {},
+  "material": "면 70% 폴리에스터 30%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면 70% 폴리에스터 30%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

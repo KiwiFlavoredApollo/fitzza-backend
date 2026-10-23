@@ -74,6 +74,17 @@
     "https://image.msscdn.net/images/prd_img/20250829/5377308/detail_5377308_17738936733718_500.jpg"
   ],
   "features": {},
+  "material": "POLY 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "POLY 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

@@ -57,6 +57,17 @@
     "https://image.msscdn.net/images/goods_img/20240603/4172293/4172293_17567770391050_500.jpg"
   ],
   "features": {},
+  "material": "코튼 90 폴리 10",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "코튼 90 폴리 10",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

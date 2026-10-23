@@ -91,6 +91,20 @@
       "가을"
     ]
   },
+  "material": "COTTON 74%+RAYON 26%",
+  "fit_type": "REGULAR",
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTON 74%+RAYON 26%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "레귤러",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

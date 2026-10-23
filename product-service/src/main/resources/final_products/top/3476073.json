@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20230818/3476073/detail_3476073_16938153976942_500.jpg"
   ],
   "features": {},
+  "material": "RAYON48% NYLON25% PPT27%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "RAYON48% NYLON25% PPT27%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

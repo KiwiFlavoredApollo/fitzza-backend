@@ -87,6 +87,20 @@
       "겨울"
     ]
   },
+  "material": "Cotton 100%",
+  "fit_type": "SLIM",
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 100%\t",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "슬림",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

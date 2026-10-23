@@ -1,5 +1,11 @@
 # Crawler to Jev contract
 
+Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
+
+The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,
+and creates Jev's `data/` bundle only when the input contract passes. It never guesses missing color-image mappings,
+starts Jev, or grants human/indexing approval. It is suspended in EKS; actual collection remains separately authorized.
+
 The AI data pipeline runs in this order:
 
 ```text
@@ -12,6 +18,12 @@ The FashionCLIP Jev implementation reads the crawler's product JSON directory di
 - `dataset.logical_category`
 - every `color_image_mappings[].color_raw`
 - all sibling colors on the same product
+
+The cloud crawler now emits explicit COLOR_CHIP option/image relationships only when an active
+option item confirms the same product and option value IDs. It preserves raw color names and
+records option-ID evidence; it never falls back to product-name guesses, generic swatches, or
+another product's image. This is metadata evidence, not image-content or human quality approval.
+OtherColorGoods-only products remain unsupported pending an observed non-empty source fixture.
 
 `scripts/validate_jev_data.py` validates the files before any paid Jev request. Color keys follow the Jev implementation's `strip().lower()` rule. It does not create an intermediate input file.
 
@@ -61,7 +73,7 @@ Remove the key when finished or close the terminal:
 Remove-Item Env:TYPESAFE_API_KEY
 ```
 
-This session-only method is recommended for local execution. Store the deployment key in AWS Secrets Manager and inject it only into the Jev batch job at runtime.
+This session-only method is for local execution. The cloud deployment reads its key from SSM SecureString `/fitzza/prod/data-pipeline/typesafe-api-key` only after separate execution approval. Do not create a new Secrets Manager resource for this pipeline.
 
 ## Local FashionCLIP indexing
 
@@ -89,7 +101,7 @@ runs/<run-id>/jev/_SUCCESS.json
 runs/<run-id>/fashion-clip/report.json
 ```
 
-FashionCLIP/Qdrant must not start until the Jev `_SUCCESS.json` exists. Jev credentials belong in AWS Secrets Manager and must never be written to S3, Kubernetes manifests, or logs.
+The layout above is historical. The deployed cloud contract uses `pipeline/runs/<run-id>/` and requires human color approval plus a separate matching dataset-quality approval; a Jev `_SUCCESS.json` alone is not sufficient. Jev credentials belong in SSM SecureString and must never be written to S3, Kubernetes manifests, or logs.
 
 ## Local Qdrant
 

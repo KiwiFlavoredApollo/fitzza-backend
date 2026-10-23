@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20220322/2435822/detail_2435822_16835200385683_500.jpg"
   ],
   "features": {},
+  "material": "상피재료-나일론,폴리우레탄 창재료-합성고무",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상피재료-나일론,폴리우레탄 창재료-합성고무",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

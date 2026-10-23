@@ -93,6 +93,17 @@
       "겨울"
     ]
   },
+  "material": "쿨패스 VER : COTTON 51%+POLYESTER 49% WINTER VER : COTTON 65%+POLYESTER 35%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "쿨패스 VER : COTTON 51%+POLYESTER 49% WINTER VER : COTTON 65%+POLYESTER 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

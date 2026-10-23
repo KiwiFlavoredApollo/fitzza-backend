@@ -59,6 +59,17 @@
     "https://image.msscdn.net/images/prd_img/20241002/4479884/detail_4479884_17285518230356_500.jpg"
   ],
   "features": {},
+  "material": null,
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세페이지 참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

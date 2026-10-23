@@ -88,6 +88,20 @@
       "겨울"
     ]
   },
+  "material": "(SHELL) COTTON 100 / (CONTRAST) COTTON 100",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "(SHELL) COTTON 100 <br />\n(CONTRAST) COTTON 100",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매_래글런",

@@ -58,6 +58,17 @@
     "https://image.msscdn.net/images/prd_img/20250108/4705361/detail_4705361_17466746500477_500.jpg"
   ],
   "features": {},
+  "material": "rayon75% polyester 25%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "rayon75% polyester 25%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",

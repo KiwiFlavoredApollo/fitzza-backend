@@ -69,6 +69,17 @@
     "https://image.msscdn.net/images/prd_img/20240115/3794791/detail_3794791_17170509095301_500.jpg"
   ],
   "features": {},
+  "material": "면 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

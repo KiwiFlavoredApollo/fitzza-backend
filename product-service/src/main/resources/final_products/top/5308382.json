@@ -94,6 +94,20 @@
       "겨울"
     ]
   },
+  "material": "면 65% 폴리 35%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "면 65% 폴리 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

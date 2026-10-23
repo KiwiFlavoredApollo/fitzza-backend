@@ -88,6 +88,20 @@
       "겨울"
     ]
   },
+  "material": "POLYESTER 80% RAYON 14% SPAN 6%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "POLYESTER 80% RAYON 14% SPAN 6%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

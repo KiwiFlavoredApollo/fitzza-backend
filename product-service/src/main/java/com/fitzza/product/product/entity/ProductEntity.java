@@ -113,6 +113,11 @@ public class ProductEntity implements Persistable<Long> {
     @Column(name = "features")
     private Map<String, List<String>> features;
 
+    /** 무신사 color_image_mappings. 상품 단위 색상-이미지 목록. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "color_image_mappings")
+    private List<ColorImageMappingValue> colorImageMappings;
+
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
@@ -152,6 +157,7 @@ public class ProductEntity implements Persistable<Long> {
             Season season,
             FitType fitType,
             Map<String, List<String>> features,
+            List<ColorImageMappingValue> colorImageMappings,
             String description,
             String imageUrl,
             ProductStatus status) {
@@ -173,9 +179,34 @@ public class ProductEntity implements Persistable<Long> {
         this.season = season;
         this.fitType = fitType;
         this.features = features == null ? new LinkedHashMap<>() : features;
+        this.colorImageMappings = colorImageMappings == null ? List.of() : List.copyOf(colorImageMappings);
         this.description = description;
         this.imageUrl = imageUrl;
         this.status = status;
+    }
+
+    /** 이미 저장된 상품에 색상 매핑만 채울 때 사용한다(재시드 백필). */
+    public void replaceColorImageMappings(List<ColorImageMappingValue> mappings) {
+        this.colorImageMappings = mappings == null ? List.of() : List.copyOf(mappings);
+    }
+
+    /**
+     * 이미 저장된 상품의 소재·핏이 비어 있을 때만 시드 값으로 채운다(재시드 백필).
+     * 이미 값이 있으면 덮어쓰지 않는다.
+     *
+     * @return 실제로 바뀐 값이 있으면 true
+     */
+    public boolean fillMissingMaterialAndFit(String material, FitType fitType) {
+        boolean changed = false;
+        if (this.material == null && material != null) {
+            this.material = material;
+            changed = true;
+        }
+        if (this.fitType == null && fitType != null) {
+            this.fitType = fitType;
+            changed = true;
+        }
+        return changed;
     }
 
     /** 가장 하위 단계의 카테고리 코드를 반환한다. */

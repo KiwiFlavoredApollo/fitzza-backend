@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20240322/3983703/detail_3983703_17110923109931_500.jpg"
   ],
   "features": {},
+  "material": "상피재료 : 소가죽 / 창 재료 : 고무",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상피재료 : 소가죽 / 창 재료 : 고무",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "스니커즈",

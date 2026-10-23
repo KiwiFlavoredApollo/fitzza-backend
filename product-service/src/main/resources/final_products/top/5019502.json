@@ -73,6 +73,17 @@
     "https://image.msscdn.net/images/prd_img/20250412/5019502/detail_5019502_17756118820388_500.jpg"
   ],
   "features": {},
+  "material": "Cotton 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

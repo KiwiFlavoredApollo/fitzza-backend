@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20260212/6021331/detail_6021331_17708964165318_500.jpg"
   ],
   "features": {},
+  "material": "폴리에스테르 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리에스테르 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

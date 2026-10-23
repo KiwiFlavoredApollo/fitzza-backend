@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadThisRunSeedAndCollection",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/seed/manifest.json",
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/seed/objects/*",
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/crawler/checkpoints.json",
+        "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/crawler/objects/*"
+      ]
+    },
+    {
+      "Sid": "CreateCuratedBundleOnly",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/curated/bundle.tar.gz",
+      "Condition": {"StringEquals": {"s3:if-none-match": "*"}}
+    }
+  ]
+}

@@ -57,6 +57,17 @@
     "https://image.msscdn.net/images/goods_img/20220812/2715570/2715570_1_500.jpg"
   ],
   "features": {},
+  "material": "나일론55%, 울40%, 캐시미어5%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "나일론55%, 울40%, 캐시미어5%",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "비니",

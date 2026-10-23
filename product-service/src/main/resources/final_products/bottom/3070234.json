@@ -94,6 +94,17 @@
       "가을"
     ]
   },
+  "material": "LNBLUE, LNLBLUE, LNLGRAY, BLACK, BEIGE, LGRAY, IVORY, KHAKI, MILDBLUE, STNGRAY, V.BROWN, ASHBLUE : COTTON 100% / DBLUE, CRDBLUE : COTTON 77%+RAYON 13%+POLYESTER 10% / R.BLACK, R.INDIGO, BROWN, SBBLAC…",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "LNBLUE, LNLBLUE, LNLGRAY, BLACK, BEIGE, LGRAY, IVORY, KHAKI, MILDBLUE, STNGRAY, V.BROWN, ASHBLUE : COTTON 100%<br />\nDBLUE, CRDBLUE : COTTON 77%+RAYON 13%+POLYESTER 10%<br />\nR.BLACK, R.INDIGO, BROWN, SBBLACK, LNBLACK, LNINDIGO : COTTON 65%+POLYESTER 35%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

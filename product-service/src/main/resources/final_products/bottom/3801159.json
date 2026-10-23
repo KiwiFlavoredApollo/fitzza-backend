@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20240117/3801159/detail_3801159_17101503794374_500.jpg"
   ],
   "features": {},
+  "material": "Cotton 50%, Polyester 46%, Polyurethane 4%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 50%, Polyester 46%, Polyurethane 4%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

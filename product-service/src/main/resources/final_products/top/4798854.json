@@ -70,6 +70,17 @@
     "https://image.msscdn.net/images/prd_img/20250218/4798854/detail_4798854_17764076917241_500.jpg"
   ],
   "features": {},
+  "material": null,
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세페이지 참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

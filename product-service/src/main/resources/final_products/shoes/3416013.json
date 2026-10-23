@@ -57,6 +57,17 @@
     "https://image.msscdn.net/images/prd_img/20230719/3416013/detail_3416013_17071135718069_500.jpg"
   ],
   "features": {},
+  "material": "겉감 : 합성가죽 / 폴리에스터 100% / 안감 : 폴리에스터 100% / 창 : EVA + 폴리에스터",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감 : 합성가죽 / 폴리에스터 100%<br />\n안감 : 폴리에스터 100%<br />\n창 : EVA + 폴리에스터",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",
