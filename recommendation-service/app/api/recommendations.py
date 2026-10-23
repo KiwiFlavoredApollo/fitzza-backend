@@ -499,45 +499,17 @@ async def get_personalized_recommendation_feed(
         except (ValueError, TypeError):
             parsed_user_id = 0
 
+    feed_service = _get_personalized_feed_service(request.app)
     cache_service = _get_cache_service(request.app)
-    cache_user_key = str(parsed_user_id) if parsed_user_id > 0 else "guest"
 
-    if refresh:
-        cache_service.delete_personalized_feed(cache_user_key)
-
-    all_items: list[PersonalizedProductItem] = []
-    if not refresh:
-        cached_raw = cache_service.get_personalized_feed(cache_user_key)
-        if isinstance(cached_raw, list):
-            all_items = [PersonalizedProductItem(**item) for item in cached_raw]
-
-    if not all_items:
-        feed_service = _get_personalized_feed_service(request.app)
-        all_items, _ = await feed_service.generate_personalized_feed_items(
-            user_id=parsed_user_id
-        )
-        if all_items:
-            cache_service.set_personalized_feed(
-                cache_user_key,
-                [item.model_dump() for item in all_items],
-                ttl_seconds=300,  # 5분 캐시
-            )
-
-    total_elements = len(all_items)
-    total_pages = (total_elements + size - 1) // size if total_elements > 0 else 0
-    start_idx = page * size
-    end_idx = start_idx + size
-    page_content = all_items[start_idx:end_idx] if start_idx < total_elements else []
-    has_next = (page < total_pages - 1) if total_pages > 0 else False
-
-    return PersonalizedPageResponse(
-        content=page_content,
+    return await feed_service.get_personalized_feed_page(
+        user_id=parsed_user_id,
         page=page,
         size=size,
-        totalElements=total_elements,
-        totalPages=total_pages,
-        hasNext=has_next,
+        refresh=refresh,
+        cache_service=cache_service,
     )
+
 
 
 

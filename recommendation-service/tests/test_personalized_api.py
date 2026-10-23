@@ -51,10 +51,15 @@ def client_with_mock_services():
     mock_redis.set.side_effect = fake_set
     mock_redis.delete.side_effect = fake_delete
 
-    # Mock Feed Service
-    mock_feed_service = MagicMock()
+    # Feed Service with real paging & caching, mock generation
+    from app.services.personalized_feed_service import PersonalizedFeedService
+
+    feed_service = PersonalizedFeedService(
+        qdrant_client=MagicMock(),
+        collection_name="test",
+    )
     dummy_80_items = _make_80_dummy_items()
-    mock_feed_service.generate_personalized_feed_items = AsyncMock(
+    feed_service.generate_personalized_feed_items = AsyncMock(
         return_value=(dummy_80_items, UserActionHistory(user_id=10))
     )
 
@@ -67,10 +72,11 @@ def client_with_mock_services():
 
     app.state.redis_client = mock_redis
     app.state.cache_service = cache_service
-    app.state.personalized_feed_service = mock_feed_service
+    app.state.personalized_feed_service = feed_service
 
     test_client = TestClient(app)
-    return test_client, mock_feed_service, cache_store
+    return test_client, feed_service, cache_store
+
 
 
 def test_get_personalized_feed_guest_cold_start(client_with_mock_services):
@@ -157,3 +163,21 @@ def test_get_personalized_feed_gateway_v1_path(client_with_mock_services):
     resp = client.get("/api/v1/recommendations/personalized")
     assert resp.status_code == 200
     assert resp.json()["totalElements"] == 80
+
+
+def test_get_personalized_feed_guest_refresh_protection(client_with_mock_services):
+    """게스트는 refresh=true를 호출해도 공용 캐시가 삭제되지 않고 유지되는지 검증"""
+    client, feed_service, cache_store = client_with_mock_services
+
+    # 1. 게스트 첫 호출 (캐시 미스 -> 생성기 1회 호출)
+    resp1 = client.get("/api/recommendations/personalized")
+    assert resp1.status_code == 200
+    assert feed_service.generate_personalized_feed_items.call_count == 1
+    assert "feed:guest" in cache_store
+
+    # 2. 게스트 refresh=true 호출 -> 공용 캐시 보호로 삭제되지 않고 생성기 재호출 없음
+    resp2 = client.get("/api/recommendations/personalized?refresh=true")
+    assert resp2.status_code == 200
+    assert feed_service.generate_personalized_feed_items.call_count == 1  # 여전히 1회
+    assert "feed:guest" in cache_store
+

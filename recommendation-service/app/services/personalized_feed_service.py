@@ -8,7 +8,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from app.core.config import get_settings
-from app.schemas.recommendation import PersonalizedProductItem
+from app.schemas.recommendation import (
+    PersonalizedPageResponse,
+    PersonalizedProductItem,
+)
 from app.services.personalized_vector_engine import PersonalizedVectorEngine
 from app.services.user_history_service import (
     UserActionHistory,
@@ -225,3 +228,57 @@ class PersonalizedFeedService:
         )
 
         return interleaved_feed, history
+
+    async def get_personalized_feed_page(
+        self,
+        user_id: int = 0,
+        page: int = 0,
+        size: int = 20,
+        refresh: bool = False,
+        cache_service: Optional[Any] = None,
+    ) -> PersonalizedPageResponse:
+        """
+        사용자 ID와 페이징 옵션을 받아 5분 캐시 정책 및 게스트 보호를 적용하여 페이징 피드를 반환한다.
+        - 게스트(user_id <= 0): 공통 키 'guest'를 사용하며, refresh=True여도 캐시 무효화를 수행하지 않음 (캐시 보호).
+        - 회원(user_id > 0): user_id별 캐시를 사용하며, refresh=True 시 기존 캐시 삭제 후 재생성.
+        - 캐시 적중 시: 캐시된 80개 목록에서 슬라이싱하여 반환.
+        - 캐시 미스 시: 80개 피드를 생성하여 캐시에 5분(300초) 저장 후 슬라이싱 반환.
+        """
+        is_guest = (user_id <= 0)
+        cache_user_key = "guest" if is_guest else str(user_id)
+
+        # 게스트의 경우 refresh 요청으로 인한 공용 캐시 무효화 방어
+        if refresh and not is_guest and cache_service is not None:
+            cache_service.delete_personalized_feed(cache_user_key)
+
+        all_items: list[PersonalizedProductItem] = []
+        if cache_service is not None and (not refresh or is_guest):
+            cached_raw = cache_service.get_personalized_feed(cache_user_key)
+            if isinstance(cached_raw, list):
+                all_items = [PersonalizedProductItem(**item) for item in cached_raw]
+
+        if not all_items:
+            all_items, _ = await self.generate_personalized_feed_items(user_id=user_id)
+            if all_items and cache_service is not None:
+                cache_service.set_personalized_feed(
+                    cache_user_key,
+                    [item.model_dump() for item in all_items],
+                    ttl_seconds=300,  # 5분 캐시
+                )
+
+        total_elements = len(all_items)
+        total_pages = (total_elements + size - 1) // size if total_elements > 0 else 0
+        start_idx = page * size
+        end_idx = start_idx + size
+        page_content = all_items[start_idx:end_idx] if start_idx < total_elements else []
+        has_next = (page < total_pages - 1) if total_pages > 0 else False
+
+        return PersonalizedPageResponse(
+            content=page_content,
+            page=page,
+            size=size,
+            totalElements=total_elements,
+            totalPages=total_pages,
+            hasNext=has_next,
+        )
+
