@@ -95,6 +95,8 @@ class VtonWorker:
             # DLQ 전송 시도
             try:
                 self.sqs_client.send_to_dlq(payload, error_message=str(exc))
+                if receipt_handle:
+                    self.sqs_client.delete_message(receipt_handle)
             except Exception as dlq_exc:
                 logger.warning("DLQ 전송 중 오류 발생: %s", dlq_exc)
             return False
