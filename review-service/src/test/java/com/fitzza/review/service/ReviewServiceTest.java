@@ -20,6 +20,7 @@ import com.fitzza.review.dto.ReviewUpdatedResponse;
 import com.fitzza.review.exception.ErrorCode;
 import com.fitzza.review.exception.ReviewApiException;
 import com.fitzza.review.repository.ReviewRepository;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -139,6 +140,21 @@ class ReviewServiceTest {
     }
 
     @Test
+    void externalReviewsCannotBeUpdatedOrDeletedAsUserReviews() {
+        Review external = Review.createExternal(
+                PRODUCT_ID, 88_328_540L, 5, "편해요", null, Instant.parse("2026-10-22T03:00:00Z"));
+        ReflectionTestUtils.setField(external, "id", 12L);
+        when(reviewRepository.findById(12L)).thenReturn(Optional.of(external));
+
+        assertThatThrownBy(() -> reviewService.update(USER_ID, 12L, new ReviewUpdateRequest(1, "수정", null)))
+                .isInstanceOfSatisfying(ReviewApiException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.NOT_AUTHOR));
+        assertThatThrownBy(() -> reviewService.delete(USER_ID, 12L))
+                .isInstanceOfSatisfying(ReviewApiException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.NOT_AUTHOR));
+    }
+
+    @Test
     void missingReviewIsNotFound() {
         when(reviewRepository.findById(anyLong())).thenReturn(Optional.empty());
 
@@ -171,6 +187,7 @@ class ReviewServiceTest {
         assertThat(response.page()).isEqualTo(1);
         assertThat(response.totalPages()).isEqualTo(3);
         assertThat(response.content()).extracting("reviewId").containsExactly(11L);
+        assertThat(response.content()).extracting("source").containsExactly("FITZZA");
     }
 
     @Test
