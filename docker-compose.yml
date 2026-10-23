@@ -265,10 +265,12 @@ services:
       args: { SERVICE_DIR: vton-service }
     command: ["python", "-m", "app.worker"]
     environment:
-      <<: *java-environment
+      <<:
+        - *service-urls
+        - *postgres-environment
+        - *redis-environment
+        - *aws-environment
       POSTGRES_SCHEMA: vton
-      PRODUCT_SERVICE_URL: http://product-service:8082
-      NOTIFICATION_SERVICE_URL: http://notification-service:8086
       VTON_SERVICE_TOKEN: ${VTON_SERVICE_TOKEN:-}
       COMMUNITY_SERVICE_TOKEN: ${COMMUNITY_SERVICE_TOKEN:?COMMUNITY_SERVICE_TOKEN must be set}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
