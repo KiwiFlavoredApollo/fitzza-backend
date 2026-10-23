@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadApprovedBundleOnly",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/approved/bundle.tar.gz"
+    },
+    {
+      "Sid": "WriteIndexerReportOnly",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261022-01/indexer/report.json"
+    }
+  ]
+}

@@ -85,6 +85,20 @@
       "겨울"
     ]
   },
+  "material": "겉감: 폴리에스터 100% / 주머니감: 폴리에스터 100% / 안감1: 나일론 100% / 충전재1: 솜털 80%, 깃털 20% (오리)",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감: 폴리에스터 100% / 주머니감: 폴리에스터 100% / 안감1: 나일론 100% / 충전재1: 솜털 80%, 깃털 20% (오리) (색상 또는 품번에 따라 기재된 혼용률에서 허용 오차 범위 내 차이가 있을 수 있습니다.)",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "헤비아우터",

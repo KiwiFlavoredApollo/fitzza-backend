@@ -57,6 +57,17 @@
     "https://image.msscdn.net/images/prd_img/20210713/2028240/detail_2028240_16943993922937_500.jpg"
   ],
   "features": {},
+  "material": "Cotton 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Cotton 100%",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

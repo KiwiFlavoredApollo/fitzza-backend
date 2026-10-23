@@ -77,6 +77,17 @@
       "보통"
     ]
   },
+  "material": "외피 - LAMINATED LEATHER / 내피 - ARTIFICIAL LEATHER",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "외피 - LAMINATED LEATHER / 내피 - ARTIFICIAL LEATHER",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

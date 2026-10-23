@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20250328/4959971/4959971_17431476217157_500.jpg"
   ],
   "features": {},
+  "material": "Polyester 95%, Span 5%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Polyester 95%, Span 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

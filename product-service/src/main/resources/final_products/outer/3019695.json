@@ -86,6 +86,20 @@
       "겨울"
     ]
   },
+  "material": "WOOL 50% / ACRYL 50%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "WOOL 50% / ACRYL 50%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

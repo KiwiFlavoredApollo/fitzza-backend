@@ -104,6 +104,20 @@
       "겨울"
     ]
   },
+  "material": "ACRYLIC 50%, POLY 28% / MOHAIR 6%, NYLON 6%, PU 2%, ALPACA 8%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "ACRYLIC 50%, POLY 28%<br />\nMOHAIR 6%, NYLON 6%, PU 2%, ALPACA 8%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

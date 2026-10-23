@@ -2,6 +2,7 @@ package com.fitzza.product.product.seed;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fitzza.product.product.entity.FitType;
 import java.util.List;
 import java.util.Map;
 
@@ -23,6 +24,8 @@ public record MusinsaProductDocument(
         PriceInfo price,
         List<String> images,
         Map<String, List<String>> features,
+        String material,
+        @JsonProperty("fit_type") FitType fitType,
         SizeInfo size,
         List<OptionGroupInfo> options,
         @JsonProperty("option_items") List<OptionItemInfo> optionItems,
@@ -75,6 +78,7 @@ public record MusinsaProductDocument(
     /** 색 이름과 그 색의 썸네일. 색이 없는 상품에는 없다. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ColorImageMapping(
+            @JsonProperty("product_id") Long productId,
             @JsonProperty("color_raw") String colorRaw,
             @JsonProperty("image_url") String imageUrl) {
     }

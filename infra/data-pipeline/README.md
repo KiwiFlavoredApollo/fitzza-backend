@@ -1,5 +1,11 @@
 # Crawler to Jev contract
 
+Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
+
+The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,
+and creates Jev's `data/` bundle only when the input contract passes. It never guesses missing color-image mappings,
+starts Jev, or grants human/indexing approval. It is suspended in EKS; actual collection remains separately authorized.
+
 The AI data pipeline runs in this order:
 
 ```text
@@ -13,7 +19,39 @@ The FashionCLIP Jev implementation reads the crawler's product JSON directory di
 - every `color_image_mappings[].color_raw`
 - all sibling colors on the same product
 
+The cloud crawler now emits explicit COLOR_CHIP option/image relationships only when an active
+option item confirms the same product and option value IDs. It preserves raw color names and
+records option-ID evidence; it never falls back to product-name guesses, generic swatches, or
+another product's image. This is metadata evidence, not image-content or human quality approval.
+OtherColorGoods-only products remain unsupported pending an observed non-empty source fixture.
+
 `scripts/validate_jev_data.py` validates the files before any paid Jev request. Color keys follow the Jev implementation's `strip().lower()` rule. It does not create an intermediate input file.
+
+## Crawled review publication and import
+
+Review crawler output is stored under the immutable production prefix
+`s3://fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/<run-id>/reviews/`.
+Keep the raw JSON private and encrypted. Upload `data/*.json` and `report.json`; do not
+put the generated SQL in Git or S3 because it is only a short-lived deployment artifact.
+
+After the release containing `V2__support_external_reviews.sql` has completed and the
+`review-service` rollout is healthy, render the idempotent database import locally:
+
+```powershell
+python -X utf8 scripts/render_crawled_review_import.py `
+  --input .data/review-crawl-500-20261022/data `
+  --report .data/review-crawl-500-20261022/report.json `
+  --output .data/review-crawl-500-20261022/import.sql `
+  --skip-invalid
+```
+
+The renderer fails closed for incomplete crawler runs, duplicate source IDs, invalid
+timestamps, blank or oversized content, and ratings outside 1 through 5. `--skip-invalid`
+must be an explicit operator choice. The SQL runs in one transaction and upserts on
+`(source, source_review_id)`, so retrying the same reviewed run does not create duplicates.
+Execute it with the `review_service_app` database identity from a short-lived pod in the
+private EKS network, verify the imported count and public API response, and then delete
+both the pod and local SQL file. Never print database credentials or place them in the SQL.
 
 ## Local usage
 
@@ -61,7 +99,7 @@ Remove the key when finished or close the terminal:
 Remove-Item Env:TYPESAFE_API_KEY
 ```
 
-This session-only method is recommended for local execution. Store the deployment key in AWS Secrets Manager and inject it only into the Jev batch job at runtime.
+This session-only method is for local execution. The cloud deployment reads its key from SSM SecureString `/fitzza/prod/data-pipeline/typesafe-api-key` only after separate execution approval. Do not create a new Secrets Manager resource for this pipeline.
 
 ## Local FashionCLIP indexing
 
@@ -89,7 +127,7 @@ runs/<run-id>/jev/_SUCCESS.json
 runs/<run-id>/fashion-clip/report.json
 ```
 
-FashionCLIP/Qdrant must not start until the Jev `_SUCCESS.json` exists. Jev credentials belong in AWS Secrets Manager and must never be written to S3, Kubernetes manifests, or logs.
+The layout above is historical. The deployed cloud contract uses `pipeline/runs/<run-id>/` and requires human color approval plus a separate matching dataset-quality approval; a Jev `_SUCCESS.json` alone is not sufficient. Jev credentials belong in SSM SecureString and must never be written to S3, Kubernetes manifests, or logs.
 
 ## Local Qdrant
 

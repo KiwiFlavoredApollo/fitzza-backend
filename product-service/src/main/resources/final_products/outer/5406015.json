@@ -67,6 +67,17 @@
     "https://image.msscdn.net/images/prd_img/20250904/5406015/detail_5406015_17572913787921_500.jpg"
   ],
   "features": {},
+  "material": "폴리에스테르 80% 아크릴 6% 나일론6% 울 5% 스판 3#",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리에스테르 80% 아크릴 6% 나일론6% 울 5% 스판 3#",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

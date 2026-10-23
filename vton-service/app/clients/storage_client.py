@@ -68,7 +68,7 @@ class StorageClient:
         """바이트 데이터를 스토리지에 업로드하고 공개 URL 또는 경로를 반환합니다.
 
         Args:
-            key: 스토리지 내 객체 식별 키 (예: photos/user_1_abc.png, fittings/10.png)
+            key: 스토리지 내 객체 식별 키 (예: user-images/user_1_abc.png, fittings/10.png)
             data: 업로드할 원본 바이트
             content_type: MIME 타입 (기본 image/png)
 
@@ -111,7 +111,7 @@ class StorageClient:
         """스토리지에서 객체 또는 로컬 파일의 바이트를 다운로드합니다.
 
         Args:
-            key_or_path: S3 키(예: photos/xxx.png), 전체 URL, 또는 로컬 파일 경로
+            key_or_path: S3 키(예: user-images/xxx.png), 전체 URL, 또는 로컬 파일 경로
 
         Returns:
             바이트 데이터

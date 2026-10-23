@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20230315/3148396/detail_3148396_16788477989615_500.jpg"
   ],
   "features": {},
+  "material": "면70% 레이온 30%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면70% 레이온 30%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

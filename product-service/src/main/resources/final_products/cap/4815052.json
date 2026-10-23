@@ -64,6 +64,17 @@
     "https://image.msscdn.net/images/prd_img/20250221/4815052/detail_4815052_17630180193506_500.jpg"
   ],
   "features": {},
+  "material": "겉감: Nylon 100%, 안감: Polyester 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감: Nylon 100%, 안감: Polyester 100%",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

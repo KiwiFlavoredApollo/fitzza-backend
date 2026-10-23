@@ -228,11 +228,32 @@ def _extract_color_text(item: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_sizes_list(item: dict[str, Any]) -> list[str] | None:
+    raw_sizes = item.get("sizes")
+    if not isinstance(raw_sizes, list) or not raw_sizes:
+        return None
+
+    extracted: list[str] = []
+    for entry in raw_sizes:
+        if isinstance(entry, dict):
+            size_val = entry.get("size")
+            if size_val is not None and str(size_val).strip():
+                extracted.append(str(size_val).strip())
+        elif isinstance(entry, str) and entry.strip():
+            extracted.append(entry.strip())
+
+    return extracted if extracted else None
+
+
 def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
     size_rec = item.get("size_recommendation") or {}
     source_type = str(item.get("fit_source_type") or "none")
 
-    recommended_size = size_rec.get("size_label") or item.get("size")
+    recommended_size = (
+        size_rec.get("size_label")
+        or item.get("recommendedSize")
+        or item.get("size")
+    )
     raw_fit_score = size_rec.get("predicted_fit_score")
     fit_percent: float | None = None
     if isinstance(raw_fit_score, (int, float)):
@@ -262,7 +283,8 @@ def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
         price=price,
         imageUrl=item.get("image_url") or item.get("imageUrl"),
         color=item.get("color") or _extract_color_text(item),
-        size=recommended_size,
+        recommendedSize=recommended_size,
+        availableSizes=_extract_sizes_list(item),
         fitPercent=fit_percent,
         evidence=evidence,
     ).model_dump()

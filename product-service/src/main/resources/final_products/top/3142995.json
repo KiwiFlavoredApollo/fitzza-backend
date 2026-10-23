@@ -82,6 +82,20 @@
       "여름"
     ]
   },
+  "material": "면72%폴리28%",
+  "fit_type": "RELAXED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "면72%폴리28%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "루즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

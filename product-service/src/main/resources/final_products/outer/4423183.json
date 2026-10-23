@@ -56,6 +56,17 @@
     "https://image.msscdn.net/images/goods_img/20240910/4423183/4423183_17268032757830_500.jpg"
   ],
   "features": {},
+  "material": null,
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세페이지 참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "헤비아우터",

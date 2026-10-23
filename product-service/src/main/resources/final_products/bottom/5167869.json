@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20250605/5167869/detail_5167869_17495318464793_500.jpg"
   ],
   "features": {},
+  "material": "면 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "면 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "반바지",

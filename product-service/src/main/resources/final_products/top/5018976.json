@@ -76,6 +76,20 @@
       "여름"
     ]
   },
+  "material": "폴리 95%, 스판 5%",
+  "fit_type": "SLIM",
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리 95%, 스판 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "슬림",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

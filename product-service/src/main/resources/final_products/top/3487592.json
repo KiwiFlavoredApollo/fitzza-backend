@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20230822/3487592/detail_3487592_16927719229648_500.jpg"
   ],
   "features": {},
+  "material": "Nylon 56% Wool 30% Polyester 14%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "Nylon 56% Wool 30% Polyester 14%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

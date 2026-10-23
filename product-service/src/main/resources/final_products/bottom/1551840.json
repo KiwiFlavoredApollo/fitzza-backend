@@ -76,6 +76,17 @@
       "겨울"
     ]
   },
+  "material": "일반 : Cotton 80% / Poly 20%, 여름용 : Cotton 60% / Poly 40%, 기모 : 2025.10월 이전 코튼 60% / 폴리 40%, 2025.10월 이후 코튼 50% / 폴리 50%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "일반 : Cotton 80% / Poly 20%, 여름용 : Cotton 60% / Poly 40%, 기모 : 2025.10월 이전 코튼 60% / 폴리 40%, 2025.10월 이후 코튼 50% / 폴리 50%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

@@ -5,7 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fitzza.review.domain.Review;
 import com.fitzza.review.domain.ReviewSort;
+import com.fitzza.review.domain.ReviewSource;
 import com.fitzza.review.support.PostgresModeJpaTest;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,6 +54,22 @@ class ReviewRepositoryTest {
 
         assertThat(reviewRepository.existsByOrderItemId(700L)).isTrue();
         assertThatThrownBy(() -> save(7L, PRODUCT_ID, 700L, 2))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void storesExternalReviewsWithoutUserOrOrderAndRejectsDuplicateSourceIdentity() {
+        Instant createdAt = Instant.parse("2026-10-22T03:00:00Z");
+        Review external = reviewRepository.saveAndFlush(
+                Review.createExternal(PRODUCT_ID, 88_328_540L, 5, "편해요", null, createdAt));
+
+        assertThat(external.getUserId()).isNull();
+        assertThat(external.getOrderItemId()).isNull();
+        assertThat(external.getSource()).isEqualTo(ReviewSource.MUSINSA);
+        assertThat(external.getSourceReviewId()).isEqualTo(88_328_540L);
+        assertThat(external.getCreatedAt()).isEqualTo(createdAt);
+        assertThatThrownBy(() -> reviewRepository.saveAndFlush(
+                        Review.createExternal(PRODUCT_ID, 88_328_540L, 4, "중복", null, createdAt)))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 

@@ -53,6 +53,17 @@
     "https://image.msscdn.net/images/goods_img/20230201/3052434/3052434_16765292117765_500.jpg"
   ],
   "features": {},
+  "material": "카우 레더 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "카우 레더 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

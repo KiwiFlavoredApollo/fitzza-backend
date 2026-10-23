@@ -60,6 +60,17 @@
     "https://image.msscdn.net/images/prd_img/20240221/3888900/detail_3888900_17085822631789_500.jpg"
   ],
   "features": {},
+  "material": "겉감 : 폴리에스터 86%, 폴리우레탄 14% / 안감 : 폴리에스터 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "겉감 : 폴리에스터 86%, 폴리우레탄 14%<br />\n안감 : 폴리에스터 100%",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "캡/야구모자",

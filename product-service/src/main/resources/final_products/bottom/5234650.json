@@ -65,6 +65,17 @@
     "https://image.msscdn.net/images/prd_img/20250709/5234650/detail_5234650_17530815704394_500.jpg"
   ],
   "features": {},
+  "material": "폴리에스터 100%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "폴리에스터 100%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

@@ -61,6 +61,17 @@
     "https://image.msscdn.net/images/prd_img/20210924/2143913/detail_2143913_17248124134198_500.jpg"
   ],
   "features": {},
+  "material": null,
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "상세이미지참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "긴소매티셔츠",

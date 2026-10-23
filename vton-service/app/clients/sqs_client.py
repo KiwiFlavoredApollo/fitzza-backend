@@ -31,9 +31,10 @@ class SqsClient:
         else:
             client_kwargs: dict[str, Any] = {
                 "region_name": self.settings.aws_region,
-                "aws_access_key_id": self.settings.aws_access_key_id,
-                "aws_secret_access_key": self.settings.aws_secret_access_key,
             }
+            if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
+                client_kwargs["aws_access_key_id"] = self.settings.aws_access_key_id
+                client_kwargs["aws_secret_access_key"] = self.settings.aws_secret_access_key
             if self.settings.aws_endpoint_url.strip():
                 client_kwargs["endpoint_url"] = self.settings.aws_endpoint_url.strip()
 

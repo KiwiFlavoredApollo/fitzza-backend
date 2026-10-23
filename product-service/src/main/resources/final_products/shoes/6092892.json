@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20260306/6092892/detail_6092892_17907295213496_500.jpg"
   ],
   "features": {},
+  "material": "갑피: 폴리에스터 100%, 내피: 폴리에스터 100%, 창: EVA",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "갑피: 폴리에스터 100%, 내피: 폴리에스터 100%, 창: EVA (색상 또는 품번에 따라 기재된 혼용률에서 허용 오차 범위 내 차이가 있을 수 있습니다.)",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

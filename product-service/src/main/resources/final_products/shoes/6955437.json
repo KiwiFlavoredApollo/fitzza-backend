@@ -77,6 +77,17 @@
       "가벼움"
     ]
   },
+  "material": "외피 - FAUX SUEDE / 내피 - SYNTHETIC LEATHER",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "외피 - FAUX SUEDE / 내피 - SYNTHETIC LEATHER",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

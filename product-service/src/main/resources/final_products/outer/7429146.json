@@ -92,6 +92,17 @@
       "겨울"
     ]
   },
+  "material": "100% COTTON",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "100% COTTON",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "점퍼",

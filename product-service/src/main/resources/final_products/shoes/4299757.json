@@ -63,6 +63,17 @@
     "https://image.msscdn.net/images/prd_img/20240806/4299757/detail_4299757_17887642222586_500.jpg"
   ],
   "features": {},
+  "material": "인조가죽",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "인조가죽",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

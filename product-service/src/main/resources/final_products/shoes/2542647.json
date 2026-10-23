@@ -68,6 +68,17 @@
       "보통"
     ]
   },
+  "material": "TPU, EVA/ Rubber",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "TPU, EVA/ Rubber",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "신발",

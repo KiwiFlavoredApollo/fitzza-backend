@@ -24,7 +24,8 @@ class RecommendedProductItem(BaseModel):
     price: int
     imageUrl: Optional[str] = None
     color: Optional[str] = None
-    size: Optional[str] = None
+    recommendedSize: Optional[str] = None
+    availableSizes: Optional[list[str]] = None
     fitPercent: Optional[float] = None
     evidence: Optional[str] = None
 

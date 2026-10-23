@@ -85,6 +85,20 @@
       "가을"
     ]
   },
+  "material": null,
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "상품 상세설명 참조",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": false
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "반소매티셔츠",

@@ -58,6 +58,17 @@
     "https://image.msscdn.net/images/prd_img/20240923/4453830/detail_4453830_17294787346296_500.jpg"
   ],
   "features": {},
+  "material": "아크릴 50% / 울 50%",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "아크릴 50%<br />\n 울 50%",
+      "name": "소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "비니",

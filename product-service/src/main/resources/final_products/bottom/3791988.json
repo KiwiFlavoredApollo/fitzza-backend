@@ -89,6 +89,17 @@
       "겨울"
     ]
   },
+  "material": "BLACK : COTTON 80% POLYESTER 10% RAYON 10% / COTTON 85% POLYESTER 15% / COTTON 100% SKY BLUE, BLUE, MEDIUM BLUE : COTTON 44% POLYESTER 26% RAYON 30% / COTTON 85% POLYESTER 15% / COTTON 100% ICE BLUE…",
+  "fit_type": null,
+  "attribute_evidence": {
+    "material": {
+      "raw": "BLACK : COTTON 80% POLYESTER 10% RAYON 10% / COTTON 85% POLYESTER 15% / COTTON 100%  SKY BLUE, BLUE,  MEDIUM BLUE : COTTON 44% POLYESTER 26% RAYON 30% / COTTON 85% POLYESTER 15% / COTTON 100%  ICE BLUE : COTTON 45% POLYESTER 28% RAYON 27% GREY : COTTON 45% POLYESTER 28% RAYON 27% / COTTON 100% INDIGO : COTTON 95% POLYESTER 5%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": null
+  },
   "size": {
     "available": true,
     "type_name": "바지",

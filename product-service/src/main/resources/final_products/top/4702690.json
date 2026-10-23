@@ -89,6 +89,20 @@
       "겨울"
     ]
   },
+  "material": "COTTON 46% / POLYESTER 52% / SPANDEX 2%",
+  "fit_type": "OVERSIZED",
+  "attribute_evidence": {
+    "material": {
+      "raw": "COTTON 46% / POLYESTER 52% / SPANDEX 2%",
+      "name": "제품 소재",
+      "source": "goodsEssential",
+      "usable": true
+    },
+    "fit": {
+      "raw": "오버 사이즈",
+      "source": "goodsMaterial"
+    }
+  },
   "size": {
     "available": true,
     "type_name": "셔츠",
