@@ -122,3 +122,14 @@ class UserHistoryCollector:
             cart_product_ids=cart_ids,
             purchased_product_ids=purchased_ids,
         )
+
+    async def collect_user_history_async(
+        self,
+        user_id: int,
+        request_id_header: str | None = None,
+    ) -> UserActionHistory:
+        """collect 메서드의 명시적 비동기 별칭."""
+        return await self.collect(user_id=user_id, request_id_header=request_id_header)
+
+    collect_async = collect_user_history_async
+

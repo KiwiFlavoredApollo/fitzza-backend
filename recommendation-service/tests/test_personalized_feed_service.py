@@ -4,7 +4,10 @@ import pytest
 
 from app.schemas.recommendation import PersonalizedProductItem
 from app.services.personalized_feed_service import PersonalizedFeedService
-from app.services.user_history_service import UserActionHistory
+from app.services.user_history_service import (
+    UserActionHistory,
+    UserHistoryCollector,
+)
 
 
 def _make_dummy_item(pid: int, category: str, wished: bool = False) -> PersonalizedProductItem:
@@ -187,3 +190,39 @@ async def test_generate_personalized_feed_items_async():
     assert feed[3].category == "신발"
     assert feed[4].category == "모자"
     assert feed[5].category == "상의"
+
+
+@pytest.mark.anyio
+async def test_generate_personalized_feed_items_with_real_collector():
+    """실제 UserHistoryCollector 인스턴스를 주입하여 collect_user_history_async가 완벽히 동작하는지 검증"""
+    from app.clients.order_client import OrderServiceClient
+    from app.clients.product_client import ProductServiceClient
+
+    mock_prod = MagicMock(spec=ProductServiceClient)
+    mock_prod.get_latest_worldcup_winner_async = AsyncMock(return_value=10)
+    mock_prod.get_user_wishlist_product_ids_async = AsyncMock(return_value=[20])
+
+    mock_order = MagicMock(spec=OrderServiceClient)
+    mock_order.get_user_cart_product_ids_async = AsyncMock(return_value=[30])
+    mock_order.get_user_recent_purchased_product_ids_async = AsyncMock(return_value=[40])
+
+    real_collector = UserHistoryCollector(product_client=mock_prod, order_client=mock_order)
+
+    mock_engine = MagicMock()
+    mock_engine.compute_user_taste_vector.return_value = [0.05] * 512
+
+    service = PersonalizedFeedService(
+        qdrant_client=MagicMock(),
+        vector_engine=mock_engine,
+        history_collector=real_collector,
+    )
+
+    with patch.object(service, "search_category_candidates", return_value=[]):
+        feed, history = await service.generate_personalized_feed_items(user_id=42)
+
+    assert history.user_id == 42
+    assert history.worldcup_winner_id == 10
+    assert history.wishlist_product_ids == [20]
+    assert history.cart_product_ids == [30]
+    assert history.purchased_product_ids == [40]
+
