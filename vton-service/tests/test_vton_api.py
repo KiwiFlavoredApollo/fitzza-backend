@@ -912,5 +912,28 @@ def test_post_vton_with_request_id_multipart_and_get_detail() -> None:
         assert detail_data["requestId"] == 15
 
 
+def test_post_vton_with_invalid_multipart_request_id_returns_400() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    fake_png = _create_sample_png()
+    files = {"userImage": ("face.png", fake_png, "image/png")}
+    data = {
+        "items": json.dumps([{"productId": 101}]),
+        "requestId": "invalid_number",
+    }
+
+    resp = client.post(
+        "/api/vton",
+        data=data,
+        files=files,
+        headers={"X-User-Id": "7"},
+    )
+    assert resp.status_code == 400
+    assert "requestId" in resp.json()["message"]
+
+
+
 
 

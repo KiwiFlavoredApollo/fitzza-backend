@@ -449,8 +449,11 @@ async def request_fitting(
         if raw_req_id is not None and str(raw_req_id).strip():
             try:
                 request_id = int(str(raw_req_id).strip())
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="requestId는 유효한 정수여야 합니다.",
+                ) from exc
         raw_items_str = form.get("items")
         raw_values = form.getlist("productIds")
 
