@@ -348,4 +348,42 @@ metadata:
 spec:
   selector: { app.kubernetes.io/name: vton-service }
   ports: [{ name: http, port: 8000, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vton-worker
+  labels: { app.kubernetes.io/name: vton-worker, fitzza.io/workload: worker }
+spec:
+  replicas: 1
+  progressDeadlineSeconds: 900
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: vton-worker }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: vton-worker }
+    spec:
+      serviceAccountName: fitzza-application
+      containers:
+        - name: vton-worker
+          image: fitzza/vton-service:latest
+          imagePullPolicy: Always
+          command: ["python", "-m", "app.worker"]
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef: { name: fitzza-app-secrets, key: VTON_REDIS_URL }
+            - name: QUEUE_BACKEND
+              value: sqs
+          envFrom:
+            - configMapRef: { name: fitzza-app-config }
+            - secretRef: { name: fitzza-app-secrets }
 

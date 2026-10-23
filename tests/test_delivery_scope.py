@@ -54,7 +54,9 @@ def test_delivery_overlay_excludes_operator_owned_resources():
     )
     documents = list(yaml.safe_load_all(result.stdout))
     deployments = [d for d in documents if d["kind"] == "Deployment"]
-    assert len(deployments) == 11
+    assert len(deployments) == 12
+    vton_worker = next(d for d in deployments if d["metadata"]["name"] == "vton-worker")
+    assert vton_worker["spec"]["template"]["spec"]["containers"][0]["command"] == ["python", "-m", "app.worker"]
     assert all(d["spec"]["progressDeadlineSeconds"] == 900 for d in deployments)
     assert all(d["kind"] in {"Deployment", "Service", "ConfigMap", "Ingress"}
                for d in documents)
