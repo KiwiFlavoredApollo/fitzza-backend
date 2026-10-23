@@ -27,6 +27,32 @@ OtherColorGoods-only products remain unsupported pending an observed non-empty s
 
 `scripts/validate_jev_data.py` validates the files before any paid Jev request. Color keys follow the Jev implementation's `strip().lower()` rule. It does not create an intermediate input file.
 
+## Crawled review publication and import
+
+Review crawler output is stored under the immutable production prefix
+`s3://fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/<run-id>/reviews/`.
+Keep the raw JSON private and encrypted. Upload `data/*.json` and `report.json`; do not
+put the generated SQL in Git or S3 because it is only a short-lived deployment artifact.
+
+After the release containing `V2__support_external_reviews.sql` has completed and the
+`review-service` rollout is healthy, render the idempotent database import locally:
+
+```powershell
+python -X utf8 scripts/render_crawled_review_import.py `
+  --input .data/review-crawl-500-20261022/data `
+  --report .data/review-crawl-500-20261022/report.json `
+  --output .data/review-crawl-500-20261022/import.sql `
+  --skip-invalid
+```
+
+The renderer fails closed for incomplete crawler runs, duplicate source IDs, invalid
+timestamps, blank or oversized content, and ratings outside 1 through 5. `--skip-invalid`
+must be an explicit operator choice. The SQL runs in one transaction and upserts on
+`(source, source_review_id)`, so retrying the same reviewed run does not create duplicates.
+Execute it with the `review_service_app` database identity from a short-lived pod in the
+private EKS network, verify the imported count and public API response, and then delete
+both the pod and local SQL file. Never print database credentials or place them in the SQL.
+
 ## Local usage
 
 Use the crawler's qualified product `data/` directory, not candidate or audit output.
