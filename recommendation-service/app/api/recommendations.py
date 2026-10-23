@@ -28,6 +28,8 @@ from app.services.cache_service import CacheService
 from app.schemas.recommendation import (
     InternalComboProductItem,
     InternalComboResponse,
+    PersonalizedPageResponse,
+    PersonalizedProductItem,
     RecommendationAcceptedResponse,
     RecommendationCreateRequest,
     RecommendationDetailResponse,
@@ -156,6 +158,32 @@ def _get_search_engine(app: Any) -> Any:
         search_engine = coordinator.engine
         app.state.search_engine = search_engine
     return search_engine
+
+
+def _get_personalized_feed_service(app: Any) -> Any:
+    feed_service = getattr(app.state, "personalized_feed_service", None)
+    if feed_service is None:
+        from app.services.personalized_feed_service import PersonalizedFeedService
+        from app.services.personalized_vector_engine import PersonalizedVectorEngine
+
+        settings = _get_settings_from_app(app)
+        search_engine = _get_search_engine(app)
+        qdrant_client = getattr(search_engine, "client", None)
+
+        vector_engine = PersonalizedVectorEngine(
+            qdrant_client=qdrant_client,
+            collection_name=settings.qdrant_collection_name,
+            search_engine=search_engine,
+            qdrant_url=settings.qdrant_url,
+        )
+        feed_service = PersonalizedFeedService(
+            qdrant_client=qdrant_client,
+            collection_name=settings.qdrant_collection_name,
+            vector_engine=vector_engine,
+            qdrant_url=settings.qdrant_url,
+        )
+        app.state.personalized_feed_service = feed_service
+    return feed_service
 
 
 
@@ -438,6 +466,79 @@ def process_recommendation_request(
 
 public_router = APIRouter(tags=["추천"])
 internal_router = APIRouter(tags=["내부 통신"])
+
+
+@public_router.get(
+    "/personalized",
+    response_model=PersonalizedPageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="홈 화면 개인화 추천 상품 피드 조회 (무한 스크롤)",
+    description=(
+        "사용자의 행동 이력(이상형 월드컵 1등, 찜/장바구니, 최근 구매 5건)을 바탕으로 "
+        "취향 벡터를 합성하여 5대 카테고리(상의, 하의, 아우터, 신발, 모자) 상품을 라운드 로빈 교차 인터리빙한 "
+        "개인화 피드를 제공합니다.\n\n"
+        "- 최근 구매 완료한 상품은 피드에서 제외됩니다.\n"
+        "- 비로그인(게스트) 또는 이력이 없는 유저는 호불호 없는 베이직 룩 추천으로 자동 폴백(Cold-Start)됩니다.\n"
+        "- 5분(300초)간 Redis에 캐싱되며, refresh=true 쿼리로 즉시 강제 갱신할 수 있습니다.\n"
+        "- 한 번에 size(기본 20개)씩 최대 4페이지(총 80개)까지 페이징 제공됩니다."
+    ),
+)
+async def get_personalized_recommendation_feed(
+    request: Request,
+    page: int = Query(default=0, ge=0, description="페이지 번호 (0부터 시작)"),
+    size: int = Query(default=20, gt=0, le=50, description="페이지당 상품 개수 (기본 20, 최대 50)"),
+    refresh: bool = Query(default=False, description="캐시 무효화 및 강제 새로고침 여부"),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> PersonalizedPageResponse:
+    parsed_user_id = 0
+    if x_user_id is not None and str(x_user_id).strip():
+        try:
+            uid = int(str(x_user_id).strip())
+            if uid > 0:
+                parsed_user_id = uid
+        except (ValueError, TypeError):
+            parsed_user_id = 0
+
+    cache_service = _get_cache_service(request.app)
+    cache_user_key = str(parsed_user_id) if parsed_user_id > 0 else "guest"
+
+    if refresh:
+        cache_service.delete_personalized_feed(cache_user_key)
+
+    all_items: list[PersonalizedProductItem] = []
+    if not refresh:
+        cached_raw = cache_service.get_personalized_feed(cache_user_key)
+        if isinstance(cached_raw, list):
+            all_items = [PersonalizedProductItem(**item) for item in cached_raw]
+
+    if not all_items:
+        feed_service = _get_personalized_feed_service(request.app)
+        all_items, _ = await feed_service.generate_personalized_feed_items(
+            user_id=parsed_user_id
+        )
+        if all_items:
+            cache_service.set_personalized_feed(
+                cache_user_key,
+                [item.model_dump() for item in all_items],
+                ttl_seconds=300,  # 5분 캐시
+            )
+
+    total_elements = len(all_items)
+    total_pages = (total_elements + size - 1) // size if total_elements > 0 else 0
+    start_idx = page * size
+    end_idx = start_idx + size
+    page_content = all_items[start_idx:end_idx] if start_idx < total_elements else []
+    has_next = (page < total_pages - 1) if total_pages > 0 else False
+
+    return PersonalizedPageResponse(
+        content=page_content,
+        page=page,
+        size=size,
+        totalElements=total_elements,
+        totalPages=total_pages,
+        hasNext=has_next,
+    )
+
 
 
 @public_router.post(
