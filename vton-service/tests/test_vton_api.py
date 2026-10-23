@@ -124,7 +124,7 @@ def test_background_vton_success_flow(tmp_path: Path) -> None:
     result_url = f"http://api.fitzza.com/api/vton/{fitting_id}/image"
 
     with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()):
-        _run_background_vton(
+        completed = _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
             photo_id=None,
@@ -132,6 +132,7 @@ def test_background_vton_success_flow(tmp_path: Path) -> None:
             result_image_url=result_url,
         )
 
+    assert completed is True
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "COMPLETED"
@@ -157,7 +158,7 @@ def test_background_vton_failure_flow() -> None:
 
     fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
 
-    _run_background_vton(
+    completed = _run_background_vton(
         fitting_id=fitting_id,
         user_id=7,
         photo_id=1,
@@ -165,6 +166,7 @@ def test_background_vton_failure_flow() -> None:
         result_image_url="http://dummy/image",
     )
 
+    assert completed is False
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "FAILED"
@@ -205,7 +207,7 @@ def test_background_vton_duplicate_category_flow() -> None:
 
     fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 102])
 
-    _run_background_vton(
+    completed = _run_background_vton(
         fitting_id=fitting_id,
         user_id=7,
         photo_id=None,
@@ -213,6 +215,7 @@ def test_background_vton_duplicate_category_flow() -> None:
         result_image_url="/api/vton/1/image",
     )
 
+    assert completed is False
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "FAILED"
