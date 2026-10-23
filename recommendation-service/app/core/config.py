@@ -58,6 +58,9 @@ class Settings:
     product_service_url: str = field(
         default_factory=lambda: os.getenv("PRODUCT_SERVICE_URL", "")
     )
+    order_service_url: str = field(
+        default_factory=lambda: os.getenv("ORDER_SERVICE_URL", "")
+    )
     notification_service_url: str = field(
         default_factory=lambda: os.getenv("NOTIFICATION_SERVICE_URL", "")
     )
