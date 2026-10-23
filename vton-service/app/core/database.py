@@ -189,7 +189,6 @@ class VtonRepository:
                         cur.execute("ALTER TABLE fittings ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;")
                     if "request_id" not in columns:
                         cur.execute("ALTER TABLE fittings ADD COLUMN request_id INTEGER;")
-                        cur.execute("ALTER TABLE fittings ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;")
 
                     cur.execute(
                         """
