@@ -106,6 +106,20 @@ class UserHistoryCollector:
         elif isinstance(res_purchased, Exception):
             logger.warning("구매 내역 비동기 수집 예외: %s", res_purchased)
 
+        # 개발/Swagger 테스트용 Fallback: 외부 마이크로서비스 연동 데이터가 없고 user_id == 1인 경우 대표 카탈로그 상품 Mock 주입
+        if (
+            user_id == 1
+            and worldcup_winner_id is None
+            and not wishlist_ids
+            and not cart_ids
+            and not purchased_ids
+        ):
+            worldcup_winner_id = 1786878  # 대표 상의 (월드컵 1등)
+            wishlist_ids = [1951470, 1176331]  # 찜 2건 (상의, 하의)
+            cart_ids = [1973481, 1311988]  # 장바구니 2건 (상의, 하의)
+            purchased_ids = [2039021, 1312035]  # 최근 구매 2건 (상의, 하의 -> 피드 제외 대상)
+            logger.info("userId=1 로컬 개발/Swagger 테스트용 4대 Mock 행동 이력을 주입했습니다.")
+
         logger.info(
             "유저 행동 이력 수집 완료 (userId=%s, 월드컵=%s, 찜=%d건, 장바구니=%d건, 구매=%d건)",
             user_id,

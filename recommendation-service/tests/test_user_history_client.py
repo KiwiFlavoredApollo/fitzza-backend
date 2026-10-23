@@ -206,3 +206,29 @@ async def test_user_history_collector_exception_resilience():
     assert history.cart_product_ids == [201]  # 성공한 것만 정상 반영
     assert history.purchased_product_ids == []
     assert history.has_any_history is True
+
+
+@pytest.mark.anyio
+async def test_user_history_collector_user_id_1_mock_fallback():
+    """외부 연동이 비어있을 때 user_id=1에 대해 대표 카탈로그 Mock 데이터가 정상 주입되는지 검증"""
+    mock_prod = MagicMock(spec=ProductServiceClient)
+    mock_prod.get_latest_worldcup_winner_async = AsyncMock(return_value=None)
+    mock_prod.get_user_wishlist_product_ids_async = AsyncMock(return_value=[])
+
+    mock_order = MagicMock(spec=OrderServiceClient)
+    mock_order.get_user_cart_product_ids_async = AsyncMock(return_value=[])
+    mock_order.get_user_recent_purchased_product_ids_async = AsyncMock(return_value=[])
+
+    collector = UserHistoryCollector(
+        product_client=mock_prod,
+        order_client=mock_order,
+    )
+
+    history = await collector.collect(user_id=1)
+    assert history.user_id == 1
+    assert history.worldcup_winner_id == 1786878
+    assert history.wishlist_product_ids == [1951470, 1176331]
+    assert history.cart_product_ids == [1973481, 1311988]
+    assert history.purchased_product_ids == [2039021, 1312035]
+    assert history.has_any_history is True
+
