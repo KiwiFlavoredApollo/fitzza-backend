@@ -55,13 +55,14 @@ class ReviewControllerTest {
 
     @Test
     void listIsPublicAndDefaultsToTheFirstPageOfLatestReviews() throws Exception {
-        ReviewResponse review = new ReviewResponse(11L, 30L, 7L, 4, "잘 맞아요", null, null);
+        ReviewResponse review = new ReviewResponse(11L, 30L, 7L, "FITZZA", 4, "잘 맞아요", null, null);
         when(reviewService.findByProduct(30L, 0, 20, ReviewSort.LATEST))
                 .thenReturn(new ReviewPageResponse(List.of(review), 0, 20, 1, 1, false));
 
         mockMvc.perform(get(REVIEWS).param("productId", "30"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].reviewId").value(11))
+                .andExpect(jsonPath("$.content[0].source").value("FITZZA"))
                 .andExpect(jsonPath("$.content[0].rating").value(4))
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.totalPages").value(1));

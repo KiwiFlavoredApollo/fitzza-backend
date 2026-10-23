@@ -108,10 +108,10 @@ class Settings:
         default_factory=lambda: os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
     )
     aws_access_key_id: str = field(
-        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "test")
+        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "")
     )
     aws_secret_access_key: str = field(
-        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "")
     )
     cloudfront_domain: str = field(
         default_factory=lambda: os.getenv("CLOUDFRONT_DOMAIN", "")
