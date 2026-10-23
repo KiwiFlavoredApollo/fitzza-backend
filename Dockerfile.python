@@ -4,7 +4,9 @@ WORKDIR /app
 COPY ${SERVICE_DIR}/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY ${SERVICE_DIR} .
-RUN mkdir -p /app/data && useradd --system --uid 10001 fitzza && chown -R fitzza /app
+RUN mkdir -p /app/data && useradd --system --create-home --uid 10001 fitzza && chown -R fitzza /app
+# 모델 캐시(Hugging Face)는 실행 계정이 쓸 수 있는 경로에 둔다. 시스템 계정은 기본적으로 홈 폴더가 없다.
+ENV HF_HOME=/app/data/huggingface
 USER fitzza
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
