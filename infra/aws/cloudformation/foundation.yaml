@@ -404,6 +404,7 @@ Resources:
           - stay attached to the private route table
           - allow read access to the regional ECR layer bucket for EKS system images
           - allow delivery artifacts only for the explicit bucket and this account
+          - allow the VTON Pod Identity role to access only the VTON asset bucket
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -446,6 +447,14 @@ Resources:
                 StringEquals:
                   aws:PrincipalAccount: !Ref AWS::AccountId
             - !Ref AWS::NoValue
+          - Sid: AllowVtonRuntimeAssets
+            Effect: Allow
+            Principal: '*'
+            Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${ProjectName}-${Environment}-assets-vton/*'
+            Condition:
+              StringEquals:
+                aws:PrincipalArn: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ProjectName}-${Environment}-vton-runtime'
       RouteTableIds:
         - !Ref PrivateRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'

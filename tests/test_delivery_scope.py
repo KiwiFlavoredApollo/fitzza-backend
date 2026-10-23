@@ -31,6 +31,20 @@ def test_artifact_endpoint_is_opt_in_and_account_scoped():
     assert "s3:::${DeliveryArtifactBucketName}/*" in template
 
 
+def test_vton_runtime_endpoint_access_is_role_and_bucket_scoped():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "Sid: AllowVtonRuntimeAssets" in template
+    assert "s3:::${ProjectName}-${Environment}-assets-vton/*" in template
+    assert "role/${ProjectName}-${Environment}-vton-runtime" in template
+    assert "Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]" in template
+
+
+def test_production_vton_uses_aws_backends():
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text()
+    assert "VTON_STORAGE_BACKEND: s3" in config
+    assert "VTON_QUEUE_BACKEND: sqs" in config
+
+
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl unavailable")
 def test_delivery_overlay_excludes_operator_owned_resources():
     yaml = pytest.importorskip("yaml")
