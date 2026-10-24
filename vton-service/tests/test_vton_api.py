@@ -450,17 +450,79 @@ def test_list_user_fittings_flow() -> None:
     data = resp.json()
     assert data["totalCount"] == 2
     assert len(data["items"]) == 2
+    assert data["hasNext"] is False
+    assert data["page"] == 0
+    assert data["totalPages"] == 1
     # 최신순 정렬 확인 (f3, f1)
     ids = [item["fittingId"] for item in data["items"]]
     assert ids == [f3, f1]
 
-    # 4. 페이징 확인 (limit=1, offset=1)
-    resp_paged = client.get("/api/vton?limit=1&offset=1", headers={"X-User-Id": "7"})
-    assert resp_paged.status_code == 200
-    paged_data = resp_paged.json()
-    assert paged_data["totalCount"] == 2
-    assert len(paged_data["items"]) == 1
-    assert paged_data["items"][0]["fittingId"] == f1
+    # 4. 페이징 확인 (limit=1, offset=0 -> hasNext=True)
+    resp_p0 = client.get("/api/vton?limit=1&offset=0", headers={"X-User-Id": "7"})
+    assert resp_p0.status_code == 200
+    p0_data = resp_p0.json()
+    assert p0_data["totalCount"] == 2
+    assert len(p0_data["items"]) == 1
+    assert p0_data["hasNext"] is True
+    assert p0_data["totalPages"] == 2
+
+    # 5. page / size 쿼리 파라미터 표준 호환 확인 (page=1, size=1)
+    resp_page1 = client.get("/api/vton?page=1&size=1", headers={"X-User-Id": "7"})
+    assert resp_page1.status_code == 200
+    p1_data = resp_page1.json()
+    assert p1_data["totalCount"] == 2
+    assert len(p1_data["items"]) == 1
+    assert p1_data["items"][0]["fittingId"] == f1
+    assert p1_data["hasNext"] is False
+    assert p1_data["page"] == 1
+
+    # 6. 정렬되지 않은 offset 요청 시 page=None 반환 검증
+    resp_unaligned = client.get("/api/vton?limit=2&offset=1", headers={"X-User-Id": "7"})
+    assert resp_unaligned.status_code == 200
+    assert resp_unaligned.json()["page"] is None
+
+
+def test_list_user_fittings_filter_by_request_id() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    f1 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101], request_id=10)
+    f2 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[102], request_id=20)
+    f3 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[103], request_id=10)
+    repo.create_fitting(user_id=8, photo_id=None, product_ids=[201], request_id=10)
+
+    # requestId=10 필터링
+    resp10 = client.get("/api/vton?requestId=10", headers={"X-User-Id": "7"})
+    assert resp10.status_code == 200
+    data10 = resp10.json()
+    assert data10["totalCount"] == 2
+    assert len(data10["items"]) == 2
+    ids = [item["fittingId"] for item in data10["items"]]
+    assert ids == [f3, f1]
+    for item in data10["items"]:
+        assert item["requestId"] == 10
+
+    # requestId=20 필터링
+    resp20 = client.get("/api/vton?requestId=20", headers={"X-User-Id": "7"})
+    assert resp20.status_code == 200
+    data20 = resp20.json()
+    assert data20["totalCount"] == 1
+    assert data20["items"][0]["fittingId"] == f2
+    assert data20["items"][0]["requestId"] == 20
+
+    # 존재하지 않는 requestId=999 필터링
+    resp999 = client.get("/api/vton?requestId=999", headers={"X-User-Id": "7"})
+    assert resp999.status_code == 200
+    data999 = resp999.json()
+    assert data999["totalCount"] == 0
+    assert data999["items"] == []
+
+    # 유효하지 않은 requestId (0 또는 음수) 요청 시 400 Bad Request
+    resp_invalid = client.get("/api/vton?requestId=0", headers={"X-User-Id": "7"})
+    assert resp_invalid.status_code == 400
+    resp_neg = client.get("/api/vton?requestId=-1", headers={"X-User-Id": "7"})
+    assert resp_neg.status_code == 400
 
 
 def test_post_vton_multipart_user_image_flow() -> None:

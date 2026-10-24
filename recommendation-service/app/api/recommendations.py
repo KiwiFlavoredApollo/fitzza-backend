@@ -589,7 +589,10 @@ def list_recommendations(
     return RecommendationHistoryPageResponse(
         content=items,
         page=page_data["page"],
+        size=page_data.get("size", size),
+        totalElements=page_data.get("totalElements", 0),
         totalPages=page_data["totalPages"],
+        hasNext=page_data.get("hasNext", False),
     )
 
 
@@ -623,6 +626,7 @@ def get_recommendation_detail(
 
     return RecommendationDetailResponse(
         requestId=record["requestId"],
+        queryText=str(record.get("queryText") or ""),
         status=record["status"],
         searchType=record["searchType"],
         tpoSummary=record["tpoSummary"],

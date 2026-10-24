@@ -212,6 +212,22 @@ class FittingListResponse(BaseModel):
         description="전체 피팅 건수",
         json_schema_extra={"example": 5},
     )
+    page: int | None = Field(
+        default=None,
+        description="현재 페이지 번호 (0부터 시작)",
+    )
+    size: int | None = Field(
+        default=None,
+        description="페이지 크기",
+    )
+    totalPages: int | None = Field(
+        default=None,
+        description="전체 페이지 수",
+    )
+    hasNext: bool = Field(
+        default=False,
+        description="다음 페이지 존재 여부 (무한 스크롤 트리거)",
+    )
 
 
 class InternalResultProduct(BaseModel):

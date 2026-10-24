@@ -42,6 +42,7 @@ class RecommendedComboItem(BaseModel):
 
 class RecommendationDetailResponse(BaseModel):
     requestId: int
+    queryText: str = ""
     status: Literal["PROCESSING", "DONE", "FAILED"]
     searchType: Optional[str] = None
     tpoSummary: Optional[str] = None
@@ -60,7 +61,10 @@ class RecommendationHistoryItem(BaseModel):
 class RecommendationHistoryPageResponse(BaseModel):
     content: list[RecommendationHistoryItem] = Field(default_factory=list)
     page: int
+    size: int = 20
+    totalElements: int = 0
     totalPages: int
+    hasNext: bool = False
 
 
 class InternalComboProductItem(BaseModel):
