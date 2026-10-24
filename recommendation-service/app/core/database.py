@@ -645,7 +645,7 @@ class RecommendationRepository:
                             (user_id, size, offset),
                         )
                         rows = cur.fetchall()
-            return self._build_page_dict(rows, page, total_pages)
+            return self._build_page_dict(rows, page, total_pages, total_count=total_count, size=size)
 
         with self._lock:
             conn = self._get_sqlite_connection()
@@ -671,7 +671,7 @@ class RecommendationRepository:
                     """,
                     (user_id, size, offset),
                 ).fetchall()
-                return self._build_page_dict(rows, page, total_pages)
+                return self._build_page_dict(rows, page, total_pages, total_count=total_count, size=size)
             finally:
                 self._close_sqlite_if_transient(conn)
 
@@ -680,6 +680,8 @@ class RecommendationRepository:
         rows: list[Any],
         page: int,
         total_pages: int,
+        total_count: int = 0,
+        size: int = 20,
     ) -> dict[str, Any]:
         content = [
             {
@@ -690,10 +692,14 @@ class RecommendationRepository:
             }
             for r in rows
         ]
+        has_next = (page + 1) < total_pages
         return {
             "content": content,
             "page": page,
+            "size": size,
+            "totalElements": total_count,
             "totalPages": total_pages,
+            "hasNext": has_next,
         }
 
     def get_combo(self, combo_id: int) -> dict[str, Any] | None:

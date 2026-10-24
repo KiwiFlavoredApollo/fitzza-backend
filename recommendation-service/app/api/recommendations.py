@@ -589,7 +589,10 @@ def list_recommendations(
     return RecommendationHistoryPageResponse(
         content=items,
         page=page_data["page"],
+        size=page_data.get("size", size),
+        totalElements=page_data.get("totalElements", 0),
         totalPages=page_data["totalPages"],
+        hasNext=page_data.get("hasNext", False),
     )
 
 

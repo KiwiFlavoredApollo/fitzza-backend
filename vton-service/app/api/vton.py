@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
-import uuid
+import math
 from pathlib import Path
 from typing import Annotated, Any
-
-import json
+import uuid
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -307,6 +307,8 @@ def list_user_fittings(
     requestId: Annotated[int | None, Query(alias="requestId", ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=100, description="조회 건수")] = 20,
     offset: Annotated[int, Query(ge=0, description="시작 위치")] = 0,
+    page: Annotated[int | None, Query(ge=0, description="페이지 번호 (0부터 시작, page 지정 시 offset 자동 계산)")] = None,
+    size: Annotated[int | None, Query(ge=1, le=100, description="페이지 크기 (기본값: limit)")] = None,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FittingListResponse:
     if not x_user_id or x_user_id <= 0:
@@ -315,11 +317,16 @@ def list_user_fittings(
             detail="로그인이 필요한 서비스입니다.",
         )
 
+    # page / size 지원 (타 마이크로서비스 표준 페이징 연동)
+    effective_limit = size if size is not None else limit
+    effective_offset = (page * effective_limit) if page is not None else offset
+    current_page = page if page is not None else (offset // effective_limit if effective_limit > 0 else 0)
+
     repo = get_repo()
     raw_items, total_count = repo.get_user_fittings(
         user_id=x_user_id,
-        limit=limit,
-        offset=offset,
+        limit=effective_limit,
+        offset=effective_offset,
         request_id=requestId,
     )
 
@@ -340,7 +347,17 @@ def list_user_fittings(
             )
         )
 
-    return FittingListResponse(items=items, totalCount=total_count)
+    has_next = (effective_offset + len(items)) < total_count
+    total_pages = math.ceil(total_count / effective_limit) if effective_limit > 0 else 0
+
+    return FittingListResponse(
+        items=items,
+        totalCount=total_count,
+        page=current_page,
+        size=effective_limit,
+        totalPages=total_pages,
+        hasNext=has_next,
+    )
 
 
 @router.post(

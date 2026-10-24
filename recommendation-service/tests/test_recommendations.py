@@ -371,11 +371,28 @@ def test_list_recommendations_returns_user_history_newest_first() -> None:
         assert list_res.status_code == 200
         data = list_res.json()
         assert data["page"] == 0
+        assert data["size"] == 10
+        assert data["totalElements"] == 2
         assert data["totalPages"] == 1
+        assert data["hasNext"] is False
         assert [item["queryText"] for item in data["content"]] == [
             "두 번째 질문",
             "첫 번째 질문",
         ]
+
+        # 페이징 size=1 -> hasNext is True 확인
+        paged_res = client.get(
+            "/api/v1/recommendations?page=0&size=1",
+            headers={"X-User-Id": "7"},
+        )
+        assert paged_res.status_code == 200
+        paged_data = paged_res.json()
+        assert paged_data["page"] == 0
+        assert paged_data["size"] == 1
+        assert paged_data["totalElements"] == 2
+        assert paged_data["totalPages"] == 2
+        assert paged_data["hasNext"] is True
+        assert len(paged_data["content"]) == 1
 
 
 def test_internal_combo_lookup_verifies_service_token_and_ownership() -> None:

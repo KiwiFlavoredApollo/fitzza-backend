@@ -420,17 +420,31 @@ def test_list_user_fittings_flow() -> None:
     data = resp.json()
     assert data["totalCount"] == 2
     assert len(data["items"]) == 2
+    assert data["hasNext"] is False
+    assert data["page"] == 0
+    assert data["totalPages"] == 1
     # 최신순 정렬 확인 (f3, f1)
     ids = [item["fittingId"] for item in data["items"]]
     assert ids == [f3, f1]
 
-    # 4. 페이징 확인 (limit=1, offset=1)
-    resp_paged = client.get("/api/vton?limit=1&offset=1", headers={"X-User-Id": "7"})
-    assert resp_paged.status_code == 200
-    paged_data = resp_paged.json()
-    assert paged_data["totalCount"] == 2
-    assert len(paged_data["items"]) == 1
-    assert paged_data["items"][0]["fittingId"] == f1
+    # 4. 페이징 확인 (limit=1, offset=0 -> hasNext=True)
+    resp_p0 = client.get("/api/vton?limit=1&offset=0", headers={"X-User-Id": "7"})
+    assert resp_p0.status_code == 200
+    p0_data = resp_p0.json()
+    assert p0_data["totalCount"] == 2
+    assert len(p0_data["items"]) == 1
+    assert p0_data["hasNext"] is True
+    assert p0_data["totalPages"] == 2
+
+    # 5. page / size 쿼리 파라미터 표준 호환 확인 (page=1, size=1)
+    resp_page1 = client.get("/api/vton?page=1&size=1", headers={"X-User-Id": "7"})
+    assert resp_page1.status_code == 200
+    p1_data = resp_page1.json()
+    assert p1_data["totalCount"] == 2
+    assert len(p1_data["items"]) == 1
+    assert p1_data["items"][0]["fittingId"] == f1
+    assert p1_data["hasNext"] is False
+    assert p1_data["page"] == 1
 
 
 def test_list_user_fittings_filter_by_request_id() -> None:
