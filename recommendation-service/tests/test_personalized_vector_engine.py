@@ -30,8 +30,21 @@ def test_l2_normalize():
     assert np.allclose(_l2_normalize(zero_vec), zero_vec)
 
 
-def test_cold_start_deterministic():
+def test_cold_start_from_precomputed_file():
+    """사전 계산된 cold_start_vector.json 파일이 정상 로드되는지 검증"""
     engine = PersonalizedVectorEngine(qdrant_client=MagicMock())
+    cold_vec = engine.get_cold_start_vector()
+
+    assert len(cold_vec) == 512
+    norm = np.linalg.norm(np.array(cold_vec))
+    assert np.isclose(norm, 1.0, atol=1e-5)
+    # 캐싱 확인
+    assert engine.get_cold_start_vector() is cold_vec
+
+
+def test_cold_start_deterministic():
+    """사전 파일과 search_engine이 모두 없을 때 결정론적 단위 벡터로 폴백"""
+    engine = PersonalizedVectorEngine(qdrant_client=MagicMock(), cold_start_path="")
     cold_vec = engine.get_cold_start_vector()
 
     assert len(cold_vec) == 512
@@ -43,12 +56,14 @@ def test_cold_start_deterministic():
 
 
 def test_cold_start_with_search_engine():
+    """사전 파일이 없을 때 search_engine.encode_text로 폴백"""
     mock_search_engine = MagicMock()
     mock_search_engine.encode_text.return_value = [0.1] * 512
 
     engine = PersonalizedVectorEngine(
         qdrant_client=MagicMock(),
         search_engine=mock_search_engine,
+        cold_start_path="",
     )
     cold_vec = engine.get_cold_start_vector()
 

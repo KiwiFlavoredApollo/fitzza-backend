@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import math
+import os
 from typing import Any, Optional
 
 import numpy as np
@@ -43,12 +45,22 @@ class PersonalizedVectorEngine:
         collection_name: Optional[str] = None,
         search_engine: Optional[Any] = None,
         qdrant_url: Optional[str] = None,
+        cold_start_path: Optional[str] = None,
     ) -> None:
         settings = get_settings()
         self.collection_name = (
             collection_name or settings.qdrant_collection_name or "musinsa_products"
         )
         self.search_engine = search_engine
+
+        if cold_start_path is not None:
+            self.cold_start_path: Optional[str] = cold_start_path
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            default_path = os.path.abspath(
+                os.path.join(base_dir, "../../data/cold_start_vector.json")
+            )
+            self.cold_start_path = default_path if os.path.exists(default_path) else None
 
         if qdrant_client is not None:
             self.client = qdrant_client
@@ -61,13 +73,27 @@ class PersonalizedVectorEngine:
     def get_cold_start_vector(self) -> list[float]:
         """
         이력이 없는 신규 유저 또는 게스트를 위한 기본 Cold-Start 베이직 룩 벡터 반환.
-        1) search_engine이 주어져 있으면 베이직 프롬프트를 인코딩하여 캐싱.
-        2) 모델이 없거나 오류 발생 시 결정론적인 단위 벡터(L2 norm 1.0) 생성 반환.
+        1) cold_start_path 파일이 존재하면 사전 계산된 512차원 벡터를 즉시 로드하여 반환.
+        2) 파일이 없고 search_engine이 주어져 있으면 베이직 프롬프트를 동적 인코딩.
+        3) 모두 실패 시 결정론적인 단위 벡터(L2 norm 1.0) 생성 반환.
         """
         if self._cold_start_vector_cache is not None:
             return self._cold_start_vector_cache
 
-        # 1) SearchEngine의 CLIP 인코더 활용 시도
+        # 1) 사전 계산된 Cold-Start 벡터 파일 로드 시도
+        if self.cold_start_path and os.path.exists(self.cold_start_path):
+            try:
+                with open(self.cold_start_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                vec = data.get("vector")
+                if isinstance(vec, list) and len(vec) == self.VECTOR_DIM:
+                    norm_vec = _l2_normalize(np.array(vec, dtype=np.float32)).tolist()
+                    self._cold_start_vector_cache = norm_vec
+                    return norm_vec
+            except Exception as e:
+                logger.warning("사전 계산된 Cold-Start 벡터 파일 로드 실패: %s", e)
+
+        # 2) SearchEngine의 CLIP 인코더 활용 시도
         if self.search_engine is not None and hasattr(self.search_engine, "encode_text"):
             try:
                 encoded = self.search_engine.encode_text(self.DEFAULT_COLD_START_PROMPT)
@@ -78,7 +104,7 @@ class PersonalizedVectorEngine:
             except Exception as e:
                 logger.warning("Cold-Start 프롬프트 인코딩 실패, 기본 상수 벡터 사용: %s", e)
 
-        # 2) 결정론적 512차원 기본 정규화 벡터 (테스트 및 독립 실행용)
+        # 3) 결정론적 512차원 기본 정규화 벡터 (테스트 및 독립 실행용)
         # 1/sqrt(512) 값으로 채워진 L2 Norm = 1.0 벡터 생성
         val = 1.0 / math.sqrt(self.VECTOR_DIM)
         deterministic_vec = [val] * self.VECTOR_DIM
