@@ -275,16 +275,21 @@ def test_get_fitting_image_serving(tmp_path: Path) -> None:
     fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
     repo.mark_completed(fitting_id, f"/api/vton/{fitting_id}/image")
 
-    # 아직 파일이 디스크에 없음 -> 404
+    # 인증 누락 -> 401
     client = TestClient(app)
-    resp_missing = client.get(f"/api/vton/{fitting_id}/image")
+    assert client.get(f"/api/vton/{fitting_id}/image").status_code == 401
+    # 타 사용자 -> 403
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "999"}).status_code == 403
+
+    # 아직 파일이 디스크에 없음 -> 404
+    resp_missing = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_missing.status_code == 404
 
-    # 이미지 파일 저장 후 요청 -> 200 image/png
+    # 이미지 파일 저장 후 본인 요청 -> 200 image/png
     img_bytes = _create_sample_png()
     (test_storage / f"{fitting_id}.png").write_bytes(img_bytes)
 
-    resp_ok = client.get(f"/api/vton/{fitting_id}/image")
+    resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_ok.status_code == 200
     assert resp_ok.headers["content-type"] == "image/png"
     assert resp_ok.content == img_bytes
@@ -368,7 +373,7 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     # 1. 삭제 전 정상 조회 가능
     resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
     assert resp.status_code == 200
-    resp_img = client.get(f"/api/vton/{fitting_id}/image")
+    resp_img = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_img.status_code == 200
 
     # 2. 타인이 삭제 요청 시 403 Forbidden
@@ -388,7 +393,7 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     assert resp_get_after.status_code == 404
 
     # 5. 삭제 후 이미지 서빙 차단 (404 Not Found)
-    resp_img_after = client.get(f"/api/vton/{fitting_id}/image")
+    resp_img_after = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_img_after.status_code == 404
 
     # 6. 이미 삭제된 피팅 재삭제 시도 시 404 Not Found
@@ -1059,6 +1064,44 @@ def test_list_and_detail_vton_converts_result_image_url_to_presigned_url() -> No
 
     set_dependencies_for_tests(None, None, None, None)
 
+
+def test_fitting_image_endpoint_idor_security_and_s3_redirect(tmp_path: Path) -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_storage = MagicMock()
+    mock_storage.is_s3 = True
+    presigned_target = "https://fitzza-prod-assets-vton.s3.ap-northeast-2.amazonaws.com/fittings/1.png?AWSAccessKeyId=KEY&Signature=OK"
+    mock_storage.get_presigned_url.return_value = presigned_target
+
+    set_dependencies_for_tests(repo=repo, storage_client=mock_storage)
+    client = TestClient(app)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101])
+    repo.mark_completed(fitting_id, result_image_url="fittings/1.png")
+
+    # 1. 로그인 인증 헤더 누락 시 401 Unauthorized
+    resp_unauth = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_unauth.status_code == 401
+    assert resp_unauth.json()["code"] == "UNAUTHORIZED"
+
+    # 2. 유효하지 않은 x_user_id (0 또는 음수) 요청 시 401
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "0"}).status_code == 401
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "-1"}).status_code == 401
+
+    # 3. 타인의 피팅 번호 조회 시 IDOR 차단 (403 Forbidden)
+    resp_forbidden = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "999"})
+    assert resp_forbidden.status_code == 403
+    assert resp_forbidden.json()["code"] == "FORBIDDEN"
+
+    # 4. 존재하지 않는 피팅 조회 시 404 Not Found
+    resp_notfound = client.get("/api/vton/99999/image", headers={"X-User-Id": "7"})
+    assert resp_notfound.status_code == 404
+
+    # 5. 본인 피팅 정상 조회 시 S3 307 Temporary Redirect 및 Location 헤더 확인
+    resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"}, follow_redirects=False)
+    assert resp_ok.status_code == 307
+    assert resp_ok.headers["location"] == presigned_target
+
+    set_dependencies_for_tests(None, None, None, None)
 
 
 

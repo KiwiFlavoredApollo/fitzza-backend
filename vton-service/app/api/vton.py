@@ -793,13 +793,25 @@ def delete_fitting(
 @router.get(
     "/api/vton/{fittingId}/image",
     summary="가상 피팅 결과 PNG 이미지 서빙",
-    description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다.",
+    description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다. 본인 소유 피팅만 접근 가능합니다.",
     responses={
         200: {"content": {"image/png": {}}, "description": "가상 피팅 완성 PNG 이미지"},
+        307: {"description": "S3 Pre-signed URL 임시 리다이렉트"},
+        401: {"description": "로그인 필요"},
+        403: {"description": "본인의 피팅 이미지만 조회 가능"},
         404: {"description": "이미지를 찾을 수 없거나 아직 생성되지 않음/삭제됨"},
     },
 )
-def get_fitting_image(fittingId: int) -> Response:
+def get_fitting_image(
+    fittingId: int,
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
+) -> Response:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
     # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
     repo = get_repo()
     detail = repo.get_fitting_detail(fittingId)
@@ -808,11 +820,30 @@ def get_fitting_image(fittingId: int) -> Response:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="존재하지 않거나 삭제된 가상 피팅입니다.",
         )
+
+    # 2. 본인 피팅인지 검증 (IDOR 보안 취약점 방어)
+    if detail["userId"] != x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인의 피팅 결과 이미지만 조회할 수 있습니다.",
+        )
+
     if detail["status"] != "COMPLETED":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"가상 피팅이 아직 완료되지 않았습니다. 현재 상태: {detail['status']}",
         )
+
+    # 3. S3 백엔드인 경우 서명 URL로 307 임시 리다이렉트
+    storage = get_storage_client()
+    if storage.is_s3:
+        key_or_url = detail.get("resultImageUrl") or f"fittings/{fittingId}.png"
+        presigned_url = storage.get_presigned_url(key_or_url, expires_in=3600)
+        if presigned_url.startswith(("http://", "https://")):
+            return RedirectResponse(
+                url=presigned_url,
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+            )
 
     settings = get_settings()
     storage_dir = Path(settings.storage_dir)
@@ -825,8 +856,7 @@ def get_fitting_image(fittingId: int) -> Response:
             headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
         )
 
-    # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3)에서 스트리밍 조회 시도
-    storage = get_storage_client()
+    # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3/Mock)에서 스트리밍 조회 시도
     try:
         img_bytes = storage.download_bytes(f"fittings/{fittingId}.png")
         return Response(

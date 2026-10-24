@@ -357,14 +357,30 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
     assert user_img_resp.headers["content-type"] == "image/png"
     assert len(user_img_resp.content) > 0
 
-    # 3. Mark fitting completed and get fitting image from S3
+    # 3. Mark fitting completed and get fitting image from S3 (with IDOR protection checks)
     repo.mark_completed(
         fitting_id,
         result_image_url=f"https://cdn.fitzza.com/fittings/{fitting_id}.png",
     )
-    fit_img_resp = client.get(f"/api/vton/{fitting_id}/image")
-    assert fit_img_resp.status_code == 200
-    assert fit_img_resp.headers["content-type"] == "image/png"
+    # 3-1. 비인증 요청 시 401 Unauthorized
+    resp_unauth = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_unauth.status_code == 401
+
+    # 3-2. 타 사용자 요청 시 403 Forbidden
+    resp_forbidden = client.get(
+        f"/api/vton/{fitting_id}/image",
+        headers={"X-User-Id": "999"},
+    )
+    assert resp_forbidden.status_code == 403
+
+    # 3-3. 본인 요청 시 S3 307 Temporary Redirect
+    fit_img_resp = client.get(
+        f"/api/vton/{fitting_id}/image",
+        headers={"X-User-Id": "100"},
+        follow_redirects=False,
+    )
+    assert fit_img_resp.status_code == 307
+    assert fit_img_resp.headers["location"] == f"https://cdn.fitzza.com/fittings/{fitting_id}.png"
 
     # Cleanup dependencies
     set_dependencies_for_tests(None, None, None, None)
