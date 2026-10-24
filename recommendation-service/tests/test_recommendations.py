@@ -695,3 +695,38 @@ def test_recommendation_detail_with_null_query_text_falls_back_to_empty_string()
             assert detail_res.status_code == 200
             assert detail_res.json()["queryText"] == ""
 
+
+def test_recommendation_request_stores_token_metrics() -> None:
+    repo = RecommendationRepository(db_path=":memory:")
+    req_id = repo.create_request(user_id=1, query_text="가을 미니멀 룩 추천해줘")
+
+    # 1. 단품 완료 시 토큰 저장 확인
+    repo.complete_single_request(
+        request_id=req_id,
+        tpo_summary="가을 미니멀 단품",
+        items=[{"product_id": 101, "product_name": "니트", "price": 45000}],
+        message="가을 니트 추천합니다.",
+        prompt_tokens=450,
+        completion_tokens=220,
+    )
+    data = repo.get_request(req_id)
+    assert data is not None
+    assert data["promptTokens"] == 450
+    assert data["completionTokens"] == 220
+
+    # 2. 코디 완료 시 토큰 저장 확인
+    req_id_combo = repo.create_request(user_id=1, query_text="가을 코디 추천해줘")
+    repo.complete_combo_request(
+        request_id=req_id_combo,
+        user_id=1,
+        tpo_summary="가을 미니멀 코디",
+        combos=[{"items": [{"product_id": 101, "price": 45000}], "totalPrice": 45000}],
+        message="코디 추천입니다.",
+        prompt_tokens=850,
+        completion_tokens=430,
+    )
+    combo_data = repo.get_request(req_id_combo)
+    assert combo_data is not None
+    assert combo_data["promptTokens"] == 850
+    assert combo_data["completionTokens"] == 430
+

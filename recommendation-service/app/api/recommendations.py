@@ -421,6 +421,8 @@ def process_recommendation_request(
 
         tpo_summary = pipeline_result.get("tpo")
         comment = pipeline_result.get("comment")
+        prompt_tokens = int(pipeline_result.get("prompt_tokens") or 0)
+        completion_tokens = int(pipeline_result.get("completion_tokens") or 0)
 
         if result_type == "single":
             raw_items = pipeline_result.get("results") or []
@@ -430,6 +432,8 @@ def process_recommendation_request(
                 tpo_summary=tpo_summary,
                 items=mapped_items,
                 message=comment,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
         else:
             raw_outfits = pipeline_result.get("outfits") or []
@@ -440,6 +444,8 @@ def process_recommendation_request(
                 tpo_summary=tpo_summary,
                 combos=mapped_combos,
                 message=comment,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
     except Exception as exc:
         logger.error(

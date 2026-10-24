@@ -82,6 +82,8 @@ class RecommendationRepository:
                                 tpo_summary TEXT,
                                 items_json TEXT NOT NULL DEFAULT '[]',
                                 message TEXT,
+                                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                                completion_tokens INTEGER NOT NULL DEFAULT 0,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                             );
 
@@ -174,6 +176,26 @@ class RecommendationRepository:
                                         ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz,
                                         ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
                                 END IF;
+
+                                IF NOT EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'recommendation_requests'
+                                      AND column_name = 'prompt_tokens'
+                                ) THEN
+                                    ALTER TABLE {schema}.recommendation_requests
+                                        ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;
+                                END IF;
+
+                                IF NOT EXISTS (
+                                    SELECT 1 FROM information_schema.columns
+                                    WHERE table_schema = '{schema}'
+                                      AND table_name = 'recommendation_requests'
+                                      AND column_name = 'completion_tokens'
+                                ) THEN
+                                    ALTER TABLE {schema}.recommendation_requests
+                                        ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;
+                                END IF;
                             END $$;
                             """
                         )
@@ -194,6 +216,8 @@ class RecommendationRepository:
                         tpo_summary TEXT,
                         items_json TEXT NOT NULL DEFAULT '[]',
                         message TEXT,
+                        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                        completion_tokens INTEGER NOT NULL DEFAULT 0,
                         created_at TEXT NOT NULL
                     );
 
@@ -237,6 +261,21 @@ class RecommendationRepository:
                     );
                     """
                 )
+                # SQLite 마이그레이션: 기존 파일 DB에 새 컬럼이 없을 경우 추가
+                columns = [
+                    row["name"]
+                    for row in conn.execute(
+                        "PRAGMA table_info(recommendation_requests)"
+                    ).fetchall()
+                ]
+                if "prompt_tokens" not in columns:
+                    conn.execute(
+                        "ALTER TABLE recommendation_requests ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0"
+                    )
+                if "completion_tokens" not in columns:
+                    conn.execute(
+                        "ALTER TABLE recommendation_requests ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0"
+                    )
                 conn.commit()
             finally:
                 self._close_sqlite_if_transient(conn)
@@ -307,6 +346,8 @@ class RecommendationRepository:
         tpo_summary: str | None,
         items: list[dict[str, Any]],
         message: str | None,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
     ) -> None:
         items_str = json.dumps(items, ensure_ascii=False)
         if self._use_postgres:
@@ -320,10 +361,12 @@ class RecommendationRepository:
                                 search_type = 'SINGLE',
                                 tpo_summary = %s,
                                 items_json = %s,
-                                message = %s
+                                message = %s,
+                                prompt_tokens = %s,
+                                completion_tokens = %s
                             WHERE request_id = %s
                             """,
-                            (tpo_summary, items_str, message, request_id),
+                            (tpo_summary, items_str, message, prompt_tokens, completion_tokens, request_id),
                         )
                     conn.commit()
             return
@@ -338,10 +381,12 @@ class RecommendationRepository:
                         search_type = 'SINGLE',
                         tpo_summary = ?,
                         items_json = ?,
-                        message = ?
+                        message = ?,
+                        prompt_tokens = ?,
+                        completion_tokens = ?
                     WHERE request_id = ?
                     """,
-                    (tpo_summary, items_str, message, request_id),
+                    (tpo_summary, items_str, message, prompt_tokens, completion_tokens, request_id),
                 )
                 conn.commit()
             finally:
@@ -354,6 +399,8 @@ class RecommendationRepository:
         tpo_summary: str | None,
         combos: list[dict[str, Any]],
         message: str | None,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
     ) -> list[dict[str, Any]]:
         saved_combos: list[dict[str, Any]] = []
         if self._use_postgres:
@@ -409,10 +456,12 @@ class RecommendationRepository:
                                 search_type = 'COMBO',
                                 tpo_summary = %s,
                                 items_json = '[]',
-                                message = %s
+                                message = %s,
+                                prompt_tokens = %s,
+                                completion_tokens = %s
                             WHERE request_id = %s
                             """,
-                            (tpo_summary, message, request_id),
+                            (tpo_summary, message, prompt_tokens, completion_tokens, request_id),
                         )
                     conn.commit()
             return saved_combos
@@ -474,10 +523,12 @@ class RecommendationRepository:
                         search_type = 'COMBO',
                         tpo_summary = ?,
                         items_json = '[]',
-                        message = ?
+                        message = ?,
+                        prompt_tokens = ?,
+                        completion_tokens = ?
                     WHERE request_id = ?
                     """,
-                    (tpo_summary, message, request_id),
+                    (tpo_summary, message, prompt_tokens, completion_tokens, request_id),
                 )
                 conn.commit()
                 return saved_combos
@@ -532,7 +583,8 @@ class RecommendationRepository:
                         cur.execute(
                             """
                             SELECT request_id, user_id, query_text, status, search_type,
-                                   tpo_summary, items_json, message, created_at
+                                   tpo_summary, items_json, message, prompt_tokens,
+                                   completion_tokens, created_at
                             FROM recommendation_requests
                             WHERE request_id = %s
                             """,
@@ -561,7 +613,8 @@ class RecommendationRepository:
                 row = conn.execute(
                     """
                     SELECT request_id, user_id, query_text, status, search_type,
-                           tpo_summary, items_json, message, created_at
+                           tpo_summary, items_json, message, prompt_tokens,
+                           completion_tokens, created_at
                     FROM recommendation_requests
                     WHERE request_id = ?
                     """,
@@ -608,6 +661,8 @@ class RecommendationRepository:
             "items": json.loads(row["items_json"] or "[]"),
             "combos": combos,
             "message": row["message"],
+            "promptTokens": int(row.get("prompt_tokens", 0) if hasattr(row, "get") else row["prompt_tokens"] if "prompt_tokens" in row.keys() else 0),
+            "completionTokens": int(row.get("completion_tokens", 0) if hasattr(row, "get") else row["completion_tokens"] if "completion_tokens" in row.keys() else 0),
             "createdAt": RecommendationRepository._format_utc_timestamp(row["created_at"]),
         }
 
