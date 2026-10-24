@@ -193,8 +193,11 @@ class PersonalizedFeedService:
         else:
             history = UserActionHistory(user_id=0)
 
-        # 2. 취향 벡터 계산
-        taste_vector = self.vector_engine.compute_user_taste_vector(history)
+        # 2. 취향 벡터 계산 (동기 Qdrant scroll 및 벡터 연산을 스레드풀에서 비동기 실행)
+        taste_vector = await asyncio.to_thread(
+            self.vector_engine.compute_user_taste_vector,
+            history,
+        )
 
         # 3. 제외할 상품 ID (최근 구매 상품) 및 찜 집합
         exclude_pids = list(set(history.purchased_product_ids))
@@ -251,11 +254,13 @@ class PersonalizedFeedService:
 
         # 게스트의 경우 refresh 요청으로 인한 공용 캐시 무효화 방어
         if refresh and not is_guest and cache_service is not None:
-            cache_service.delete_personalized_feed(cache_user_key)
+            await asyncio.to_thread(cache_service.delete_personalized_feed, cache_user_key)
 
         all_items: list[PersonalizedProductItem] = []
         if cache_service is not None and (not refresh or is_guest):
-            cached_raw = cache_service.get_personalized_feed(cache_user_key)
+            cached_raw = await asyncio.to_thread(
+                cache_service.get_personalized_feed, cache_user_key
+            )
             if isinstance(cached_raw, list):
                 try:
                     all_items = [PersonalizedProductItem(**item) for item in cached_raw]
@@ -270,7 +275,8 @@ class PersonalizedFeedService:
         if not all_items:
             all_items, _ = await self.generate_personalized_feed_items(user_id=user_id)
             if all_items and cache_service is not None:
-                cache_service.set_personalized_feed(
+                await asyncio.to_thread(
+                    cache_service.set_personalized_feed,
                     cache_user_key,
                     [item.model_dump() for item in all_items],
                     ttl_seconds=300,  # 5분 캐시
