@@ -208,3 +208,30 @@ def test_fetch_product_vectors_error_handling():
     engine = PersonalizedVectorEngine(qdrant_client=mock_client)
     res = engine.fetch_product_vectors([100])
     assert res == {}
+
+
+def test_fetch_product_vectors_pagination():
+    """복수 페이지 scroll 순회 검증"""
+    mock_client = MagicMock()
+
+    class MockPoint:
+        def __init__(self, pid, vector):
+            self.payload = {"product_id": pid}
+            self.vector = vector
+
+    p1 = MockPoint(100, [0.1] * 512)
+    p2 = MockPoint(200, [0.2] * 512)
+
+    # 1페이지: [p1], offset="page2" -> 2페이지: [p2], offset=None
+    mock_client.scroll.side_effect = [
+        ([p1], "page2"),
+        ([p2], None),
+    ]
+
+    engine = PersonalizedVectorEngine(qdrant_client=mock_client)
+    res = engine.fetch_product_vectors([100, 200])
+
+    assert 100 in res
+    assert 200 in res
+    assert mock_client.scroll.call_count == 2
+

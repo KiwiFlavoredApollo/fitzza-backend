@@ -105,13 +105,20 @@ class PersonalizedVectorEngine:
                     )
                 ]
             )
-            # 색상별로 동일 상품 ID에 대한 point가 복수 개 존재할 수 있으므로 여유있게 limit 설정
-            points, _ = self.client.scroll(
-                collection_name=self.collection_name,
-                scroll_filter=scroll_filter,
-                with_vectors=True,
-                limit=len(clean_ids) * 4,
-            )
+            # 색상별로 동일 상품 ID에 대한 point가 복수 개 존재할 수 있으므로 모든 페이지를 순회 조회
+            points = []
+            offset = None
+            while True:
+                batch, offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=scroll_filter,
+                    with_vectors=True,
+                    limit=max(len(clean_ids) * 4, 64),
+                    offset=offset,
+                )
+                points.extend(batch)
+                if offset is None:
+                    break
 
             result_map: dict[int, list[float]] = {}
             for point in points:
