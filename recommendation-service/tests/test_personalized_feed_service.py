@@ -226,3 +226,34 @@ async def test_generate_personalized_feed_items_with_real_collector():
     assert history.cart_product_ids == [30]
     assert history.purchased_product_ids == [40]
 
+
+@pytest.mark.anyio
+async def test_get_personalized_feed_page_corrupted_cache_fallback():
+    """캐시에 손상된 데이터가 있을 경우 500 에러 대신 경고 후 재생성하는지 검증"""
+    service = PersonalizedFeedService(
+        qdrant_client=MagicMock(),
+        vector_engine=MagicMock(),
+    )
+
+    mock_cache = MagicMock()
+    # 유효하지 않은 스키마 데이터 (productId 누락 등 ValidationError 유발)
+    mock_cache.get_personalized_feed.return_value = [{"invalid": "item"}]
+
+    dummy_item = PersonalizedProductItem(
+        productId=999,
+        productName="새 상품",
+        price=10000,
+    )
+    with patch.object(
+        service,
+        "generate_personalized_feed_items",
+        AsyncMock(return_value=([dummy_item], MagicMock())),
+    ):
+        page = await service.get_personalized_feed_page(
+            user_id=1, page=0, size=10, cache_service=mock_cache
+        )
+
+    assert page.totalElements == 1
+    assert page.content[0].productId == 999
+
+

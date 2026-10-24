@@ -7,6 +7,8 @@ from typing import Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
+from pydantic import ValidationError
+
 from app.core.config import get_settings
 from app.schemas.recommendation import (
     PersonalizedPageResponse,
@@ -255,7 +257,15 @@ class PersonalizedFeedService:
         if cache_service is not None and (not refresh or is_guest):
             cached_raw = cache_service.get_personalized_feed(cache_user_key)
             if isinstance(cached_raw, list):
-                all_items = [PersonalizedProductItem(**item) for item in cached_raw]
+                try:
+                    all_items = [PersonalizedProductItem(**item) for item in cached_raw]
+                except (TypeError, ValidationError) as exc:
+                    logger.warning(
+                        "개인화 피드 캐시 역직렬화 실패, 재생성합니다 (key=%s): %s",
+                        cache_user_key,
+                        exc,
+                    )
+                    all_items = []
 
         if not all_items:
             all_items, _ = await self.generate_personalized_feed_items(user_id=user_id)
