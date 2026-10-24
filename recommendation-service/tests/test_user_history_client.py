@@ -225,14 +225,16 @@ async def test_user_history_collector_user_id_1_mock_fallback():
         order_client=mock_order,
     )
 
-    # 1. 기본값 (False): Mock 주입되지 않고 빈 이력 반환
-    history_default = await collector.collect(user_id=1)
-    assert history_default.user_id == 1
-    assert history_default.worldcup_winner_id is None
-    assert history_default.wishlist_product_ids == []
-    assert history_default.cart_product_ids == []
-    assert history_default.purchased_product_ids == []
-    assert history_default.has_any_history is False
+    # 1. False 설정 시: Mock 주입되지 않고 빈 이력 반환
+    from app.core.config import Settings
+    with patch("app.services.user_history_service.get_settings", return_value=Settings(enable_dev_mock_history=False)):
+        history_default = await collector.collect(user_id=1)
+        assert history_default.user_id == 1
+        assert history_default.worldcup_winner_id is None
+        assert history_default.wishlist_product_ids == []
+        assert history_default.cart_product_ids == []
+        assert history_default.purchased_product_ids == []
+        assert history_default.has_any_history is False
 
     # 2. ENABLE_DEV_MOCK_HISTORY=True 인 경우 Mock 데이터 정상 주입
     from app.core.config import Settings
