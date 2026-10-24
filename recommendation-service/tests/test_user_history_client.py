@@ -108,6 +108,7 @@ async def test_order_client_get_user_recent_purchased_product_ids_success(mock_s
             {"orderId": 11, "orderStatus": "COMPLETED"},
             {"orderId": 12, "orderStatus": "SHIPPING"},
             {"orderId": 13, "orderStatus": "CANCELED"},  # 취소된 주문은 제외되어야 함
+            {"orderId": 14, "orderStatus": "PENDING"},   # 미결제 주문도 제외되어야 함
         ],
         "page": 0,
     }

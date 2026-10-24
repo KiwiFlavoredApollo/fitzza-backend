@@ -179,8 +179,8 @@ class OrderServiceClient:
                 order_ids: list[int] = []
                 for o in content:
                     if isinstance(o, dict) and o.get("orderId"):
-                        # 취소되지 않은 주문 대상
-                        if o.get("orderStatus") != "CANCELED":
+                        # 결제 완료 또는 배송/완료된 정상 구매 주문만 대상
+                        if o.get("orderStatus") in {"PAID", "SHIPPING", "COMPLETED"}:
                             order_ids.append(int(o["orderId"]))
                     if len(order_ids) >= limit:
                         break
