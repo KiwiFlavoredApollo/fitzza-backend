@@ -221,6 +221,7 @@ async def test_generate_personalized_feed_items_with_real_collector():
         feed, history = await service.generate_personalized_feed_items(user_id=42)
 
     assert history.user_id == 42
+    assert feed == []
     assert history.worldcup_winner_id == 10
     assert history.wishlist_product_ids == [20]
     assert history.cart_product_ids == [30]
