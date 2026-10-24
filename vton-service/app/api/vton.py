@@ -304,7 +304,10 @@ ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"
 )
 def list_user_fittings(
     request: Request,
-    requestId: Annotated[int | None, Query(alias="requestId", ge=1)] = None,
+    requestId: Annotated[
+        int | None,
+        Query(alias="requestId", ge=1, description="추천 대화 ID (대화별 피팅 필터링)"),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=100, description="조회 건수")] = 20,
     offset: Annotated[int, Query(ge=0, description="시작 위치")] = 0,
     page: Annotated[int | None, Query(ge=0, description="페이지 번호 (0부터 시작, page 지정 시 offset 자동 계산)")] = None,

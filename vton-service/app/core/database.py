@@ -779,7 +779,7 @@ class VtonRepository:
                 try:
                     cur = conn.cursor()
                     where_clauses = ["user_id = ?", "is_deleted = 0"]
-                    params = [user_id]
+                    params: list[Any] = [user_id]
                     if request_id is not None:
                         where_clauses.append("request_id = ?")
                         params.append(request_id)
