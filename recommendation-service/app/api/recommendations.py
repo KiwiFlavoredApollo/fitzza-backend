@@ -499,7 +499,10 @@ async def get_personalized_recommendation_feed(
         except (ValueError, TypeError):
             parsed_user_id = 0
 
-    feed_service = _get_personalized_feed_service(request.app)
+    feed_service = await run_in_threadpool(
+        _get_personalized_feed_service,
+        request.app,
+    )
     cache_service = _get_cache_service(request.app)
 
     return await feed_service.get_personalized_feed_page(
