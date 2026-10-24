@@ -39,9 +39,17 @@ class StorageClient:
             parsed = urllib.parse.urlparse(clean)
             path = parsed.path.lstrip("/")
             if path.startswith(f"{self.bucket_name}/"):
-                return path[len(self.bucket_name) + 1 :]
-            return path
-        return clean.lstrip("/")
+                path = path[len(self.bucket_name) + 1 :]
+        else:
+            path = clean.lstrip("/")
+
+        # /api/vton/{id}/image 형태의 레거시 로컬 엔드포인트 경로를 S3 객체 키(fittings/{id}.png)로 자동 매핑
+        if path.startswith("api/vton/") and path.endswith("/image"):
+            parts = path.split("/")
+            if len(parts) == 4 and parts[2].isdigit():
+                return f"fittings/{parts[2]}.png"
+
+        return path
 
     def _get_s3(self) -> Any:
         if self._s3_client is None:

@@ -185,6 +185,14 @@ def test_get_presigned_url() -> None:
     assert c_s3.get_presigned_url("") == ""
     assert c_s3.get_presigned_url(None) == ""
 
+    # 5. 레거시 엔드포인트 URL(/api/vton/42/image) 전달 시 fittings/42.png로 매핑되어 서명
+    _ = c_s3.get_presigned_url("/api/vton/42/image", expires_in=3600)
+    mock_s3.generate_presigned_url.assert_called_with(
+        ClientMethod="get_object",
+        Params={"Bucket": "fitzza-prod", "Key": "fittings/42.png"},
+        ExpiresIn=3600,
+    )
+
 
 def test_local_storage_crud(tmp_path: Path) -> None:
     storage_dir = tmp_path / "data" / "fittings"
