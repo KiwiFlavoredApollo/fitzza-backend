@@ -26,6 +26,39 @@ variables sourced with `envFrom` are captured only when a Pod starts. In particu
 restart and wait for both `vton-service` and `vton-worker`; verify only the presence of
 the `OPENAI_API_KEY` variable and never print its value.
 
+## Distributed tracing (FITZZA-284)
+
+Production tracing remains disabled. The pilot cluster runs on one `t4g.large` worker
+without spare rollout capacity, and no trace retention, storage, or UI access policy has
+been approved. Do not deploy a Jaeger or OpenTelemetry collector and do not add tracing
+variables to `fitzza-app-config` until those decisions and the collector's resource
+requests have been reviewed. Java and FastAPI services default to a sampling probability
+of `0.0`, so the current manifests do not export spans.
+
+To enable tracing later:
+
+1. Deploy a collector with an OTLP/HTTP receiver reachable only inside the cluster. Define
+   its resource requests and limits, trace backend, retention period, and UI access policy.
+2. Confirm that the collector and all existing Pods fit within the node's actual
+   allocatable CPU, memory, and Pod count. Obtain cost approval before adding storage or
+   increasing worker capacity.
+3. Add both values to `fitzza-app-config`; the endpoint must include the OTLP HTTP traces
+   path rather than only the collector host:
+
+   ```yaml
+   MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+   MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.1"
+   ```
+
+4. Apply the ConfigMap and restart the traced Deployments. Values supplied by `envFrom`
+   are read only when each Pod starts. Config Server and Discovery Service are not traced.
+5. Verify application health, one end-to-end trace across Gateway and domain services,
+   collector export errors, and actual resource use before keeping tracing enabled.
+
+For rollback, set `MANAGEMENT_TRACING_SAMPLING_PROBABILITY` to `"0.0"` (or remove both
+keys), apply the ConfigMap, and restart the same Deployments. Removing or changing the
+ConfigMap alone does not update an existing Pod's environment.
+
 ## Values to replace
 
 Before deployment, replace the following placeholders through an environment-specific overlay or pipeline step:

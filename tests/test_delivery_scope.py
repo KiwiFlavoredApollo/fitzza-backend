@@ -51,9 +51,15 @@ def test_vton_runtime_endpoint_access_is_role_and_bucket_scoped():
 
 
 def test_production_vton_uses_aws_backends():
-    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text()
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text(encoding="utf-8")
     assert "VTON_STORAGE_BACKEND: s3" in config
     assert "VTON_QUEUE_BACKEND: sqs" in config
+
+
+def test_production_tracing_stays_disabled_without_an_approved_collector():
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text(encoding="utf-8")
+    assert "MANAGEMENT_OTLP_TRACING_ENDPOINT" not in config
+    assert "MANAGEMENT_TRACING_SAMPLING_PROBABILITY" not in config
 
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl unavailable")
