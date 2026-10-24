@@ -85,6 +85,12 @@ def test_vton_uses_dedicated_pod_identity_and_least_privilege_queue_role():
     assert apps.count("serviceAccountName: fitzza-vton") == 2
 
 
+def test_production_tracing_stays_disabled_without_an_approved_collector():
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text(encoding="utf-8")
+    assert "MANAGEMENT_OTLP_TRACING_ENDPOINT" not in config
+    assert "MANAGEMENT_TRACING_SAMPLING_PROBABILITY" not in config
+
+
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl unavailable")
 def test_delivery_overlay_excludes_operator_owned_resources():
     yaml = pytest.importorskip("yaml")
