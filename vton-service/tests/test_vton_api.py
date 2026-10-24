@@ -854,6 +854,38 @@ def test_resolve_product_item_prefers_override_image_url() -> None:
         mock_fetch.assert_called_once_with(override_url)
 
 
+def test_resolve_product_item_prefers_normal_price() -> None:
+    client = ProductServiceClient()
+    fake_png = _create_sample_png()
+
+    # normalPrice가 있을 때 우선 반영되는지 검증
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png), \
+         patch.object(client, "get_product", return_value={
+             "productName": "와이드 슬랙스",
+             "price": 26100,        # 세일가
+             "normalPrice": 29000,  # 정가 (우선순위)
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "하의",
+         }):
+        item = client.resolve_product_item(product_id=202)
+        assert item["productId"] == 202
+        assert item["price"] == 29000  # normalPrice 반영 확인
+        assert item["categoryName"] == "하의"
+
+    # normalPrice가 없거나 0일 때 세일가(price)로 폴백되는지 검증
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png), \
+         patch.object(client, "get_product", return_value={
+             "productName": "와이드 슬랙스",
+             "price": 26100,
+             "normalPrice": None,
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "하의",
+         }):
+        item = client.resolve_product_item(product_id=202)
+        assert item["price"] == 26100  # price 폴백 확인
+
+
+
 def test_post_vton_with_request_id_json_and_get_detail() -> None:
     client = TestClient(app)
     repo = VtonRepository(db_path=":memory:")
