@@ -134,6 +134,9 @@ class Settings:
     sqs_max_number_of_messages: int = field(
         default_factory=lambda: int(os.getenv("SQS_MAX_NUMBER_OF_MESSAGES", "1"))
     )
+    sqs_max_receive_count: int = field(
+        default_factory=lambda: int(os.getenv("SQS_MAX_RECEIVE_COUNT", "3"))
+    )
 
 
 

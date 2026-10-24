@@ -147,8 +147,9 @@ def _run_background_vton(
     request_id_header: str | None = None,
     user_face_bytes: bytes | None = None,
     item_image_urls: dict[int, str] | None = None,
+    finalize_failure: bool = True,
 ) -> bool:
-    """백그라운드에서 상품 조회, AI 피팅 합성, 결과 이미지 저장, DB 업데이트 및 FCM 알림을 수행합니다."""
+    """백그라운드 피팅을 수행하고 최종 실패일 때만 상태와 알림을 확정합니다."""
     settings = get_settings()
     repo = get_repo()
     prod_client = get_product_client()
@@ -277,18 +278,24 @@ def _run_background_vton(
             err_msg,
             exc_info=True,
         )
-        # 내부 시스템 경로 등 상세 스택트레이스를 숨기고 정제된 안내 메시지 저장
-        user_error_message = (
-            str(exc)
-            if isinstance(exc, VtonValidationError)
-            else "가상 피팅 생성 중 오류가 발생했습니다."
-        )
-        repo.mark_failed(fitting_id, error_message=user_error_message)
-        notif_client.send_fitting_failed(
-            user_id=user_id,
-            fitting_id=fitting_id,
-            request_id_header=request_id_header,
-        )
+        if finalize_failure:
+            # 내부 시스템 경로 등 상세 스택트레이스를 숨기고 정제된 안내 메시지 저장
+            user_error_message = (
+                str(exc)
+                if isinstance(exc, VtonValidationError)
+                else "가상 피팅 생성 중 오류가 발생했습니다."
+            )
+            repo.mark_failed(fitting_id, error_message=user_error_message)
+            notif_client.send_fitting_failed(
+                user_id=user_id,
+                fitting_id=fitting_id,
+                request_id_header=request_id_header,
+            )
+        else:
+            logger.info(
+                "SQS 재시도를 위해 피팅 상태를 PENDING으로 유지합니다 (fittingId=%s)",
+                fitting_id,
+            )
         return False
 
 

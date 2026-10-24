@@ -50,6 +50,7 @@ class VtonWorker:
         result_image_url = payload.get("result_image_url") or f"/api/vton/{fitting_id}/image"
         request_id_header = payload.get("request_id_header")
         item_image_urls = payload.get("item_image_urls")
+        finalize_failure = receive_count >= self.settings.sqs_max_receive_count
 
         if fitting_id is None or user_id is None:
             logger.error(
@@ -78,6 +79,7 @@ class VtonWorker:
                 "result_image_url": result_image_url,
                 "request_id_header": request_id_header,
                 "user_face_bytes": None,  # 워커 프로세스는 저장된 S3/로컬 파일 참조
+                "finalize_failure": finalize_failure,
             }
             if item_image_urls:
                 vton_kwargs["item_image_urls"] = item_image_urls

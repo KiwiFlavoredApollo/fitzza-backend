@@ -49,6 +49,7 @@ def sqs_settings():
         aws_sqs_dlq_url="https://sqs.ap-northeast-2.amazonaws.com/123456789012/fitzza-vton-dlq",
         sqs_visibility_timeout=300,
         sqs_wait_time_seconds=20,
+        sqs_max_receive_count=3,
     )
 
 
@@ -195,6 +196,7 @@ def test_vton_worker_process_message_success(mock_boto_sqs, sqs_settings):
             result_image_url="/api/vton/20/image",
             request_id_header="req-trace-worker",
             user_face_bytes=None,
+            finalize_failure=False,
         )
         # Message was deleted after success
         mock_boto_sqs.delete_message.assert_called_once_with(
@@ -241,6 +243,23 @@ def test_vton_worker_treats_reported_pipeline_failure_as_failure(mock_boto_sqs, 
 
     assert success is False
     mock_boto_sqs.send_message.assert_not_called()
+    mock_boto_sqs.delete_message.assert_not_called()
+
+
+def test_vton_worker_finalizes_failure_only_on_last_receive(mock_boto_sqs, sqs_settings):
+    sqs_client = SqsClient(settings=sqs_settings, sqs_client=mock_boto_sqs)
+    worker = VtonWorker(settings=sqs_settings, sqs_client=sqs_client)
+    msg = {
+        "receipt_handle": "handle-final-attempt",
+        "receive_count": 3,
+        "body": {"fitting_id": 102, "user_id": 7, "product_ids": [201]},
+    }
+
+    with patch("app.worker._run_background_vton", return_value=False) as mock_run_vton:
+        success = worker.process_message(msg)
+
+    assert success is False
+    assert mock_run_vton.call_args.kwargs["finalize_failure"] is True
     mock_boto_sqs.delete_message.assert_not_called()
 
 

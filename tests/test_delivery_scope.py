@@ -56,6 +56,7 @@ def test_production_vton_uses_aws_backends():
     assert "VTON_QUEUE_BACKEND: sqs" in config
     assert "AWS_SQS_QUEUE_URL: CHANGE_ME_VTON_JOB_QUEUE_URL" in config
     assert "AWS_SQS_DLQ_URL: CHANGE_ME_VTON_JOB_DLQ_URL" in config
+    assert 'SQS_MAX_RECEIVE_COUNT: "3"' in config
 
 
 def test_vton_queue_has_bounded_retry_dlq_and_transport_protection():
