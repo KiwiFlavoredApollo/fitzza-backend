@@ -210,7 +210,7 @@ async def test_user_history_collector_exception_resilience():
 
 @pytest.mark.anyio
 async def test_user_history_collector_user_id_1_mock_fallback():
-    """외부 연동이 비어있을 때 user_id=1에 대해 대표 카탈로그 Mock 데이터가 정상 주입되는지 검증"""
+    """외부 연동이 비어있을 때 user_id=1에 대해 ENABLE_DEV_MOCK_HISTORY=True인 경우에만 Mock 주입되는지 검증"""
     mock_prod = MagicMock(spec=ProductServiceClient)
     mock_prod.get_latest_worldcup_winner_async = AsyncMock(return_value=None)
     mock_prod.get_user_wishlist_product_ids_async = AsyncMock(return_value=[])
@@ -224,11 +224,25 @@ async def test_user_history_collector_user_id_1_mock_fallback():
         order_client=mock_order,
     )
 
-    history = await collector.collect(user_id=1)
-    assert history.user_id == 1
-    assert history.worldcup_winner_id == 1786878
-    assert history.wishlist_product_ids == [1951470, 1176331]
-    assert history.cart_product_ids == [1973481, 1311988]
-    assert history.purchased_product_ids == [2039021, 1312035]
-    assert history.has_any_history is True
+    # 1. 기본값 (False): Mock 주입되지 않고 빈 이력 반환
+    history_default = await collector.collect(user_id=1)
+    assert history_default.user_id == 1
+    assert history_default.worldcup_winner_id is None
+    assert history_default.wishlist_product_ids == []
+    assert history_default.cart_product_ids == []
+    assert history_default.purchased_product_ids == []
+    assert history_default.has_any_history is False
+
+    # 2. ENABLE_DEV_MOCK_HISTORY=True 인 경우 Mock 데이터 정상 주입
+    from app.core.config import Settings
+    mock_settings = Settings(enable_dev_mock_history=True)
+    with patch("app.services.user_history_service.get_settings", return_value=mock_settings):
+        history_enabled = await collector.collect(user_id=1)
+        assert history_enabled.user_id == 1
+        assert history_enabled.worldcup_winner_id == 1786878
+        assert history_enabled.wishlist_product_ids == [1951470, 1176331]
+        assert history_enabled.cart_product_ids == [1973481, 1311988]
+        assert history_enabled.purchased_product_ids == [2039021, 1312035]
+        assert history_enabled.has_any_history is True
+
 

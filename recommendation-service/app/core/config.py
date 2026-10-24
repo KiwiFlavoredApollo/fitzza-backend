@@ -97,6 +97,9 @@ class Settings:
     redis_enabled: bool = field(
         default_factory=lambda: os.getenv("REDIS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
     )
+    enable_dev_mock_history: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_DEV_MOCK_HISTORY", "false").strip().lower() in ("true", "1", "yes")
+    )
     redis_ttl_seconds: int = field(
         default_factory=lambda: int(os.getenv("REDIS_TTL_SECONDS", "3600"))
     )

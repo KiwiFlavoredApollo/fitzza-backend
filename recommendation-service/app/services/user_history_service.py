@@ -8,6 +8,7 @@ import logging
 
 from app.clients.order_client import OrderServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +107,10 @@ class UserHistoryCollector:
         elif isinstance(res_purchased, Exception):
             logger.warning("구매 내역 비동기 수집 예외: %s", res_purchased)
 
-        # 개발/Swagger 테스트용 Fallback: 외부 마이크로서비스 연동 데이터가 없고 user_id == 1인 경우 대표 카탈로그 상품 Mock 주입
+        # 개발/Swagger 테스트용 Fallback: ENABLE_DEV_MOCK_HISTORY=True이고 외부 마이크로서비스 연동 데이터가 없고 user_id == 1인 경우 대표 카탈로그 상품 Mock 주입
         if (
-            user_id == 1
+            get_settings().enable_dev_mock_history
+            and user_id == 1
             and worldcup_winner_id is None
             and not wishlist_ids
             and not cart_ids
