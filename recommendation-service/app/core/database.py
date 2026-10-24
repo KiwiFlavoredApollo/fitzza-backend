@@ -3,7 +3,8 @@ import math
 import re
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -1020,3 +1021,239 @@ class RecommendationRepository:
                 return json.loads(row["preference_spec_json"] or "{}")
             finally:
                 self._close_sqlite_if_transient(conn)
+
+    def get_analytics_data(self, reference_dt: datetime | None = None) -> dict[str, Any]:
+        """일간/주간/월간/연간 토큰 사용량, 인기 키워드, 추천 상품 통계를 집계하여 반환합니다."""
+        now = reference_dt or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+
+        # 1. 일간 (오늘 00:00:00 ~ 23:59:59)
+        daily_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1) - timedelta(microseconds=1)
+
+        # 2. 주간 (이번 주 월요일 00:00:00 ~ 일요일 23:59:59)
+        weekly_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        weekly_end = weekly_start + timedelta(days=7) - timedelta(microseconds=1)
+
+        # 3. 월간 (이번 달 1일 00:00:00 ~ 말일 23:59:59)
+        monthly_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        next_month = (monthly_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        monthly_end = next_month - timedelta(microseconds=1)
+
+        # 4. 연간 (올해 1월 1일 00:00:00 ~ 12월 31일 23:59:59)
+        yearly_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        yearly_end = yearly_start.replace(year=yearly_start.year + 1) - timedelta(microseconds=1)
+
+        daily_data = self._aggregate_period_analytics("daily", "일간", daily_start, daily_end)
+        weekly_data = self._aggregate_period_analytics("weekly", "주간", weekly_start, weekly_end)
+        monthly_data = self._aggregate_period_analytics("monthly", "월간", monthly_start, monthly_end)
+        yearly_data = self._aggregate_period_analytics("yearly", "연간", yearly_start, yearly_end)
+
+        return {
+            "daily": daily_data,
+            "weekly": weekly_data,
+            "monthly": monthly_data,
+            "yearly": yearly_data,
+        }
+
+    def _get_requests_in_range(self, start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
+        """지정된 기간 동안 완료(DONE)된 추천 요청 및 코디 상품 데이터를 조회합니다."""
+        start_iso = start_dt.isoformat()
+        end_iso = end_dt.isoformat()
+
+        if self._use_postgres:
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            SELECT r.request_id, r.query_text, r.search_type, r.tpo_summary,
+                                   r.items_json, r.prompt_tokens, r.completion_tokens, r.created_at,
+                                   COALESCE(
+                                       json_agg(c.items_json) FILTER (WHERE c.combo_id IS NOT NULL),
+                                       '[]'::json
+                                   ) AS combo_items_json
+                            FROM recommendation_requests r
+                            LEFT JOIN recommendation_combos c ON r.request_id = c.request_id
+                            WHERE r.created_at >= %s AND r.created_at <= %s
+                              AND r.status = 'DONE'
+                            GROUP BY r.request_id
+                            ORDER BY r.created_at ASC
+                            """,
+                            (start_dt, end_dt),
+                        )
+                        rows = cur.fetchall()
+            return [dict(r) for r in rows]
+
+        with self._lock:
+            conn = self._get_sqlite_connection()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT request_id, query_text, search_type, tpo_summary,
+                           items_json, prompt_tokens, completion_tokens, created_at
+                    FROM recommendation_requests
+                    WHERE created_at >= ? AND created_at <= ?
+                      AND status = 'DONE'
+                    ORDER BY created_at ASC
+                    """,
+                    (start_iso, end_iso),
+                ).fetchall()
+                results = []
+                for r in rows:
+                    req_dict = dict(r)
+                    req_id = req_dict["request_id"]
+                    c_rows = conn.execute(
+                        "SELECT items_json FROM recommendation_combos WHERE request_id = ?",
+                        (req_id,),
+                    ).fetchall()
+                    req_dict["combo_items_json"] = [cr["items_json"] for cr in c_rows]
+                    results.append(req_dict)
+                return results
+            finally:
+                self._close_sqlite_if_transient(conn)
+
+    def _aggregate_period_analytics(
+        self,
+        period: str,
+        label: str,
+        start_dt: datetime,
+        end_dt: datetime,
+    ) -> dict[str, Any]:
+        records = self._get_requests_in_range(start_dt, end_dt)
+
+        # 1. 토큰 사용량 집계 (슬롯 레이블 초기화)
+        usage_buckets = self._init_usage_buckets(period, start_dt, end_dt)
+        keyword_counts: Counter[str] = Counter()
+        product_counts: dict[tuple[str, str], int] = Counter()
+
+        for rec in records:
+            created_at_raw = rec.get("created_at")
+            if isinstance(created_at_raw, datetime):
+                rec_dt = created_at_raw.astimezone(timezone.utc) if created_at_raw.tzinfo else created_at_raw.replace(tzinfo=timezone.utc)
+            elif created_at_raw:
+                rec_dt = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            else:
+                rec_dt = start_dt
+
+            bucket_key = self._get_bucket_key(period, rec_dt, start_dt)
+            p_tokens = int(rec.get("prompt_tokens") or 0)
+            c_tokens = int(rec.get("completion_tokens") or 0)
+
+            if bucket_key in usage_buckets:
+                usage_buckets[bucket_key]["input"] += p_tokens
+                usage_buckets[bucket_key]["output"] += c_tokens
+
+            # 키워드 집계 (tpo_summary 및 query_text 파싱)
+            extracted_keywords = self._extract_keywords(rec.get("tpo_summary"), rec.get("query_text"))
+            for kw in extracted_keywords:
+                keyword_counts[kw] += 1
+
+            # 상품 집계
+            items_to_count = []
+            single_items_raw = rec.get("items_json")
+            if single_items_raw:
+                try:
+                    loaded = json.loads(single_items_raw) if isinstance(single_items_raw, str) else single_items_raw
+                    if isinstance(loaded, list):
+                        items_to_count.extend(loaded)
+                except Exception:
+                    pass
+
+            combos_raw = rec.get("combo_items_json")
+            if combos_raw:
+                for c_item in combos_raw:
+                    try:
+                        c_loaded = json.loads(c_item) if isinstance(c_item, str) else c_item
+                        if isinstance(c_loaded, list):
+                            items_to_count.extend(c_loaded)
+                    except Exception:
+                        pass
+
+            for it in items_to_count:
+                p_name = it.get("productName") or it.get("product_name") or ""
+                p_brand = it.get("brandName") or it.get("brand_name") or ""
+                if p_name:
+                    product_counts[(p_name, p_brand)] += 1
+
+        usage_list = [
+            {"label": val["label"], "input": val["input"], "output": val["output"]}
+            for val in usage_buckets.values()
+        ]
+
+        keywords_list = [
+            {"name": name, "count": count}
+            for name, count in keyword_counts.most_common(10)
+        ]
+
+        products_list = [
+            {"name": name, "brand": brand, "count": count}
+            for (name, brand), count in sorted(product_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+
+        return {
+            "label": label,
+            "startDate": start_dt.strftime("%Y-%m-%d"),
+            "endDate": end_dt.strftime("%Y-%m-%d"),
+            "usage": usage_list,
+            "keywords": keywords_list,
+            "products": products_list,
+        }
+
+    @staticmethod
+    def _init_usage_buckets(period: str, start_dt: datetime, end_dt: datetime) -> dict[str, dict[str, Any]]:
+        buckets: dict[str, dict[str, Any]] = {}
+        if period == "daily":
+            for h in (0, 4, 8, 12, 16, 20):
+                label = f"{h:02d}시"
+                buckets[label] = {"label": label, "input": 0, "output": 0}
+        elif period == "weekly":
+            day_labels = ["월", "화", "수", "목", "금", "토", "일"]
+            for d in day_labels:
+                buckets[d] = {"label": d, "input": 0, "output": 0}
+        elif period == "monthly":
+            for w in range(1, 6):
+                label = f"{w}주"
+                buckets[label] = {"label": label, "input": 0, "output": 0}
+        elif period == "yearly":
+            for m in range(1, 13):
+                label = f"{m}월"
+                buckets[label] = {"label": label, "input": 0, "output": 0}
+        return buckets
+
+    @staticmethod
+    def _get_bucket_key(period: str, rec_dt: datetime, start_dt: datetime) -> str:
+        if period == "daily":
+            h = rec_dt.hour
+            slot_h = (h // 4) * 4
+            return f"{slot_h:02d}시"
+        if period == "weekly":
+            day_labels = ["월", "화", "수", "목", "금", "토", "일"]
+            return day_labels[rec_dt.weekday()]
+        if period == "monthly":
+            week_idx = ((rec_dt.day - 1) // 7) + 1
+            if week_idx > 5:
+                week_idx = 5
+            return f"{week_idx}주"
+        if period == "yearly":
+            return f"{rec_dt.month}월"
+        return ""
+
+    @staticmethod
+    def _extract_keywords(tpo_summary: str | None, query_text: str | None) -> list[str]:
+        target_text = f"{tpo_summary or ''} {query_text or ''}"
+        standard_keywords = [
+            "출근룩", "미니멀", "캐주얼", "가을 코디", "데이트룩",
+            "오버핏", "스트릿", "하객룩", "여행룩", "포멀", "댄디",
+            "와이드", "스포티", "빈티지", "시티보이", "겨울 코디", "봄 코디", "여름 코디"
+        ]
+        found = []
+        for kw in standard_keywords:
+            if kw in target_text:
+                found.append(kw)
+        if not found and tpo_summary:
+            words = [w.strip() for w in re.split(r"[,\s]+", tpo_summary) if len(w.strip()) >= 2]
+            found.extend(words[:3])
+        return found
+

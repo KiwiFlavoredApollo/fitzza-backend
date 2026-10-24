@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import (
@@ -41,6 +42,7 @@ from app.schemas.recommendation import (
     VisualSearchResultItem,
     VisualSearchResponse,
 )
+from app.schemas.analytics import AnalyticsResponse
 
 FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
     "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
@@ -600,6 +602,35 @@ def list_recommendations(
         totalPages=page_data["totalPages"],
         hasNext=page_data.get("hasNext", False),
     )
+
+
+@public_router.get(
+    "/analytics",
+    response_model=AnalyticsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="관리자 대시보드 통계 집계 조회",
+    description="일간/주간/월간/연간 토큰 사용량 추이, 인기 스타일 키워드, 추천 상품 통계를 집계하여 반환합니다.",
+)
+def get_recommendation_analytics(
+    request: Request,
+    date: Optional[str] = Query(
+        default=None,
+        description="통계 기준 일자 (YYYY-MM-DD, 기본값: 현재 일자)",
+    ),
+) -> AnalyticsResponse:
+    ref_dt = None
+    if date:
+        try:
+            ref_dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise RecommendationApiError(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="INVALID_DATE_FORMAT",
+                message="기준 일자 형식이 올바르지 않습니다. (YYYY-MM-DD)",
+            )
+    repository = _get_repository(request)
+    data = repository.get_analytics_data(reference_dt=ref_dt)
+    return AnalyticsResponse(**data)
 
 
 @public_router.get(
