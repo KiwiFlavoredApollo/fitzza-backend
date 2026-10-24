@@ -7,14 +7,14 @@ This directory contains the local, credential-free Kubernetes deployment baselin
 - An EKS cluster with the AWS Load Balancer Controller installed
 - ECR repositories for every application image, with tag immutability enabled
 - An RDS PostgreSQL endpoint reachable from the private subnets
-- An IAM association for the `fitzza-application` service account using EKS Pod Identity or IRSA
+- The existing operator-managed association for `fitzza-application` and the foundation stack's dedicated EKS Pod Identity association for `fitzza-vton`
 - A Kubernetes Secret named `fitzza-app-secrets`, populated from the approved secret store. The SSM transition is tracked in FITZZA-251; the existing RDS password still uses Secrets Manager until that transition is verified.
 
 Do not apply `base/secret.example.yaml`. It documents required keys only and is intentionally excluded from Kustomize.
 
-Production VTON uses the operator-managed `fitzza-prod-vton-runtime` Pod Identity role on
-`fitzza/fitzza-application`. Scope that role to object read/write/delete on
-`fitzza-prod-assets-vton` and send/receive/delete/change-visibility on `vton-jobs`.
+Production VTON uses the foundation-managed `VtonRuntimeRole` Pod Identity role on
+`fitzza/fitzza-vton`. That role is scoped to object read/write/delete on
+`fitzza-prod-assets-vton` and send/receive/delete/change-visibility on the foundation VTON job queue.
 The foundation S3 Gateway Endpoint separately admits that role only to the VTON asset
 bucket. Keep `VTON_STORAGE_BACKEND=local` and `VTON_QUEUE_BACKEND=memory` until the
 association and endpoint access are verified; then switch both values together.
@@ -36,6 +36,8 @@ Before deployment, replace the following placeholders through an environment-spe
 - `CHANGE_ME_ALB_SECURITY_GROUP_ID` (CloudFormation output `AlbSecurityGroupId`)
 - `CHANGE_ME_API_DOMAIN`
 - `CHANGE_ME_REFRESH_COOKIE_SECURE` (set by `scripts/render_production_manifests.py`: `true` with TLS, `false` without)
+- `CHANGE_ME_VTON_JOB_QUEUE_URL` (CloudFormation output `VtonJobQueueUrl`)
+- `CHANGE_ME_VTON_JOB_DLQ_URL` (CloudFormation output `VtonJobDeadLetterQueueUrl`)
 
 The production overlay contains image mappings for all 11 application services. CodeBuild's `post_build` step fills `CHANGE_ME_ECR_REGISTRY`, `CHANGE_ME_ECR_REPOSITORY_PREFIX`, and `CHANGE_ME_COMMIT_TAG` from `image-definitions.json`, using the same ECR paths and 12-character Git commit tag as the image build. CodeBuild requires a resolved Git commit SHA; there is no `local` tag fallback.
 
