@@ -14,7 +14,8 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 | Commerce | User / Product / Order / Community / Review | 8081-8085 |
 | Messaging | Notification | 8086 |
 | AI | Virtual Try-On / Recommendation (FastAPI) | 8091-8092 |
-| Infra | PostgreSQL / Redis / LocalStack(S3, SQS) | 5432 / 6379 / 4566 |
+| Infra | PostgreSQL / Redis / LocalStack(S3, SQS) / Qdrant | 5432 / 6379 / 4566 / 6333 |
+| Observability | Jaeger (UI / OTLP HTTP) | 16686 / 4318 |
 
 ## 빠른 시작
 
@@ -92,6 +93,7 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 - 로컬에서 직접 확인 가능한 상태 주소: Config <http://localhost:8888/health>, Discovery <http://localhost:8761/health>, Gateway <http://localhost:8080/health>, Virtual Try-On <http://localhost:8091/health>, Recommendation <http://localhost:8092/health>
 - Eureka 대시보드: <http://localhost:8761>
 - LocalStack 상태: <http://localhost:4566/_localstack/health>
+- Jaeger UI(분산 추적): <http://localhost:16686> — Java 서비스가 OTLP(`http://jaeger:4318/v1/traces`, IDE 단독 실행 시 `http://localhost:4318/v1/traces`)로 전송합니다. 배포 환경 엔드포인트는 `MANAGEMENT_OTLP_TRACING_ENDPOINT`로 바꿉니다.
 
 Gateway를 통한 예시 호출:
 

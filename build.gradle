@@ -30,6 +30,9 @@ subprojects {
     }
 
     dependencies {
+        // Micrometer Tracing → OpenTelemetry → OTLP(Jaeger). 로컬 Compose jaeger:4318, 배포는 MANAGEMENT_OTLP_TRACING_ENDPOINT로 교체.
+        implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+        implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
     }
 
