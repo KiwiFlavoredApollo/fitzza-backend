@@ -446,6 +446,11 @@ def test_list_user_fittings_flow() -> None:
     assert p1_data["hasNext"] is False
     assert p1_data["page"] == 1
 
+    # 6. 정렬되지 않은 offset 요청 시 page=None 반환 검증
+    resp_unaligned = client.get("/api/vton?limit=2&offset=1", headers={"X-User-Id": "7"})
+    assert resp_unaligned.status_code == 200
+    assert resp_unaligned.json()["page"] is None
+
 
 def test_list_user_fittings_filter_by_request_id() -> None:
     client = TestClient(app)

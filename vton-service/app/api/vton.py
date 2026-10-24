@@ -304,7 +304,7 @@ ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"
 )
 def list_user_fittings(
     request: Request,
-    requestId: Annotated[
+    request_id: Annotated[
         int | None,
         Query(alias="requestId", ge=1, description="추천 대화 ID (대화별 피팅 필터링)"),
     ] = None,
@@ -323,14 +323,19 @@ def list_user_fittings(
     # page / size 지원 (타 마이크로서비스 표준 페이징 연동)
     effective_limit = size if size is not None else limit
     effective_offset = (page * effective_limit) if page is not None else offset
-    current_page = page if page is not None else (offset // effective_limit if effective_limit > 0 else 0)
+    if page is not None:
+        current_page = page
+    elif effective_limit > 0 and (offset % effective_limit == 0):
+        current_page = offset // effective_limit
+    else:
+        current_page = None
 
     repo = get_repo()
     raw_items, total_count = repo.get_user_fittings(
         user_id=x_user_id,
         limit=effective_limit,
         offset=effective_offset,
-        request_id=requestId,
+        request_id=request_id,
     )
 
     items: list[FittingSummaryResponse] = []
