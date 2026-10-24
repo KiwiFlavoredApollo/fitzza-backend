@@ -22,7 +22,7 @@ from fastapi import (
     status,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
@@ -338,16 +338,23 @@ def list_user_fittings(
         request_id=request_id,
     )
 
+    storage = get_storage_client()
     items: list[FittingSummaryResponse] = []
     for item in raw_items:
         user_img_url = _resolve_user_image_url(item["fittingId"], request) if item.get("photoId") else None
+        raw_res_url = item.get("resultImageUrl")
+        res_img_url = (
+            storage.get_presigned_url(raw_res_url)
+            if item.get("status") == "COMPLETED" and raw_res_url
+            else None
+        )
         items.append(
             FittingSummaryResponse(
                 fittingId=item["fittingId"],
                 userId=item["userId"],
                 requestId=item.get("requestId"),
                 status=item["status"],
-                resultImageUrl=item["resultImageUrl"] if item["status"] == "COMPLETED" else None,
+                resultImageUrl=res_img_url,
                 userImageUrl=user_img_url,
                 productCount=item.get("productCount", len(item.get("products", []))),
                 products=item.get("products", []),
@@ -720,6 +727,14 @@ def get_fitting(
             detail="본인의 피팅 결과만 조회할 수 있습니다.",
         )
 
+    storage = get_storage_client()
+    raw_res_url = detail.get("resultImageUrl")
+    result_img_url = (
+        storage.get_presigned_url(raw_res_url)
+        if detail.get("status") == "COMPLETED" and raw_res_url
+        else None
+    )
+
     user_img_url = _resolve_user_image_url(detail["fittingId"], None) if detail.get("photoId") else None
     return FittingDetailResponse(
         fittingId=detail["fittingId"],
@@ -727,7 +742,7 @@ def get_fitting(
         requestId=detail.get("requestId"),
         userImageUrl=user_img_url,
         status=detail["status"],
-        resultImageUrl=detail["resultImageUrl"] if detail["status"] == "COMPLETED" else None,
+        resultImageUrl=result_img_url,
         errorMessage=detail["errorMessage"],
         products=detail["products"],
         createdAt=detail["createdAt"],

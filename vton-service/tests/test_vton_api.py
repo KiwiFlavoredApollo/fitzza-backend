@@ -1031,6 +1031,37 @@ def test_post_vton_with_invalid_multipart_request_id_returns_400() -> None:
     assert "requestId" in resp.json()["message"]
 
 
+def test_list_and_detail_vton_converts_result_image_url_to_presigned_url() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    mock_storage = MagicMock()
+    mock_storage.get_presigned_url.side_effect = lambda url, **kwargs: f"{url}?AWSAccessKeyId=KEY&Signature=SIGNED&Expires=3600" if url else ""
+
+    set_dependencies_for_tests(repo=repo, storage_client=mock_storage)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101], request_id=10)
+    raw_s3_url = f"https://fitzza-prod-assets-vton.s3.ap-northeast-2.amazonaws.com/fittings/{fitting_id}.png"
+    repo.mark_completed(fitting_id, result_image_url=raw_s3_url)
+
+    # 1. 목록 조회 시 resultImageUrl 서명 URL 변환 확인
+    list_resp = client.get("/api/vton", headers={"X-User-Id": "7"})
+    assert list_resp.status_code == 200
+    item = list_resp.json()["items"][0]
+    assert item["resultImageUrl"].startswith(raw_s3_url)
+    assert "Signature=SIGNED" in item["resultImageUrl"]
+
+    # 2. 상세 조회 시 resultImageUrl 서명 URL 변환 확인
+    detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["resultImageUrl"].startswith(raw_s3_url)
+    assert "Signature=SIGNED" in detail["resultImageUrl"]
+
+    set_dependencies_for_tests(None, None, None, None)
+
+
+
+
 
 
 
