@@ -176,6 +176,36 @@ def test_background_vton_failure_flow() -> None:
     mock_notif_client.send_fitting_failed.assert_called_once()
 
 
+def test_background_vton_retry_keeps_pending_without_failure_notification() -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+    mock_prod_client.resolve_product_item.side_effect = RuntimeError("temporary error")
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
+
+    completed = _run_background_vton(
+        fitting_id=fitting_id,
+        user_id=7,
+        photo_id=1,
+        product_ids=[101],
+        result_image_url="http://dummy/image",
+        finalize_failure=False,
+    )
+
+    assert completed is False
+    detail = repo.get_fitting_detail(fitting_id)
+    assert detail is not None
+    assert detail["status"] == "PENDING"
+    assert detail["errorMessage"] is None
+    mock_notif_client.send_fitting_failed.assert_not_called()
+
+
 def test_background_vton_duplicate_category_flow() -> None:
     repo = VtonRepository(db_path=":memory:")
     mock_prod_client = MagicMock(spec=ProductServiceClient)

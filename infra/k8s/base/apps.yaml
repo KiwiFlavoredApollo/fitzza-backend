@@ -327,7 +327,7 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: vton-service }
     spec:
-      serviceAccountName: fitzza-application
+      serviceAccountName: fitzza-vton
       containers:
         - name: vton-service
           image: fitzza/vton-service:latest
@@ -368,7 +368,7 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: vton-worker }
     spec:
-      serviceAccountName: fitzza-application
+      serviceAccountName: fitzza-vton
       containers:
         - name: vton-worker
           image: fitzza/vton-service:latest

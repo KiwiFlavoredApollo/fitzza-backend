@@ -27,6 +27,7 @@ data:
   VTON_STORAGE_BACKEND: s3
   AWS_S3_BUCKET_NAME: fitzza-prod-assets-vton
   VTON_QUEUE_BACKEND: sqs
-  AWS_SQS_QUEUE_URL: https://sqs.ap-northeast-2.amazonaws.com/414901227428/vton-jobs
-  AWS_SQS_DLQ_URL: https://sqs.ap-northeast-2.amazonaws.com/414901227428/vton-jobs-dlq
+  AWS_SQS_QUEUE_URL: CHANGE_ME_VTON_JOB_QUEUE_URL
+  AWS_SQS_DLQ_URL: CHANGE_ME_VTON_JOB_DLQ_URL
+  SQS_MAX_RECEIVE_COUNT: "3"
 
