@@ -167,8 +167,8 @@ def _get_personalized_feed_service(app: Any) -> Any:
         from app.services.personalized_vector_engine import PersonalizedVectorEngine
 
         settings = _get_settings_from_app(app)
-        search_engine = _get_search_engine(app)
-        qdrant_client = getattr(search_engine, "client", None)
+        search_engine = getattr(app.state, "search_engine", None)
+        qdrant_client = getattr(search_engine, "client", None) if search_engine else None
 
         vector_engine = PersonalizedVectorEngine(
             qdrant_client=qdrant_client,
