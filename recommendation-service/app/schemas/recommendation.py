@@ -42,6 +42,7 @@ class RecommendedComboItem(BaseModel):
 
 class RecommendationDetailResponse(BaseModel):
     requestId: int
+    queryText: str = ""
     status: Literal["PROCESSING", "DONE", "FAILED"]
     searchType: Optional[str] = None
     tpoSummary: Optional[str] = None

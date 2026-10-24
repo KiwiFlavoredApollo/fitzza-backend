@@ -433,6 +433,49 @@ def test_list_user_fittings_flow() -> None:
     assert paged_data["items"][0]["fittingId"] == f1
 
 
+def test_list_user_fittings_filter_by_request_id() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    f1 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101], request_id=10)
+    f2 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[102], request_id=20)
+    f3 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[103], request_id=10)
+    repo.create_fitting(user_id=8, photo_id=None, product_ids=[201], request_id=10)
+
+    # requestId=10 필터링
+    resp10 = client.get("/api/vton?requestId=10", headers={"X-User-Id": "7"})
+    assert resp10.status_code == 200
+    data10 = resp10.json()
+    assert data10["totalCount"] == 2
+    assert len(data10["items"]) == 2
+    ids = [item["fittingId"] for item in data10["items"]]
+    assert ids == [f3, f1]
+    for item in data10["items"]:
+        assert item["requestId"] == 10
+
+    # requestId=20 필터링
+    resp20 = client.get("/api/vton?requestId=20", headers={"X-User-Id": "7"})
+    assert resp20.status_code == 200
+    data20 = resp20.json()
+    assert data20["totalCount"] == 1
+    assert data20["items"][0]["fittingId"] == f2
+    assert data20["items"][0]["requestId"] == 20
+
+    # 존재하지 않는 requestId=999 필터링
+    resp999 = client.get("/api/vton?requestId=999", headers={"X-User-Id": "7"})
+    assert resp999.status_code == 200
+    data999 = resp999.json()
+    assert data999["totalCount"] == 0
+    assert data999["items"] == []
+
+    # 유효하지 않은 requestId (0 또는 음수) 요청 시 400 Bad Request
+    resp_invalid = client.get("/api/vton?requestId=0", headers={"X-User-Id": "7"})
+    assert resp_invalid.status_code == 400
+    resp_neg = client.get("/api/vton?requestId=-1", headers={"X-User-Id": "7"})
+    assert resp_neg.status_code == 400
+
+
 def test_post_vton_multipart_user_image_flow() -> None:
     client = TestClient(app)
     img_bytes = _create_sample_png()

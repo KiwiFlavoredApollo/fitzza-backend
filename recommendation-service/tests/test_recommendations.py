@@ -222,6 +222,7 @@ def test_post_recommendations_returns_accepted_and_triggers_fcm_notification() -
         assert detail_res.status_code == 200
         detail = detail_res.json()
         assert detail["requestId"] == request_id
+        assert detail["queryText"] == "성수동 주말 나들이 코디 추천해줘"
         assert detail["status"] == "DONE"
         assert detail["searchType"] == "COMBO"
         assert detail["tpoSummary"] == "성수동 주말 나들이 미니멀"
@@ -256,6 +257,8 @@ def test_single_item_recommendation_saves_items_and_notifies_fcm() -> None:
         )
         assert detail_res.status_code == 200
         detail = detail_res.json()
+        assert detail["requestId"] == request_id
+        assert detail["queryText"] == "검정 가디건 단품 추천해줘"
         assert detail["status"] == "DONE"
         assert detail["searchType"] == "SINGLE"
         assert len(detail["items"]) == 1
@@ -644,4 +647,34 @@ def test_map_product_item_includes_sizes() -> None:
     mapped_none = _map_product_item(item_without_sizes)
     assert mapped_none["recommendedSize"] is None
     assert mapped_none["availableSizes"] is None
+
+
+def test_recommendation_detail_with_null_query_text_falls_back_to_empty_string() -> None:
+    from unittest.mock import patch
+
+    with TestClient(app) as client:
+        post_res = client.post(
+            "/api/v1/recommendations",
+            headers={"X-User-Id": "15"},
+            json={"query": "테스트 코디"},
+        )
+        assert post_res.status_code == 202
+        request_id = post_res.json()["requestId"]
+
+        repo = app.state.repository
+        original_get_request = repo.get_request
+
+        def mock_get_request(req_id: int):
+            data = original_get_request(req_id)
+            if data and req_id == request_id:
+                data["queryText"] = None
+            return data
+
+        with patch.object(repo, "get_request", side_effect=mock_get_request):
+            detail_res = client.get(
+                f"/api/v1/recommendations/{request_id}",
+                headers={"X-User-Id": "15"},
+            )
+            assert detail_res.status_code == 200
+            assert detail_res.json()["queryText"] == ""
 

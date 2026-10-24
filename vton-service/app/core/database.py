@@ -680,6 +680,7 @@ class VtonRepository:
         user_id: int,
         limit: int = 20,
         offset: int = 0,
+        request_id: int | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """사용자의 활성(삭제되지 않은) 피팅 목록을 최신순으로 조회하고 전체 건수와 함께 반환합니다."""
         items: list[dict[str, Any]] = []
@@ -690,14 +691,21 @@ class VtonRepository:
             with self._lock:
                 with self._get_pg_connection() as conn:
                     with conn.cursor() as cur:
+                        where_clauses = ["user_id = %s", "is_deleted = FALSE"]
+                        params: list[Any] = [user_id]
+                        if request_id is not None:
+                            where_clauses.append("request_id = %s")
+                            params.append(request_id)
+                        where_sql = " AND ".join(where_clauses)
+
                         # 전체 건수
                         cur.execute(
                             f"""
                             SELECT COUNT(*) AS total_count
                             FROM {schema}.fittings
-                            WHERE user_id = %s AND is_deleted = FALSE;
+                            WHERE {where_sql};
                             """,
-                            (user_id,),
+                            tuple(params),
                         )
                         count_row = cur.fetchone()
                         if count_row:
@@ -713,16 +721,17 @@ class VtonRepository:
                             return [], 0
 
                         # 목록 조회
+                        query_params = list(params) + [limit, offset]
                         cur.execute(
                             f"""
                             SELECT fitting_id, user_id, photo_id, request_id, status,
                                    result_image_url, error_message, created_at, updated_at
                             FROM {schema}.fittings
-                            WHERE user_id = %s AND is_deleted = FALSE
+                            WHERE {where_sql}
                             ORDER BY fitting_id DESC
                             LIMIT %s OFFSET %s;
                             """,
-                            (user_id, limit, offset),
+                            tuple(query_params),
                         )
                         rows = cur.fetchall() or []
                         fitting_ids = [int(r["fitting_id"]) for r in rows]
@@ -769,13 +778,20 @@ class VtonRepository:
                 conn = self._get_sqlite_connection()
                 try:
                     cur = conn.cursor()
+                    where_clauses = ["user_id = ?", "is_deleted = 0"]
+                    params = [user_id]
+                    if request_id is not None:
+                        where_clauses.append("request_id = ?")
+                        params.append(request_id)
+                    where_sql = " AND ".join(where_clauses)
+
                     cur.execute(
-                        """
+                        f"""
                         SELECT COUNT(*)
                         FROM fittings
-                        WHERE user_id = ? AND is_deleted = 0;
+                        WHERE {where_sql};
                         """,
-                        (user_id,),
+                        tuple(params),
                     )
                     count_row = cur.fetchone()
                     total_count = int(count_row[0]) if count_row else 0
@@ -783,16 +799,17 @@ class VtonRepository:
                     if total_count == 0:
                         return [], 0
 
+                    query_params = list(params) + [limit, offset]
                     cur.execute(
-                        """
+                        f"""
                         SELECT fitting_id, user_id, photo_id, request_id, status,
                                result_image_url, error_message, created_at, updated_at
                         FROM fittings
-                        WHERE user_id = ? AND is_deleted = 0
+                        WHERE {where_sql}
                         ORDER BY fitting_id DESC
                         LIMIT ? OFFSET ?;
                         """,
-                        (user_id, limit, offset),
+                        tuple(query_params),
                     )
                     rows = [dict(r) for r in cur.fetchall()]
                     fitting_ids = [int(r["fitting_id"]) for r in rows]

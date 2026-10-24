@@ -304,6 +304,7 @@ ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"
 )
 def list_user_fittings(
     request: Request,
+    requestId: Annotated[int | None, Query(alias="requestId", ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=100, description="조회 건수")] = 20,
     offset: Annotated[int, Query(ge=0, description="시작 위치")] = 0,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
@@ -315,7 +316,12 @@ def list_user_fittings(
         )
 
     repo = get_repo()
-    raw_items, total_count = repo.get_user_fittings(user_id=x_user_id, limit=limit, offset=offset)
+    raw_items, total_count = repo.get_user_fittings(
+        user_id=x_user_id,
+        limit=limit,
+        offset=offset,
+        request_id=requestId,
+    )
 
     items: list[FittingSummaryResponse] = []
     for item in raw_items:

@@ -623,6 +623,7 @@ def get_recommendation_detail(
 
     return RecommendationDetailResponse(
         requestId=record["requestId"],
+        queryText=str(record.get("queryText") or ""),
         status=record["status"],
         searchType=record["searchType"],
         tpoSummary=record["tpoSummary"],
