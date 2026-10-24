@@ -58,6 +58,9 @@ class Settings:
     product_service_url: str = field(
         default_factory=lambda: os.getenv("PRODUCT_SERVICE_URL", "")
     )
+    order_service_url: str = field(
+        default_factory=lambda: os.getenv("ORDER_SERVICE_URL", "")
+    )
     notification_service_url: str = field(
         default_factory=lambda: os.getenv("NOTIFICATION_SERVICE_URL", "")
     )
@@ -93,6 +96,12 @@ class Settings:
     )
     redis_enabled: bool = field(
         default_factory=lambda: os.getenv("REDIS_ENABLED", "true").strip().lower() in ("true", "1", "yes")
+    )
+    enable_dev_mock_history: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_DEV_MOCK_HISTORY", "false").strip().lower() in ("true", "1", "yes")
+    )
+    enable_lifespan_warmup: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_LIFESPAN_WARMUP", "true").strip().lower() in ("true", "1", "yes")
     )
     redis_ttl_seconds: int = field(
         default_factory=lambda: int(os.getenv("REDIS_TTL_SECONDS", "3600"))
