@@ -53,6 +53,10 @@ Execute it with the `review_service_app` database identity from a short-lived po
 private EKS network, verify the imported count and public API response, and then delete
 both the pod and local SQL file. Never print database credentials or place them in the SQL.
 
+For local Docker Compose QA, `scripts/load_local_reviews.py` validates the same crawler output
+and streams the rendered SQL into the Compose `postgres` service without writing a file. It
+cannot reach RDS. See [infra/seed/README.md](../seed/README.md#크롤링-리뷰-로컬-qa).
+
 ## Local usage
 
 Use the crawler's qualified product `data/` directory, not candidate or audit output.
