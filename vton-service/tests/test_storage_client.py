@@ -123,6 +123,61 @@ def test_get_public_url() -> None:
     )
 
 
+def test_get_presigned_url() -> None:
+    # 1. S3 모드에서 presigned URL 정상 생성 및 만료 시간 확인
+    s_s3 = Settings(
+        storage_backend="s3",
+        aws_s3_bucket_name="fitzza-prod",
+        aws_region="ap-northeast-2",
+    )
+    c_s3 = StorageClient(s_s3)
+    mock_s3 = MagicMock()
+    mock_s3.generate_presigned_url.return_value = (
+        "https://fitzza-prod.s3.ap-northeast-2.amazonaws.com/fittings/1.png?AWSAccessKeyId=KEY&Signature=SIG&Expires=3600"
+    )
+    c_s3._s3_client = mock_s3
+
+    # 키 형태 전달 시
+    url = c_s3.get_presigned_url("fittings/1.png", expires_in=3600)
+    assert "Expires=3600" in url
+    mock_s3.generate_presigned_url.assert_called_with(
+        ClientMethod="get_object",
+        Params={"Bucket": "fitzza-prod", "Key": "fittings/1.png"},
+        ExpiresIn=3600,
+    )
+
+    # 전체 S3 URL 전달 시에도 S3 Key만 추출하여 서명
+    url2 = c_s3.get_presigned_url(
+        "https://fitzza-prod.s3.ap-northeast-2.amazonaws.com/fittings/1.png",
+        expires_in=1800,
+    )
+    assert "Expires=3600" in url2
+    mock_s3.generate_presigned_url.assert_called_with(
+        ClientMethod="get_object",
+        Params={"Bucket": "fitzza-prod", "Key": "fittings/1.png"},
+        ExpiresIn=1800,
+    )
+
+    # 2. CloudFront 도메인 설정 시 영구 CDN 캐싱 URL 반환
+    s_cf = Settings(
+        storage_backend="s3",
+        cloudfront_domain="https://cdn.fitzza.site",
+        aws_s3_bucket_name="fitzza-prod",
+    )
+    c_cf = StorageClient(s_cf)
+    cf_url = c_cf.get_presigned_url("fittings/1.png")
+    assert cf_url == "https://cdn.fitzza.site/fittings/1.png"
+
+    # 3. 로컬 스토리지 모드 시 원본 경로/URL 반환 (Fallback)
+    s_local = Settings(storage_backend="local")
+    c_local = StorageClient(s_local)
+    assert c_local.get_presigned_url("/data/fittings/1.png") == "/data/fittings/1.png"
+
+    # 4. 빈 값 / None 전달 시 빈 문자열 반환
+    assert c_s3.get_presigned_url("") == ""
+    assert c_s3.get_presigned_url(None) == ""
+
+
 def test_local_storage_crud(tmp_path: Path) -> None:
     storage_dir = tmp_path / "data" / "fittings"
     storage_dir.mkdir(parents=True)

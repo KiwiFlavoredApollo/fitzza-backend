@@ -188,6 +188,46 @@ class StorageClient:
             return f"{base}/{self.bucket_name}/{clean_key}"
         return f"https://{self.bucket_name}.s3.{self.settings.aws_region}.amazonaws.com/{clean_key}"
 
+    def get_presigned_url(self, key_or_url: str | None, expires_in: int = 3600) -> str:
+        """S3 객체에 대한 임시 서명 URL(Pre-signed URL)을 생성하여 반환합니다.
+
+        - key_or_url: DB에 저장된 S3 키(fittings/12.png) 또는 전체 URL(https://bucket.s3.../fittings/12.png)
+        - expires_in: 서명 유효 시간(초, 기본 3600초 / 1시간)
+        - CloudFront 도메인이 설정된 경우 영구 캐싱 CDN URL을 우선 반환합니다.
+        - 로컬 스토리지 모드이거나 서명 생성 실패 시 원본 경로를 안전하게 반환합니다.
+        """
+        if not key_or_url:
+            return ""
+
+        clean_input = str(key_or_url).strip()
+        if not clean_input:
+            return ""
+
+        # CloudFront 도메인이 연결되어 있으면 CDN 캐싱 URL로 자동 반환
+        if self.cloudfront_domain:
+            return self.get_public_url(clean_input)
+
+        # S3 백엔드가 아니거나 로컬 모드인 경우 원본 경로 반환
+        if not self.is_s3:
+            return clean_input
+
+        clean_key = self._extract_s3_key(clean_input)
+        try:
+            s3 = self._get_s3()
+            url = s3.generate_presigned_url(
+                ClientMethod="get_object",
+                Params={"Bucket": self.bucket_name, "Key": clean_key},
+                ExpiresIn=expires_in,
+            )
+            return str(url)
+        except Exception as exc:
+            logger.warning(
+                "S3 Pre-signed URL 생성 실패 (key=%s): %s. 원본 URL을 반환합니다.",
+                clean_key,
+                exc,
+            )
+            return clean_input
+
     def _save_local(self, clean_key: str, data: bytes) -> str:
         """로컬 파일시스템에 저장 (Fallback)."""
         base_dir = Path(self.settings.storage_dir).parent
