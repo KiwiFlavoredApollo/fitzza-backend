@@ -1096,10 +1096,11 @@ def test_fitting_image_endpoint_idor_security_and_s3_redirect(tmp_path: Path) ->
     resp_notfound = client.get("/api/vton/99999/image", headers={"X-User-Id": "7"})
     assert resp_notfound.status_code == 404
 
-    # 5. 본인 피팅 정상 조회 시 S3 307 Temporary Redirect 및 Location 헤더 확인
+    # 5. 본인 피팅 정상 조회 시 S3 307 Temporary Redirect 및 Location, Cache-Control 헤더 확인
     resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"}, follow_redirects=False)
     assert resp_ok.status_code == 307
     assert resp_ok.headers["location"] == presigned_target
+    assert resp_ok.headers["cache-control"] == "no-cache, no-store, must-revalidate"
 
     set_dependencies_for_tests(None, None, None, None)
 

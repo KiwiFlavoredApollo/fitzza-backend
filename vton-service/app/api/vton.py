@@ -697,13 +697,13 @@ async def request_fitting(
 
 
 @router.get(
-    "/api/vton/{fittingId}",
+    "/api/vton/{fitting_id}",
     response_model=FittingDetailResponse,
     summary="가상 피팅 결과 상세 조회",
     description="피팅 ID로 현재 진행 상태(PENDING/COMPLETED/FAILED) 및 결과 이미지 URL, 상품 목록을 조회합니다.",
 )
 def get_fitting(
-    fittingId: int,
+    fitting_id: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FittingDetailResponse:
     if not x_user_id or x_user_id <= 0:
@@ -713,7 +713,7 @@ def get_fitting(
         )
 
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -791,7 +791,7 @@ def delete_fitting(
 
 
 @router.get(
-    "/api/vton/{fittingId}/image",
+    "/api/vton/{fitting_id}/image",
     summary="가상 피팅 결과 PNG 이미지 서빙",
     description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다. 본인 소유 피팅만 접근 가능합니다.",
     responses={
@@ -803,7 +803,7 @@ def delete_fitting(
     },
 )
 def get_fitting_image(
-    fittingId: int,
+    fitting_id: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
     if not x_user_id or x_user_id <= 0:
@@ -814,7 +814,7 @@ def get_fitting_image(
 
     # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail or detail.get("isDeleted"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -837,32 +837,33 @@ def get_fitting_image(
     # 3. S3 백엔드인 경우 서명 URL로 307 임시 리다이렉트
     storage = get_storage_client()
     if storage.is_s3:
-        key_or_url = detail.get("resultImageUrl") or f"fittings/{fittingId}.png"
+        key_or_url = detail.get("resultImageUrl") or f"fittings/{fitting_id}.png"
         presigned_url = storage.get_presigned_url(key_or_url, expires_in=3600)
         if presigned_url.startswith(("http://", "https://")):
             return RedirectResponse(
                 url=presigned_url,
                 status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
             )
 
     settings = get_settings()
     storage_dir = Path(settings.storage_dir)
-    image_file = storage_dir / f"{fittingId}.png"
+    image_file = storage_dir / f"{fitting_id}.png"
 
     if image_file.is_file():
         return FileResponse(
             path=str(image_file),
             media_type="image/png",
-            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+            headers={"Content-Disposition": f'inline; filename="fitting-{fitting_id}.png"'},
         )
 
     # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3/Mock)에서 스트리밍 조회 시도
     try:
-        img_bytes = storage.download_bytes(f"fittings/{fittingId}.png")
+        img_bytes = storage.download_bytes(f"fittings/{fitting_id}.png")
         return Response(
             content=img_bytes,
             media_type="image/png",
-            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+            headers={"Content-Disposition": f'inline; filename="fitting-{fitting_id}.png"'},
         )
     except Exception:
         raise HTTPException(

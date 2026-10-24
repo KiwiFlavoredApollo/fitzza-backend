@@ -173,6 +173,14 @@ def test_get_presigned_url() -> None:
     c_local = StorageClient(s_local)
     assert c_local.get_presigned_url("/data/fittings/1.png") == "/data/fittings/1.png"
 
+    # 로컬 모드인데 cloudfront_domain이 설정되어 있어도 로컬 경로 반환
+    s_local_cf = Settings(
+        storage_backend="local",
+        cloudfront_domain="https://cdn.fitzza.site",
+    )
+    c_local_cf = StorageClient(s_local_cf)
+    assert c_local_cf.get_presigned_url("/data/fittings/1.png") == "/data/fittings/1.png"
+
     # 4. 빈 값 / None 전달 시 빈 문자열 반환
     assert c_s3.get_presigned_url("") == ""
     assert c_s3.get_presigned_url(None) == ""
@@ -381,6 +389,7 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
     )
     assert fit_img_resp.status_code == 307
     assert fit_img_resp.headers["location"] == f"https://cdn.fitzza.com/fittings/{fitting_id}.png"
+    assert fit_img_resp.headers["cache-control"] == "no-cache, no-store, must-revalidate"
 
     # Cleanup dependencies
     set_dependencies_for_tests(None, None, None, None)

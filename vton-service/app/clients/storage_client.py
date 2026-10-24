@@ -203,13 +203,13 @@ class StorageClient:
         if not clean_input:
             return ""
 
-        # CloudFront 도메인이 연결되어 있으면 CDN 캐싱 URL로 자동 반환
-        if self.cloudfront_domain:
-            return self.get_public_url(clean_input)
-
         # S3 백엔드가 아니거나 로컬 모드인 경우 원본 경로 반환
         if not self.is_s3:
             return clean_input
+
+        # CloudFront 도메인이 연결되어 있으면 CDN 캐싱 URL로 자동 반환
+        if self.cloudfront_domain:
+            return self.get_public_url(clean_input)
 
         clean_key = self._extract_s3_key(clean_input)
         try:
