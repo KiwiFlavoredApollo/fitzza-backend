@@ -130,7 +130,8 @@ management:
         exclude: "*"
   tracing:
     sampling:
-      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+      # 기본 꺼짐(운영 안전). 로컬 Compose는 MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0 으로 켠다.
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:0.0}
   otlp:
     tracing:
       endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
