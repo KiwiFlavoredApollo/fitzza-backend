@@ -30,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: crawler
-          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/crawler:full-20261026-07
+          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/crawler:full-20261026-08
           imagePullPolicy: Always
           command: ["python", "-u", "-m", "src.cloud_full_run"]
           args:

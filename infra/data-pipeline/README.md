@@ -32,6 +32,10 @@ restores crawler checkpoints and skips completed media objects. Its Pod Identity
 limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3
 `status.json`; application deployments are not restored automatically.
 
+Checkpoint restoration downloads and verifies 16 content-addressed S3 objects in
+parallel and prints progress every 500 objects. SHA-256 verification still completes
+before each restored file is written.
+
 Garments still require centimeter actual-size measurements. Shoes may instead use
 the product's purchasable size options when Musinsa does not publish a measurement
 table; these records are marked with `size.source=sales_option` and never presented
