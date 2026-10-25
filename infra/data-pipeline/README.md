@@ -1,5 +1,31 @@
 # Crawler to Jev contract
 
+## Full AWS collection with image files
+
+`crawler-full-run-job.yaml` runs the manually approved 3,000-product collection
+entirely on EKS. It restores product-screening checkpoints, combines qualified
+seed and new products, and streams product images, privacy-minimized reviews and
+review images directly to the run-specific S3 prefix. The Job does not invoke Jev,
+embeddings or Qdrant indexing.
+
+The 2026-10-25 run uses:
+
+```text
+s3://fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261025-01/
+status.json
+crawler/checkpoints.json
+curated/data/<category>/<product-id>.json
+curated/manifest.json
+images/products/<product-id>/
+reviews/data/<product-id>.json
+images/reviews/<product-id>/<review-id>/
+```
+
+The EKS Job has a 20-hour deadline and no retry. Recreating it with the same run ID
+restores crawler checkpoints and skips completed media objects. Its Pod Identity is
+limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3
+`status.json`; application deployments are not restored automatically.
+
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
 The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,

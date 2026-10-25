@@ -202,6 +202,17 @@ async def screen_category(
                     )
                     print("REJECT category")
 
+                elif not product.get("color_image_mappings"):
+                    out = {
+                        "product_id": product_id,
+                        "reason": "color_image_mappings_missing",
+                    }
+                    (rejected_dir / f"{product_id}.json").write_text(
+                        json.dumps(out, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    print("REJECT color-image")
+
                 else:
                     (screened_dir / f"{product_id}.json").write_text(
                         json.dumps(product, ensure_ascii=False, indent=2),
