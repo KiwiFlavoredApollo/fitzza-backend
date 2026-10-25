@@ -94,37 +94,45 @@ def main() -> None:
     os.environ["SEED_MANIFEST"] = str(manifest_path)
     files, etag = restore_checkpoints(s3, args.bucket, prefix)
 
+    candidate_factor = 18.0
+    minimum_candidates = 10_000
     for category in CATEGORY_CONFIG:
-        complete = False
-        for factor in (6.0, 12.0, 18.0):
-            status(s3, args.bucket, prefix, "discovery", category=category,
-                   candidate_factor=factor)
-            run_command(["src.cli", "discover", "--category", category,
-                         "--factor", str(factor), "--page-size", "60",
-                         "--max-pages-per-sort", "100"], 3600)
-            files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
+        selection = select_category(category)
+        if selection["complete"]:
+            continue
 
-            while True:
-                selection = select_category(category)
-                status(s3, args.bucket, prefix, "screening", category=category,
-                       candidate_factor=factor, selected=selection["selected"],
-                       target=selection["required"], counts=selection["counts"],
-                       deficit=selection["deficit"])
-                if selection["complete"]:
-                    complete = True
-                    break
-                before = handled_count(category)
-                run_command(["src.fast_screen", "--category", category,
-                             "--max-new", "500", "--workers", "8"], 1800)
-                files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
-                if handled_count(category) == before:
-                    break
-            if complete:
+        complete = False
+        status(s3, args.bucket, prefix, "discovery", category=category,
+               candidate_factor=candidate_factor,
+               minimum_candidates=minimum_candidates)
+        run_command(["src.cli", "discover", "--category", category,
+                     "--factor", str(candidate_factor), "--min-candidates",
+                     str(minimum_candidates), "--page-size", "60",
+                     "--max-pages-per-sort", "100"], 3600)
+        files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
+
+        while True:
+            selection = select_category(category)
+            status(s3, args.bucket, prefix, "screening", category=category,
+                   candidate_factor=candidate_factor,
+                   minimum_candidates=minimum_candidates,
+                   selected=selection["selected"],
+                   target=selection["required"], counts=selection["counts"],
+                   deficit=selection["deficit"])
+            if selection["complete"]:
+                complete = True
+                break
+            before = handled_count(category)
+            run_command(["src.fast_screen", "--category", category,
+                         "--max-new", "500", "--workers", "8"], 1800)
+            files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
+            if handled_count(category) == before:
                 break
         if not complete:
             selection = select_category(category)
             raise RuntimeError(
-                f"{category} quota incomplete after 18x discovery: {selection['deficit']}"
+                f"{category} quota incomplete after expanded discovery: "
+                f"{selection['deficit']}"
             )
 
     status(s3, args.bucket, prefix, "curation")

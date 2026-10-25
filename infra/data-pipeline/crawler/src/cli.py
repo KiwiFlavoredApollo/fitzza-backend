@@ -38,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="목표량 기반으로 카테고리별 후보를 확보",
     )
     discover.add_argument("--factor", type=float, default=1.6)
+    discover.add_argument("--min-candidates", type=int, default=0)
     discover.add_argument(
         "--category",
         choices=list(CATEGORY_CONFIG),
