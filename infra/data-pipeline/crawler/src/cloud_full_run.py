@@ -114,9 +114,8 @@ def main() -> None:
                     complete = True
                     break
                 before = handled_count(category)
-                run_command(["src.cli", "screen", "--category", category,
-                             "--chunk-size", "100", "--max-new", "100",
-                             "--delay", "0.8"], 1800)
+                run_command(["src.fast_screen", "--category", category,
+                             "--max-new", "500", "--workers", "8"], 1800)
                 files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
                 if handled_count(category) == before:
                     break
