@@ -59,8 +59,8 @@ def normalize_actual_size(data: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def normalize_shoe_option_size(product: dict[str, Any]) -> dict[str, Any]:
-    """Preserve purchasable shoe sizes when no centimeter table is published."""
+def normalize_accessory_option_size(product: dict[str, Any]) -> dict[str, Any]:
+    """Preserve purchasable accessory sizes when no measurement table is published."""
     values: list[dict[str, Any]] = []
     seen: set[str] = set()
     option_name = None
@@ -91,7 +91,7 @@ def normalize_shoe_option_size(product: dict[str, Any]) -> dict[str, Any]:
         "type_name": option_name,
         "type_number": None,
         "unit": "mm" if numeric_millimeters else "label",
-        "description": "Purchasable shoe size options from the product page",
+        "description": "Purchasable accessory size options from the product page",
         "guide_image": None,
         "measurements": [],
         "options": values,

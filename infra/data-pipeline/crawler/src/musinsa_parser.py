@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 
 from src.color_image_mappings import (
     extract_color_image_mappings,
-    extract_shoe_image_fallback,
+    extract_accessory_image_fallback,
 )
 
 
@@ -258,8 +258,9 @@ def normalize_musinsa_product(html: str, source_url: str) -> dict[str, Any]:
     images = [image for image in images if image]
     color_image_mappings = extract_color_image_mappings(product_id, options)
     category = detail.get("category") or {}
-    if not color_image_mappings and category.get("categoryDepth1Name") == "신발":
-        color_image_mappings = extract_shoe_image_fallback(
+    if (not color_image_mappings
+            and category.get("categoryDepth1Name") in {"신발", "모자"}):
+        color_image_mappings = extract_accessory_image_fallback(
             product_id,
             options,
             images,

@@ -4,6 +4,7 @@ from typing import Any
 
 
 ALLOWED_GENDERS = {"MALE", "UNISEX"}
+ACCESSORY_FALLBACK_CATEGORIES = {"신발", "모자"}
 
 CATEGORY_NAME_MAP = {
     "상의": "상의",
@@ -46,7 +47,7 @@ def has_required_size(product: dict[str, Any], category: str | None = None) -> b
     size = product.get("size") or {}
     options = size.get("options") or []
     return bool(
-        expected == "신발"
+        expected in ACCESSORY_FALLBACK_CATEGORIES
         and size.get("available") is True
         and size.get("source") == "sales_option"
         and size.get("unit") in {"mm", "label"}

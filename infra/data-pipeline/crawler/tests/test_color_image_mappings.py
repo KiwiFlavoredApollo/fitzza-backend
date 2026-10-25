@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from src.color_image_mappings import (
     extract_color_image_mappings,
-    extract_shoe_image_fallback,
+    extract_accessory_image_fallback,
     product_image_url,
 )
 from src.musinsa_parser import normalize_musinsa_product
@@ -29,7 +29,7 @@ class ColorImageMappingTests(unittest.TestCase):
         options = options_fixture()
         options["basic"][0]["displayType"] = "DROPDOWN"
         options["basic"][0]["optionValues"][0]["imageUrl"] = None
-        mappings = extract_shoe_image_fallback(
+        mappings = extract_accessory_image_fallback(
             123, options, ["https://image.msscdn.net/images/shoe.jpg"]
         )
         self.assertEqual(len(mappings), 1)
@@ -37,7 +37,7 @@ class ColorImageMappingTests(unittest.TestCase):
         self.assertEqual(mappings[0]["color_status"], "declared_single_option")
 
     def test_shoe_without_color_keeps_unspecified_primary_image(self):
-        mappings = extract_shoe_image_fallback(
+        mappings = extract_accessory_image_fallback(
             123,
             {"basic": [], "optionItems": []},
             ["https://image.msscdn.net/images/shoe.jpg"],
@@ -56,7 +56,7 @@ class ColorImageMappingTests(unittest.TestCase):
         options["optionItems"][0]["optionValues"].append(
             {"no": 22, "optionNo": 10, "name": "화이트"}
         )
-        self.assertEqual(extract_shoe_image_fallback(
+        self.assertEqual(extract_accessory_image_fallback(
             123, options, ["https://image.msscdn.net/images/shoe.jpg"]
         ), [])
 

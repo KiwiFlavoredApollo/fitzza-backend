@@ -36,15 +36,16 @@ Checkpoint restoration downloads and verifies 16 content-addressed S3 objects in
 parallel and prints progress every 500 objects. SHA-256 verification still completes
 before each restored file is written.
 
-Garments still require centimeter actual-size measurements. Shoes may instead use
-the product's purchasable size options when Musinsa does not publish a measurement
-table; these records are marked with `size.source=sales_option` and never presented
-as inferred centimeter measurements.
+Apparel still requires centimeter actual-size measurements. Shoes and hats may
+instead use the product's purchasable size options when Musinsa does not publish a
+measurement table; these records are marked with `size.source=sales_option` and
+never presented as inferred centimeter measurements.
 
-Shoe image evidence uses explicit color-chip images first. When absent, one declared
-color may use the product's primary image. A shoe with no color dimension keeps the
-primary image with `color_raw=null` and `color_status=unspecified`; products with
-multiple colors but no per-color images remain rejected.
+Shoe and hat image evidence uses explicit color-chip images first. When absent, one
+declared color may use the product's primary image. An accessory with no color
+dimension keeps the primary image with `color_raw=null` and
+`color_status=unspecified`; products with multiple colors but no per-color images
+remain rejected.
 
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 

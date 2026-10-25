@@ -11,7 +11,7 @@ from unittest.mock import patch, Mock
 from src.curate_dataset import prepare, validate_product, write_bundle, select_products
 from src.cloud_curate import main, curate, restore_product
 from src.collector.rules import has_required_size
-from src.musinsa_size import normalize_shoe_option_size
+from src.musinsa_size import normalize_accessory_option_size
 
 
 def product(identifier=1, category="상의"):
@@ -30,7 +30,7 @@ class CurateTests(unittest.TestCase):
 
     def test_shoe_sales_options_are_valid_size_fallback(self):
         item = product(category="신발")
-        item["size"] = normalize_shoe_option_size({"options": [{
+        item["size"] = normalize_accessory_option_size({"options": [{
             "name": "사이즈",
             "values": [
                 {"name": "250", "code": "250"},
@@ -58,9 +58,25 @@ class CurateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid_color"):
             validate_product(item)
 
+    def test_hat_sales_size_and_unspecified_image_are_valid(self):
+        item = product(category="모자")
+        item["size"] = normalize_accessory_option_size({"options": [{
+            "name": "사이즈",
+            "values": [{"name": "FREE", "code": "FREE"}],
+        }]})
+        item["color_image_mappings"] = [{
+            "product_id": 1,
+            "color_raw": None,
+            "color_status": "unspecified",
+            "image_url": "https://image.msscdn.net/images/hat.jpg",
+            "evidence": "Detail.primaryImage.colorUnspecified",
+        }]
+        self.assertTrue(has_required_size(item, "모자"))
+        self.assertEqual(validate_product(item), ("1", "모자"))
+
     def test_sales_options_do_not_replace_apparel_measurements(self):
         item = product(category="상의")
-        item["size"] = normalize_shoe_option_size({"options": [{
+        item["size"] = normalize_accessory_option_size({"options": [{
             "name": "SIZE",
             "values": [{"name": "M", "code": "M"}],
         }]})

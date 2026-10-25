@@ -67,12 +67,12 @@ def extract_color_image_mappings(product_id: int, options: dict) -> list[dict]:
     return [item for item in candidates if len(images_to_colors[item["image_url"]]) == 1]
 
 
-def extract_shoe_image_fallback(
+def extract_accessory_image_fallback(
     product_id: int,
     options: dict,
     product_images: list[str],
 ) -> list[dict]:
-    """Use a product image only when the shoe color relationship is unambiguous."""
+    """Use a product image only when the accessory color relationship is unambiguous."""
     primary_image = next(
         (image for value in product_images if (image := product_image_url(value))),
         None,

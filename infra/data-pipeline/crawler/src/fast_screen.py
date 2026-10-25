@@ -13,11 +13,16 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from src.collector.config import CATEGORY_CONFIG
-from src.collector.rules import has_actual_size, is_allowed_gender, is_target_category
+from src.collector.rules import (
+    ACCESSORY_FALLBACK_CATEGORIES,
+    has_actual_size,
+    is_allowed_gender,
+    is_target_category,
+)
 from src.collector.screen_until_ready import handled_ids, read_candidates
 from src.collector.select_balanced import select_category
 from src.musinsa_parser import normalize_musinsa_product
-from src.musinsa_size import normalize_actual_size, normalize_shoe_option_size
+from src.musinsa_size import normalize_accessory_option_size, normalize_actual_size
 
 
 HEADERS = {
@@ -96,7 +101,8 @@ def fetch_product(product_id: int, category: str) -> dict:
     actual_size = normalize_actual_size(
         size_payload.get("data") if isinstance(size_payload, dict) else None
     )
-    if category != "신발" and not has_actual_size({"size": actual_size}):
+    if (category not in ACCESSORY_FALLBACK_CATEGORIES
+            and not has_actual_size({"size": actual_size})):
         return {"product_id": product_id, "_rejection": "actual_size_unavailable",
                 "size": actual_size}
     html = fetch_bytes(product_url, product_url).decode("utf-8")
@@ -106,7 +112,7 @@ def fetch_product(product_id: int, category: str) -> dict:
     product["size"] = (
         actual_size
         if has_actual_size({"size": actual_size})
-        else normalize_shoe_option_size(product)
+        else normalize_accessory_option_size(product)
     )
     if not product["size"]["available"]:
         product["_rejection"] = "size_option_unavailable"

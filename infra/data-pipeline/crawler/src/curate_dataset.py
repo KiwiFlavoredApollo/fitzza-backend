@@ -12,7 +12,11 @@ import tarfile
 from urllib.parse import urlparse
 
 from src.collector.config import CATEGORY_CONFIG
-from src.collector.rules import is_allowed_gender, logical_category
+from src.collector.rules import (
+    ACCESSORY_FALLBACK_CATEGORIES,
+    is_allowed_gender,
+    logical_category,
+)
 from src.collector.season_allocator import possible_seasons
 from src.collector.select_balanced import Dinic, SEASONS
 
@@ -40,13 +44,14 @@ def validate_product(product: dict) -> tuple[str, str]:
         raise ValueError("gender_not_allowed")
     size = product.get("size") or {}
     rows = size.get("measurements") or []
-    if category == "신발" and size.get("source") == "sales_option":
+    if (category in ACCESSORY_FALLBACK_CATEGORIES
+            and size.get("source") == "sales_option"):
         options = size.get("options") or []
         if (size.get("available") is not True
                 or size.get("unit") not in {"mm", "label"}
                 or not options
                 or not all(str(item.get("size") or "").strip() for item in options)):
-            raise ValueError("invalid_shoe_size_options")
+            raise ValueError("invalid_accessory_size_options")
     else:
         if size.get("available") is not True or size.get("unit") != "cm" or not rows:
             raise ValueError("actual_size_missing_or_wrong_unit")
@@ -65,13 +70,13 @@ def validate_product(product: dict) -> tuple[str, str]:
     for mapping in mappings:
         raw, url = mapping.get("color_raw"), mapping.get("image_url")
         evidence = mapping.get("evidence")
-        unspecified_shoe = (
-            category == "신발"
+        unspecified_accessory = (
+            category in ACCESSORY_FALLBACK_CATEGORIES
             and raw is None
             and mapping.get("color_status") == "unspecified"
             and evidence == "Detail.primaryImage.colorUnspecified"
         )
-        if ((not unspecified_shoe
+        if ((not unspecified_accessory
              and (not isinstance(raw, str) or not raw.strip()))
                 or not isinstance(url, str)):
             raise ValueError("invalid_color_image_mapping")

@@ -10,13 +10,14 @@ from playwright.async_api import async_playwright
 from src.collector.batch_crawler import BatchProductCrawler
 from src.collector.config import CATEGORY_CONFIG
 from src.collector.rules import (
+    ACCESSORY_FALLBACK_CATEGORIES,
     has_actual_size,
     has_required_size,
     is_allowed_gender,
     is_target_category,
 )
 from src.collector.select_balanced import select_category
-from src.musinsa_size import normalize_shoe_option_size
+from src.musinsa_size import normalize_accessory_option_size
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,7 +85,7 @@ def handled_ids(category: str) -> set[int]:
     if rejected_dir.exists():
         for path in rejected_dir.glob("*.json"):
             try:
-                if category == "신발":
+                if category in ACCESSORY_FALLBACK_CATEGORIES:
                     rejected = json.loads(path.read_text(encoding="utf-8"))
                     if rejected.get("reason") in {
                         "actual_size_unavailable",
@@ -168,7 +169,8 @@ async def screen_category(
                     strict=True,
                 )
 
-                if category != "신발" and not has_actual_size({"size": actual_size}):
+                if (category not in ACCESSORY_FALLBACK_CATEGORIES
+                        and not has_actual_size({"size": actual_size})):
                     out = {
                         "product_id": product_id,
                         "reason": "actual_size_unavailable",
@@ -188,7 +190,7 @@ async def screen_category(
                 product["size"] = (
                     actual_size
                     if has_actual_size({"size": actual_size})
-                    else normalize_shoe_option_size(product)
+                    else normalize_accessory_option_size(product)
                 )
 
                 if not has_required_size(product, category):
