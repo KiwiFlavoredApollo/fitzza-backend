@@ -90,7 +90,7 @@ def main() -> None:
     for category in CATEGORY_CONFIG:
         status(s3, args.bucket, prefix, "discovery", category=category)
         run_command(["src.cli", "discover", "--category", category,
-                     "--factor", "1.6", "--page-size", "60",
+                     "--factor", "6.0", "--page-size", "60",
                      "--max-pages-per-sort", "40"], 1800)
         files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
 
