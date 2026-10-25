@@ -32,6 +32,13 @@ def run_command(arguments: list[str], timeout: int) -> None:
     subprocess.run([sys.executable, "-u", "-m", *arguments], check=True, timeout=timeout)
 
 
+def handled_count(category: str) -> int:
+    return sum(
+        len(list((Path("data") / directory / category).glob("*.json")))
+        for directory in ("screened", "screened_rejected")
+    )
+
+
 def download_seed(s3, bucket: str, prefix: str) -> tuple[Path, Path]:
     manifest_path = Path("seed-manifest.json").resolve()
     s3.download_file(bucket, f"{prefix}/seed/manifest.json", str(manifest_path))
@@ -88,31 +95,38 @@ def main() -> None:
     files, etag = restore_checkpoints(s3, args.bucket, prefix)
 
     for category in CATEGORY_CONFIG:
-        status(s3, args.bucket, prefix, "discovery", category=category)
-        run_command(["src.cli", "discover", "--category", category,
-                     "--factor", "6.0", "--page-size", "60",
-                     "--max-pages-per-sort", "40"], 1800)
-        files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
-
-        attempts_without_progress = 0
-        previous_selected = -1
-        while True:
-            selection = select_category(category)
-            status(s3, args.bucket, prefix, "screening", category=category,
-                   selected=selection["selected"], target=selection["required"],
-                   counts=selection["counts"], deficit=selection["deficit"])
-            if selection["complete"]:
-                break
-            if selection["selected"] == previous_selected:
-                attempts_without_progress += 1
-            else:
-                attempts_without_progress = 0
-            if attempts_without_progress >= 3:
-                raise RuntimeError(f"{category} screening made no progress")
-            previous_selected = selection["selected"]
-            run_command(["src.cli", "screen", "--category", category,
-                         "--chunk-size", "100", "--max-new", "100", "--delay", "0.8"], 1800)
+        complete = False
+        for factor in (6.0, 12.0, 18.0):
+            status(s3, args.bucket, prefix, "discovery", category=category,
+                   candidate_factor=factor)
+            run_command(["src.cli", "discover", "--category", category,
+                         "--factor", str(factor), "--page-size", "60",
+                         "--max-pages-per-sort", "100"], 3600)
             files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
+
+            while True:
+                selection = select_category(category)
+                status(s3, args.bucket, prefix, "screening", category=category,
+                       candidate_factor=factor, selected=selection["selected"],
+                       target=selection["required"], counts=selection["counts"],
+                       deficit=selection["deficit"])
+                if selection["complete"]:
+                    complete = True
+                    break
+                before = handled_count(category)
+                run_command(["src.cli", "screen", "--category", category,
+                             "--chunk-size", "100", "--max-new", "100",
+                             "--delay", "0.8"], 1800)
+                files, etag = save_checkpoints(s3, args.bucket, prefix, files, etag)
+                if handled_count(category) == before:
+                    break
+            if complete:
+                break
+        if not complete:
+            selection = select_category(category)
+            raise RuntimeError(
+                f"{category} quota incomplete after 18x discovery: {selection['deficit']}"
+            )
 
     status(s3, args.bucket, prefix, "curation")
     report, curated_files = prepare([seed_root, Path("data/screened")])

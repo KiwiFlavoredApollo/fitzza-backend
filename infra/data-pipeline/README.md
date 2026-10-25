@@ -21,7 +21,9 @@ reviews/data/<product-id>.json
 images/reviews/<product-id>/<review-id>/
 ```
 
-The EKS Job has a 36-hour deadline and no retry. Recreating it with the same run ID
+The EKS Job has a 72-hour deadline and no retry. Candidate discovery expands from
+6x to 12x and then 18x when a category exhausts its current pool without meeting
+the unchanged quality and season quotas. Recreating it with the same run ID
 restores crawler checkpoints and skips completed media objects. Its Pod Identity is
 limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3
 `status.json`; application deployments are not restored automatically.
