@@ -11,10 +11,12 @@ from src.collector.batch_crawler import BatchProductCrawler
 from src.collector.config import CATEGORY_CONFIG
 from src.collector.rules import (
     has_actual_size,
+    has_required_size,
     is_allowed_gender,
     is_target_category,
 )
 from src.collector.select_balanced import select_category
+from src.musinsa_size import normalize_shoe_option_size
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,7 +75,7 @@ def handled_ids(category: str) -> set[int]:
         for path in screened_dir.glob("*.json"):
             try:
                 product = json.loads(path.read_text(encoding="utf-8"))
-                if has_actual_size(product):
+                if has_required_size(product, category):
                     ids.add(int(path.stem))
             except (OSError, ValueError, json.JSONDecodeError):
                 pass
@@ -82,8 +84,12 @@ def handled_ids(category: str) -> set[int]:
     if rejected_dir.exists():
         for path in rejected_dir.glob("*.json"):
             try:
+                if category == "신발":
+                    rejected = json.loads(path.read_text(encoding="utf-8"))
+                    if rejected.get("reason") == "actual_size_unavailable":
+                        continue
                 ids.add(int(path.stem))
-            except ValueError:
+            except (OSError, ValueError, json.JSONDecodeError):
                 pass
 
     return ids
@@ -159,7 +165,7 @@ async def screen_category(
                     strict=True,
                 )
 
-                if not has_actual_size({"size": actual_size}):
+                if category != "신발" and not has_actual_size({"size": actual_size}):
                     out = {
                         "product_id": product_id,
                         "reason": "actual_size_unavailable",
@@ -176,7 +182,27 @@ async def screen_category(
                     continue
 
                 product = await crawler.fetch_basic_product(product_id)
-                product["size"] = actual_size
+                product["size"] = (
+                    actual_size
+                    if has_actual_size({"size": actual_size})
+                    else normalize_shoe_option_size(product)
+                )
+
+                if not has_required_size(product, category):
+                    out = {
+                        "product_id": product_id,
+                        "reason": "size_option_unavailable",
+                        "size": product["size"],
+                    }
+                    (rejected_dir / f"{product_id}.json").write_text(
+                        json.dumps(out, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    print("REJECT size-option")
+                    done.add(product_id)
+                    processed_this_chunk += 1
+                    new_total += 1
+                    continue
 
                 if not is_allowed_gender(product):
                     out = {

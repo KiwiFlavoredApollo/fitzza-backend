@@ -40,16 +40,24 @@ def validate_product(product: dict) -> tuple[str, str]:
         raise ValueError("gender_not_allowed")
     size = product.get("size") or {}
     rows = size.get("measurements") or []
-    if size.get("available") is not True or size.get("unit") != "cm" or not rows:
-        raise ValueError("actual_size_missing_or_wrong_unit")
-    for row in rows:
-        measurements = row.get("measurements") or {}
-        if not row.get("size") or not any(
-            key in MEASUREMENTS[category] and isinstance(value, (int, float))
-            and not isinstance(value, bool) and math.isfinite(value) and value > 0
-            for key, value in measurements.items()
-        ):
-            raise ValueError("invalid_actual_size")
+    if category == "신발" and size.get("source") == "sales_option":
+        options = size.get("options") or []
+        if (size.get("available") is not True
+                or size.get("unit") not in {"mm", "label"}
+                or not options
+                or not all(str(item.get("size") or "").strip() for item in options)):
+            raise ValueError("invalid_shoe_size_options")
+    else:
+        if size.get("available") is not True or size.get("unit") != "cm" or not rows:
+            raise ValueError("actual_size_missing_or_wrong_unit")
+        for row in rows:
+            measurements = row.get("measurements") or {}
+            if not row.get("size") or not any(
+                key in MEASUREMENTS[category] and isinstance(value, (int, float))
+                and not isinstance(value, bool) and math.isfinite(value) and value > 0
+                for key, value in measurements.items()
+            ):
+                raise ValueError("invalid_actual_size")
     mappings = product.get("color_image_mappings")
     if not isinstance(mappings, list) or not mappings:
         raise ValueError("color_image_mappings_missing")

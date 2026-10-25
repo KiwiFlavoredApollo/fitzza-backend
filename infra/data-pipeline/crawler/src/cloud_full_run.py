@@ -17,6 +17,7 @@ from botocore.config import Config
 from src.cloud_batch import restore_checkpoints, save_checkpoints
 from src.cloud_media import put_json, upload_product_images, upload_reviews, utc_now
 from src.collector.config import CATEGORY_CONFIG
+from src.collector.screen_until_ready import handled_ids
 from src.collector.select_balanced import select_category
 from src.curate_dataset import prepare
 
@@ -33,10 +34,7 @@ def run_command(arguments: list[str], timeout: int) -> None:
 
 
 def handled_count(category: str) -> int:
-    return sum(
-        len(list((Path("data") / directory / category).glob("*.json")))
-        for directory in ("screened", "screened_rejected")
-    )
+    return len(handled_ids(category))
 
 
 def download_seed(s3, bucket: str, prefix: str) -> tuple[Path, Path]:

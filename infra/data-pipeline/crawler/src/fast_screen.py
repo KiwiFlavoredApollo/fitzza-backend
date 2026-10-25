@@ -17,7 +17,7 @@ from src.collector.rules import has_actual_size, is_allowed_gender, is_target_ca
 from src.collector.screen_until_ready import handled_ids, read_candidates
 from src.collector.select_balanced import select_category
 from src.musinsa_parser import normalize_musinsa_product
-from src.musinsa_size import normalize_actual_size
+from src.musinsa_size import normalize_actual_size, normalize_shoe_option_size
 
 
 HEADERS = {
@@ -89,21 +89,27 @@ def fetch_bytes(url: str, referer: str, attempts: int = 4) -> bytes:
     raise RuntimeError(f"request exhausted retries ({last_error}): {url}")
 
 
-def fetch_product(product_id: int) -> dict:
+def fetch_product(product_id: int, category: str) -> dict:
     product_url = f"https://www.musinsa.com/products/{product_id}"
     size_url = f"https://goods-detail.musinsa.com/api2/goods/{product_id}/actual-size"
     size_payload = json.loads(fetch_bytes(size_url, product_url))
     actual_size = normalize_actual_size(
         size_payload.get("data") if isinstance(size_payload, dict) else None
     )
-    if not has_actual_size({"size": actual_size}):
+    if category != "신발" and not has_actual_size({"size": actual_size}):
         return {"product_id": product_id, "_rejection": "actual_size_unavailable",
                 "size": actual_size}
     html = fetch_bytes(product_url, product_url).decode("utf-8")
     product = normalize_musinsa_product(html, product_url)
     if int(product["product_id"]) != product_id:
         raise ValueError("requested product identity mismatch")
-    product["size"] = actual_size
+    product["size"] = (
+        actual_size
+        if has_actual_size({"size": actual_size})
+        else normalize_shoe_option_size(product)
+    )
+    if not product["size"]["available"]:
+        product["_rejection"] = "size_option_unavailable"
     return product
 
 
@@ -129,6 +135,9 @@ def save_result(category: str, product_id: int, product: dict) -> str:
     (screened / f"{product_id}.json").write_text(
         json.dumps(product, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    rejection = rejected / f"{product_id}.json"
+    if rejection.exists():
+        rejection.unlink()
     failure = failed / f"{product_id}.json"
     if failure.exists():
         failure.unlink()
@@ -139,7 +148,7 @@ async def process_candidate(semaphore: asyncio.Semaphore, category: str,
                             product_id: int) -> tuple[int, bool]:
     async with semaphore:
         try:
-            product = await asyncio.to_thread(fetch_product, product_id)
+            product = await asyncio.to_thread(fetch_product, product_id, category)
             outcome = save_result(category, product_id, product)
             print(f"  screen {product_id} ... {outcome}", flush=True)
             return product_id, True

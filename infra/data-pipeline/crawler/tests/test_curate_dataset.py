@@ -10,6 +10,8 @@ from unittest.mock import patch, Mock
 
 from src.curate_dataset import prepare, validate_product, write_bundle, select_products
 from src.cloud_curate import main, curate, restore_product
+from src.collector.rules import has_required_size
+from src.musinsa_size import normalize_shoe_option_size
 
 
 def product(identifier=1, category="상의"):
@@ -25,6 +27,30 @@ def product(identifier=1, category="상의"):
 class CurateTests(unittest.TestCase):
     def test_valid_contract(self):
         self.assertEqual(validate_product(product()), ("1", "상의"))
+
+    def test_shoe_sales_options_are_valid_size_fallback(self):
+        item = product(category="신발")
+        item["size"] = normalize_shoe_option_size({"options": [{
+            "name": "사이즈",
+            "values": [
+                {"name": "250", "code": "250"},
+                {"name": "260", "code": "260"},
+            ],
+        }]})
+        self.assertTrue(has_required_size(item, "신발"))
+        self.assertEqual(item["size"]["source"], "sales_option")
+        self.assertEqual(item["size"]["unit"], "mm")
+        self.assertEqual(validate_product(item), ("1", "신발"))
+
+    def test_sales_options_do_not_replace_apparel_measurements(self):
+        item = product(category="상의")
+        item["size"] = normalize_shoe_option_size({"options": [{
+            "name": "SIZE",
+            "values": [{"name": "M", "code": "M"}],
+        }]})
+        self.assertFalse(has_required_size(item, "상의"))
+        with self.assertRaisesRegex(ValueError, "actual_size_missing"):
+            validate_product(item)
 
     def test_missing_color_mapping_is_not_guessed(self):
         item = product()

@@ -12,7 +12,7 @@ from src.collector.color_product_export import export_dataset
 from src.collector.config import CATEGORY_CONFIG
 from src.collector.discover_targeted import run as run_discover
 from src.collector.hydrate_selected import run as run_hydrate
-from src.collector.rules import has_actual_size
+from src.collector.rules import has_required_size
 from src.collector.screen_until_ready import run as run_screen
 
 
@@ -125,7 +125,7 @@ def _hydrated_count(category: str, selected_ids: set[int]) -> int:
         except (OSError, ValueError, json.JSONDecodeError):
             continue
 
-        if product_id in selected_ids and has_actual_size(product):
+        if product_id in selected_ids and has_required_size(product, category):
             count += 1
 
     return count

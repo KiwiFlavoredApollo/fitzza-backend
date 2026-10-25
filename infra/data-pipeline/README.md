@@ -32,6 +32,11 @@ restores crawler checkpoints and skips completed media objects. Its Pod Identity
 limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3
 `status.json`; application deployments are not restored automatically.
 
+Garments still require centimeter actual-size measurements. Shoes may instead use
+the product's purchasable size options when Musinsa does not publish a measurement
+table; these records are marked with `size.source=sales_option` and never presented
+as inferred centimeter measurements.
+
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
 The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,
