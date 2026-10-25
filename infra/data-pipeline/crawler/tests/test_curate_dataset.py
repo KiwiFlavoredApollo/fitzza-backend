@@ -42,6 +42,22 @@ class CurateTests(unittest.TestCase):
         self.assertEqual(item["size"]["unit"], "mm")
         self.assertEqual(validate_product(item), ("1", "신발"))
 
+    def test_shoe_unspecified_color_primary_image_is_valid(self):
+        item = product(category="신발")
+        item["size"]["measurements"][0]["measurements"] = {"발길이": 25}
+        item["color_image_mappings"] = [{
+            "product_id": 1,
+            "color_raw": None,
+            "color_status": "unspecified",
+            "image_url": "https://image.msscdn.net/images/shoe.jpg",
+            "evidence": "Detail.primaryImage.colorUnspecified",
+        }]
+        self.assertEqual(validate_product(item), ("1", "신발"))
+
+        item["category"]["categoryDepth1Name"] = "상의"
+        with self.assertRaisesRegex(ValueError, "invalid_color"):
+            validate_product(item)
+
     def test_sales_options_do_not_replace_apparel_measurements(self):
         item = product(category="상의")
         item["size"] = normalize_shoe_option_size({"options": [{

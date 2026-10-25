@@ -41,6 +41,11 @@ the product's purchasable size options when Musinsa does not publish a measureme
 table; these records are marked with `size.source=sales_option` and never presented
 as inferred centimeter measurements.
 
+Shoe image evidence uses explicit color-chip images first. When absent, one declared
+color may use the product's primary image. A shoe with no color dimension keeps the
+primary image with `color_raw=null` and `color_status=unspecified`; products with
+multiple colors but no per-color images remain rejected.
+
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
 The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,

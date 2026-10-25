@@ -64,15 +64,24 @@ def validate_product(product: dict) -> tuple[str, str]:
     seen = set()
     for mapping in mappings:
         raw, url = mapping.get("color_raw"), mapping.get("image_url")
-        if not isinstance(raw, str) or not raw.strip() or not isinstance(url, str):
+        evidence = mapping.get("evidence")
+        unspecified_shoe = (
+            category == "신발"
+            and raw is None
+            and mapping.get("color_status") == "unspecified"
+            and evidence == "Detail.primaryImage.colorUnspecified"
+        )
+        if ((not unspecified_shoe
+             and (not isinstance(raw, str) or not raw.strip()))
+                or not isinstance(url, str)):
             raise ValueError("invalid_color_image_mapping")
         parsed = urlparse(url)
         if (parsed.scheme != "https" or parsed.hostname not in IMAGE_HOSTS
                 or parsed.username or parsed.password or parsed.port not in (None, 443)):
             raise ValueError("unapproved_image_url")
-        if str(mapping.get("product_id", "")) != identifier or not mapping.get("evidence"):
+        if str(mapping.get("product_id", "")) != identifier or not evidence:
             raise ValueError("color_image_evidence_missing")
-        pair = (raw.strip().lower(), url)
+        pair = (raw.strip().lower() if isinstance(raw, str) else None, url)
         if pair in seen:
             raise ValueError("duplicate_color_image_mapping")
         seen.add(pair)

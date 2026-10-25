@@ -86,7 +86,10 @@ def handled_ids(category: str) -> set[int]:
             try:
                 if category == "신발":
                     rejected = json.loads(path.read_text(encoding="utf-8"))
-                    if rejected.get("reason") == "actual_size_unavailable":
+                    if rejected.get("reason") in {
+                        "actual_size_unavailable",
+                        "color_image_mappings_missing",
+                    }:
                         continue
                 ids.add(int(path.stem))
             except (OSError, ValueError, json.JSONDecodeError):
