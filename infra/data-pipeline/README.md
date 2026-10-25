@@ -25,7 +25,8 @@ The EKS Job has a 72-hour deadline and no retry. Candidate discovery starts with
 the larger of 18x the category quota or 10,000 products, while completed categories
 are skipped on checkpoint restore. Newer product IDs are screened first to avoid
 spending the initial batches on stale listings. Screening uses eight concurrent direct
-HTTP workers; it does not wait for browser rendering because the server response
+HTTP workers behind a shared request-rate gate. A server `Retry-After` response pauses
+all workers so parallel requests do not extend a temporary block. It does not wait for browser rendering because the server response
 already contains the validated `__NEXT_DATA__` contract. Recreating it with the same run ID
 restores crawler checkpoints and skips completed media objects. Its Pod Identity is
 limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import random
+import threading
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -27,24 +28,65 @@ HEADERS = {
     ),
 }
 
+REQUEST_INTERVAL_SECONDS = 0.4
+_RATE_CONDITION = threading.Condition()
+_NEXT_REQUEST_AT = 0.0
+_BLOCKED_UNTIL = 0.0
+
+
+def wait_for_request_slot() -> None:
+    global _NEXT_REQUEST_AT
+    while True:
+        with _RATE_CONDITION:
+            now = time.monotonic()
+            ready_at = max(_NEXT_REQUEST_AT, _BLOCKED_UNTIL)
+            if ready_at <= now:
+                _NEXT_REQUEST_AT = now + REQUEST_INTERVAL_SECONDS
+                return
+            delay = min(ready_at - now, 1.0)
+        time.sleep(delay)
+
+
+def apply_global_cooldown(seconds: float) -> None:
+    global _BLOCKED_UNTIL
+    with _RATE_CONDITION:
+        _BLOCKED_UNTIL = max(_BLOCKED_UNTIL, time.monotonic() + seconds)
+        _RATE_CONDITION.notify_all()
+
+
+def retry_after_seconds(error: HTTPError, attempt: int) -> float:
+    value = error.headers.get("Retry-After")
+    try:
+        return max(float(value), 1.0)
+    except (TypeError, ValueError):
+        return float(2 ** attempt)
+
 
 def fetch_bytes(url: str, referer: str, attempts: int = 4) -> bytes:
     request = Request(url, headers={**HEADERS, "Referer": referer})
+    last_error = "unknown"
     for attempt in range(attempts):
+        wait_for_request_slot()
         try:
             with urlopen(request, timeout=30) as response:
                 if response.status >= 400:
                     raise RuntimeError(f"HTTP {response.status}: {url}")
                 return response.read()
         except HTTPError as error:
-            if error.code != 429 and not 500 <= error.code < 600:
+            last_error = f"HTTP {error.code}"
+            if error.code == 429:
+                cooldown = retry_after_seconds(error, attempt) + random.uniform(0.5, 1.5)
+                apply_global_cooldown(cooldown)
+                print(f"  rate-limit cooldown={cooldown:.1f}s", flush=True)
+                continue
+            if not 500 <= error.code < 600:
                 raise
-        except (URLError, TimeoutError):
-            pass
+        except (URLError, TimeoutError) as error:
+            last_error = f"{type(error).__name__}: {error}"
         if attempt + 1 == attempts:
-            raise RuntimeError(f"request exhausted retries: {url}")
+            raise RuntimeError(f"request exhausted retries ({last_error}): {url}")
         time.sleep(2 ** attempt + random.uniform(0, 0.25))
-    raise AssertionError("unreachable")
+    raise RuntimeError(f"request exhausted retries ({last_error}): {url}")
 
 
 def fetch_product(product_id: int) -> dict:
