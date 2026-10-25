@@ -47,6 +47,10 @@ dimension keeps the primary image with `color_raw=null` and
 `color_status=unspecified`; products with multiple colors but no per-color images
 remain rejected.
 
+Product and review image downloads isolate source-side failures such as HTTP 404,
+timeouts, and invalid image payloads. Each skipped URL is recorded in its S3 manifest
+and processing continues; S3 upload and permission failures still stop the run.
+
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
 The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,

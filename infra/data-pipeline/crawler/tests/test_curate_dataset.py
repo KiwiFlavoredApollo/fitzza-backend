@@ -55,6 +55,7 @@ class CurateTests(unittest.TestCase):
         self.assertEqual(validate_product(item), ("1", "신발"))
 
         item["category"]["categoryDepth1Name"] = "상의"
+        item["size"]["measurements"][0]["measurements"] = {"총장": 70}
         with self.assertRaisesRegex(ValueError, "invalid_color"):
             validate_product(item)
 

@@ -25,6 +25,10 @@ EXTENSIONS = {
 }
 
 
+class ImageSourceError(RuntimeError):
+    """An individual source image cannot be downloaded or validated."""
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -60,7 +64,7 @@ def normalize_image_url(value: object) -> str | None:
 def fetch_image(url: str, *, attempts: int = 4) -> tuple[bytes, str, str]:
     normalized = normalize_image_url(url)
     if normalized is None:
-        raise ValueError("unapproved image URL")
+        raise ImageSourceError("unapproved image URL")
     request = Request(normalized, headers={
         "Accept": "image/avif,image/webp,image/png,image/jpeg,image/gif",
         "User-Agent": "Mozilla/5.0 (compatible; FitzzaCloudCrawler/1.0)",
@@ -69,14 +73,16 @@ def fetch_image(url: str, *, attempts: int = 4) -> tuple[bytes, str, str]:
         try:
             with urlopen(request, timeout=30) as response:
                 if normalize_image_url(response.geturl()) is None:
-                    raise ValueError("image redirect left approved hosts")
+                    raise ImageSourceError("image redirect left approved hosts")
                 data = response.read(MAX_IMAGE_BYTES + 1)
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
             if not data or len(data) > MAX_IMAGE_BYTES:
-                raise ValueError("invalid image byte length")
+                raise ImageSourceError("invalid image byte length")
             extension = EXTENSIONS.get(content_type)
             if extension is None:
-                raise ValueError(f"unsupported image content type: {content_type}")
+                raise ImageSourceError(
+                    f"unsupported image content type: {content_type}"
+                )
             valid = ((extension == ".jpg" and data.startswith(b"\xff\xd8\xff"))
                      or (extension == ".png" and data.startswith(b"\x89PNG\r\n\x1a\n"))
                      or (extension == ".gif" and data.startswith((b"GIF87a", b"GIF89a")))
@@ -85,15 +91,15 @@ def fetch_image(url: str, *, attempts: int = 4) -> tuple[bytes, str, str]:
                      or (extension == ".avif" and len(data) >= 12
                          and data[4:8] == b"ftyp" and b"avif" in data[8:32]))
             if not valid:
-                raise ValueError("image signature does not match content type")
+                raise ImageSourceError("image signature does not match content type")
             return data, content_type, extension
         except HTTPError as error:
             if error.code != 429 and not 500 <= error.code < 600:
-                raise
+                raise ImageSourceError(f"HTTP {error.code}") from error
         except (URLError, TimeoutError):
             pass
         if attempt + 1 == attempts:
-            raise RuntimeError("image download exhausted retries")
+            raise ImageSourceError("image download exhausted retries")
         time.sleep(2 ** attempt + random.uniform(0, 0.25))
     raise AssertionError("unreachable")
 
@@ -132,17 +138,24 @@ def upload_product_images(s3, bucket: str, prefix: str, product: dict) -> dict:
     manifest_key = f"{prefix}/images/products/{product_id}/manifest.json"
     if object_exists(s3, bucket, manifest_key):
         return {"skipped": True, "image_count": 0}
-    images = []
+    images, failures = [], []
     for index, (kind, url) in enumerate(product_image_urls(product), 1):
-        record = upload_image(s3, bucket,
-            f"{prefix}/images/products/{product_id}/{index:03d}", url)
-        record["kind"] = kind
-        images.append(record)
+        try:
+            record = upload_image(s3, bucket,
+                f"{prefix}/images/products/{product_id}/{index:03d}", url)
+            record["kind"] = kind
+            images.append(record)
+        except ImageSourceError as error:
+            failure = {"kind": kind, "source_url": url, "error": str(error)}
+            failures.append(failure)
+            print(json.dumps({"event": "image_download_skipped",
+                "scope": "product", "product_id": product_id, **failure}),
+                flush=True)
         time.sleep(0.2)
-    if not images:
-        raise ValueError(f"product {product_id} has no downloadable images")
     manifest = {"schema_version": 1, "product_id": product_id,
-                "downloaded_at": utc_now(), "image_count": len(images), "images": images}
+                "downloaded_at": utc_now(), "image_count": len(images),
+                "failed_image_count": len(failures), "images": images,
+                "failures": failures}
     put_json(s3, bucket, manifest_key, manifest)
     return manifest
 
@@ -211,18 +224,29 @@ def upload_reviews(s3, bucket: str, prefix: str, product_id: str,
         if not items or (total_pages and page >= total_pages):
             break
         time.sleep(1.0)
-    image_count = 0
+    image_count = failed_image_count = 0
     for review in reviews:
-        files = []
+        files, failures = [], []
         for index, url in enumerate(review.pop("image_urls"), 1):
-            files.append(upload_image(s3, bucket,
-                f"{prefix}/images/reviews/{product_id}/{review['source_review_id']}/{index:03d}", url))
-            image_count += 1
+            try:
+                files.append(upload_image(s3, bucket,
+                    f"{prefix}/images/reviews/{product_id}/{review['source_review_id']}/{index:03d}", url))
+                image_count += 1
+            except ImageSourceError as error:
+                failure = {"source_url": url, "error": str(error)}
+                failures.append(failure)
+                failed_image_count += 1
+                print(json.dumps({"event": "image_download_skipped",
+                    "scope": "review", "product_id": product_id,
+                    "review_id": review["source_review_id"], **failure}), flush=True)
             time.sleep(0.2)
         review["image_files"] = files
+        review["image_failures"] = failures
     result = {"schema_version": 1, "source": "musinsa", "product_id": product_id,
         "collected_at": utc_now(), "reported_review_count": reported_total,
         "collected_review_count": len(reviews), "truncated": len(reviews) < reported_total,
-        "downloaded_review_image_count": image_count, "reviews": reviews}
+        "downloaded_review_image_count": image_count,
+        "failed_review_image_count": failed_image_count, "reviews": reviews}
     put_json(s3, bucket, output_key, result)
-    return {"review_count": len(reviews), "image_count": image_count}
+    return {"review_count": len(reviews), "image_count": image_count,
+            "failed_image_count": failed_image_count}
