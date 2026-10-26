@@ -8,7 +8,13 @@ import tempfile
 import unittest
 from unittest.mock import patch, Mock
 
-from src.curate_dataset import prepare, validate_product, write_bundle, select_products
+from src.curate_dataset import (
+    external_product_contract,
+    prepare,
+    select_products,
+    validate_product,
+    write_bundle,
+)
 from src.cloud_curate import main, curate, restore_product
 from src.collector.rules import has_required_size
 from src.musinsa_size import normalize_accessory_option_size
@@ -74,6 +80,16 @@ class CurateTests(unittest.TestCase):
         }]
         self.assertTrue(has_required_size(item, "모자"))
         self.assertEqual(validate_product(item), ("1", "모자"))
+
+        external = external_product_contract(item)
+        self.assertNotIn("source", external["size"])
+        self.assertNotIn("options", external["size"])
+        self.assertEqual(external["size"]["measurements"], [{
+            "size": "FREE", "sequence": 1, "measurements": {}
+        }])
+        mapping = external["color_image_mappings"][0]
+        self.assertEqual(mapping["color_raw"], "미지정")
+        self.assertNotIn("color_status", mapping)
 
     def test_sales_options_do_not_replace_apparel_measurements(self):
         item = product(category="상의")

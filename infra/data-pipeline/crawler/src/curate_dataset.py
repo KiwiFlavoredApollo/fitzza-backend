@@ -30,6 +30,31 @@ MEASUREMENTS = {
 }
 
 
+def external_product_contract(product: dict) -> dict:
+    """Return the original downstream JSON shape after internal fallback handling."""
+    item = deepcopy(product)
+    size = item.get("size")
+    if isinstance(size, dict):
+        size.pop("source", None)
+        options = size.pop("options", [])
+        if not size.get("measurements") and isinstance(options, list):
+            size["measurements"] = [
+                {"size": str(option.get("size") or "").strip(),
+                 "sequence": index, "measurements": {}}
+                for index, option in enumerate(options, 1)
+                if isinstance(option, dict) and str(option.get("size") or "").strip()
+            ]
+    mappings = item.get("color_image_mappings")
+    if isinstance(mappings, list):
+        for mapping in mappings:
+            if not isinstance(mapping, dict):
+                continue
+            mapping.pop("color_status", None)
+            if not isinstance(mapping.get("color_raw"), str) or not mapping["color_raw"].strip():
+                mapping["color_raw"] = "미지정"
+    return item
+
+
 def validate_product(product: dict) -> tuple[str, str]:
     identifier = str(product.get("product_id", ""))
     if not identifier.isascii() or not identifier.isdecimal() or int(identifier) <= 0:
@@ -155,7 +180,7 @@ def prepare(sources: list[Path]) -> tuple[dict, dict[str, bytes]]:
         for item in items:
             item.setdefault("dataset", {}).update(logical_category=category,
                 primary_season=item["season"]["primary"], gender_scope="MALE_AND_UNISEX")
-        selected.extend(items)
+        selected.extend(external_product_contract(item) for item in items)
     files = {f"data/{item['dataset']['logical_category']}/{int(item['product_id'])}.json":
              (json.dumps(item, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
              for item in selected}

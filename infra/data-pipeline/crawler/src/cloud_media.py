@@ -152,10 +152,14 @@ def upload_product_images(s3, bucket: str, prefix: str, product: dict) -> dict:
                 "scope": "product", "product_id": product_id, **failure}),
                 flush=True)
         time.sleep(0.2)
+    if failures:
+        put_json(s3, bucket,
+            f"{prefix}/audit/image-download-failures/products/{product_id}.json",
+            {"schema_version": 1, "product_id": product_id,
+             "recorded_at": utc_now(), "failures": failures})
     manifest = {"schema_version": 1, "product_id": product_id,
                 "downloaded_at": utc_now(), "image_count": len(images),
-                "failed_image_count": len(failures), "images": images,
-                "failures": failures}
+                "images": images}
     put_json(s3, bucket, manifest_key, manifest)
     return manifest
 
@@ -196,8 +200,7 @@ def normalize_review(value: dict) -> dict:
              for answer in question.get("answers", []) if isinstance(answer, dict)
              and answer.get("answerShortText") is not None]}
             for question in questions if isinstance(question, dict)],
-        "image_urls": [url for item in value.get("images") or [] if isinstance(item, dict)
-                       if (url := normalize_image_url(item.get("image")))]}
+        "image_files": []}
 
 
 def upload_reviews(s3, bucket: str, prefix: str, product_id: str,
@@ -224,29 +227,9 @@ def upload_reviews(s3, bucket: str, prefix: str, product_id: str,
         if not items or (total_pages and page >= total_pages):
             break
         time.sleep(1.0)
-    image_count = failed_image_count = 0
-    for review in reviews:
-        files, failures = [], []
-        for index, url in enumerate(review.pop("image_urls"), 1):
-            try:
-                files.append(upload_image(s3, bucket,
-                    f"{prefix}/images/reviews/{product_id}/{review['source_review_id']}/{index:03d}", url))
-                image_count += 1
-            except ImageSourceError as error:
-                failure = {"source_url": url, "error": str(error)}
-                failures.append(failure)
-                failed_image_count += 1
-                print(json.dumps({"event": "image_download_skipped",
-                    "scope": "review", "product_id": product_id,
-                    "review_id": review["source_review_id"], **failure}), flush=True)
-            time.sleep(0.2)
-        review["image_files"] = files
-        review["image_failures"] = failures
     result = {"schema_version": 1, "source": "musinsa", "product_id": product_id,
         "collected_at": utc_now(), "reported_review_count": reported_total,
         "collected_review_count": len(reviews), "truncated": len(reviews) < reported_total,
-        "downloaded_review_image_count": image_count,
-        "failed_review_image_count": failed_image_count, "reviews": reviews}
+        "downloaded_review_image_count": 0, "reviews": reviews}
     put_json(s3, bucket, output_key, result)
-    return {"review_count": len(reviews), "image_count": image_count,
-            "failed_image_count": failed_image_count}
+    return {"review_count": len(reviews), "image_count": 0}

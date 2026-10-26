@@ -38,18 +38,18 @@ before each restored file is written.
 
 Apparel still requires centimeter actual-size measurements. Shoes and hats may
 instead use the product's purchasable size options when Musinsa does not publish a
-measurement table; these records are marked with `size.source=sales_option` and
-never presented as inferred centimeter measurements.
+measurement table. Fallback provenance is retained in internal checkpoints only;
+the curated product JSON keeps the existing external field set.
 
 Shoe and hat image evidence uses explicit color-chip images first. When absent, one
 declared color may use the product's primary image. An accessory with no color
-dimension keeps the primary image with `color_raw=null` and
-`color_status=unspecified`; products with multiple colors but no per-color images
-remain rejected.
+dimension keeps the primary image under the existing non-empty `color_raw` contract;
+products with multiple colors but no per-color images remain rejected.
 
-Product and review image downloads isolate source-side failures such as HTTP 404,
-timeouts, and invalid image payloads. Each skipped URL is recorded in its S3 manifest
-and processing continues; S3 upload and permission failures still stop the run.
+Product image downloads isolate source-side failures such as HTTP 404, timeouts, and
+invalid image payloads. Skipped URLs are written below the separate S3 `audit/`
+prefix so the existing product and review JSON contracts do not change. Review images
+are not downloaded. S3 upload and permission failures still stop the run.
 
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 

@@ -141,36 +141,30 @@ def main() -> None:
 
     product_by_id = {str(json.loads(data)["product_id"]): json.loads(data)
                      for data in curated_files.values()}
-    product_image_count = product_image_failure_count = 0
+    product_image_count = 0
     for index, record in enumerate(manifest["products"], 1):
         result = upload_product_images(s3, args.bucket, prefix,
                                        product_by_id[record["product_id"]])
         product_image_count += int(result.get("image_count", 0))
-        product_image_failure_count += int(result.get("failed_image_count", 0))
         if index % 10 == 0:
             status(s3, args.bucket, prefix, "product-images", completed=index,
-                   total=3000, images_this_run=product_image_count,
-                   failed_images_this_run=product_image_failure_count)
+                   total=3000, images_this_run=product_image_count)
 
-    review_count = review_image_count = review_image_failure_count = 0
+    review_count = review_image_count = 0
     for index, record in enumerate(manifest["products"], 1):
         result = upload_reviews(s3, args.bucket, prefix, record["product_id"], 100)
         review_count += int(result.get("review_count", 0))
         review_image_count += int(result.get("image_count", 0))
-        review_image_failure_count += int(result.get("failed_image_count", 0))
         if index % 10 == 0:
             status(s3, args.bucket, prefix, "reviews-and-images", completed=index,
                    total=3000, reviews_this_run=review_count,
-                   images_this_run=review_image_count,
-                   failed_images_this_run=review_image_failure_count)
+                   images_this_run=review_image_count)
 
     final = {"schema_version": 1, "stage": "complete", "state": "succeeded",
              "completed_at": utc_now(), "product_count": 3000,
              "product_images_this_run": product_image_count,
-             "product_image_failures_this_run": product_image_failure_count,
              "reviews_this_run": review_count,
-             "review_images_this_run": review_image_count,
-             "review_image_failures_this_run": review_image_failure_count}
+             "review_images_this_run": review_image_count}
     put_json(s3, args.bucket, f"{prefix}/status.json", final)
     print(json.dumps(final, ensure_ascii=False), flush=True)
 
