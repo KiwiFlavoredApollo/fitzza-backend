@@ -22,14 +22,15 @@
 | `/aws/codebuild/fitzza-prod-build` | 보존 7일 | 파이프라인 실패 조사 가능 |
 | `/aws/codebuild/fitzza-prod-deploy` | 보존 7일 | 배포 실패 조사 가능 |
 | `/aws/lambda/fitzza-prod-node-scaler` | 보존 14일 | 스케일러 실행 조사 가능 |
-| `/aws/eks/fitzza-prod/cluster` | 보존 기간 미설정 | 로그 비용과 개인정보 보존 범위를 즉시 결정해야 함 |
+| `/aws/eks/fitzza-prod/cluster` | 현재 `Never Expire`(보존 기간 미설정) | 목표 보존 기간: 미정(운영·비용 승인 필요) |
 | EKS cluster log stored bytes | `1,922,623,851` bytes (CLI raw value) | 삭제·압축·보존 정책을 임의 적용하지 않고 승인 필요 |
 | Budgets / Cost Explorer | linked account 권한 거부 | payer 관리자에게서 FITZZA-221 Budget·비용 조회 증적을 받아야 함 |
 
-AWS Budget과 Cost Explorer는 payer 계정에서 관리되므로 linked account에서
-`DescribeBudgets` 또는 `GetCostAndUsage`를 재시도해도 해결되지 않는다. FITZZA-221에
-기록된 예산 요청안(USD 124, 50/80/100% 알림, 자동 조치 없음)을 기준으로 payer
-관리자의 설정 결과를 별도 증적으로 받아야 한다.
+Payer 소유 Budget을 조회·설정하거나 linked account 필터를 포함한 집계 비용을
+조회하려면 payer 권한이 필요하다. 현재 linked account 자격으로 실행한
+`DescribeBudgets`와 `GetCostAndUsage`는 권한 거부되었으므로, FITZZA-221에 기록된
+예산 요청안(USD 124, 50/80/100% 알림, 자동 조치 없음)을 기준으로 payer 관리자의
+설정 결과를 별도 증적으로 받아야 한다.
 
 ## FITZZA-177 대시보드 초안
 
