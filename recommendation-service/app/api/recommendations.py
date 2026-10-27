@@ -51,6 +51,7 @@ from app.services.size_resolver import (
     evaluate_single_product_size,
     extract_payload_metadata,
     fetch_qdrant_product_payload,
+    process_size_feedback,
     resolve_product_for_size,
     sync_user_body,
     sync_user_size_preference,
@@ -950,49 +951,24 @@ def receive_size_feedback(
     product_client: ProductServiceClient = getattr(
         request.app.state, "product_client", None
     ) or ProductServiceClient(settings)
-
-    purchased_spec = product_client.find_option_measurement(
-        product_id=payload.productId,
-        option_id=payload.optionId,
-        request_id_header=x_request_id,
+    size_resolver = getattr(request.app.state, "size_resolver", None) or getattr(
+        getattr(request.app.state, "coordinator", None), "size_resolver", None
     )
-
+    cache_service = _get_cache_service(request.app)
     qdrant_payload = _get_qdrant_product_payload(request.app, payload.productId)
-    subcategory: str | None = None
-    fit_type: str | None = None
-    if qdrant_payload is not None:
-        meta = extract_payload_metadata(qdrant_payload)
-        subcategory = meta["subcategory"] or None
-        fit_type = meta["fit_type"] or None
 
-    repository.save_size_feedback(
+    process_size_feedback(
         user_id=payload.userId,
         product_id=payload.productId,
         option_id=payload.optionId,
         size_feedback=payload.sizeFeedback,
-        subcategory=subcategory,
-        fit_type=fit_type,
-        purchased_spec=purchased_spec,
+        repository=repository,
+        product_client=product_client,
+        qdrant_payload=qdrant_payload,
+        size_resolver=size_resolver,
+        cache_service=cache_service,
+        request_id_header=x_request_id,
     )
-
-    if subcategory:
-        updated_pref = repository.get_user_size_preference(
-            user_id=payload.userId,
-            subcategory=subcategory,
-        )
-        size_resolver = getattr(request.app.state, "size_resolver", None) or getattr(
-            getattr(request.app.state, "coordinator", None), "size_resolver", None
-        )
-        _sync_user_size_preference(
-            size_resolver=size_resolver,
-            user_id=str(payload.userId),
-            subcategory=subcategory,
-            fit_type=fit_type or "레귤러",
-            pref_spec=updated_pref,
-        )
-
-    cache_service = _get_cache_service(request.app)
-    cache_service.invalidate_user_pipeline(user_id=str(payload.userId))
 
     return Response(status_code=status.HTTP_202_ACCEPTED)
 

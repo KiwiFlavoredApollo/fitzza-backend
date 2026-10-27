@@ -1,7 +1,9 @@
+import inspect
 import json
 import logging
 import os
 import re
+import threading
 from typing import Any, Optional
 
 from app.services.size_spec_normalizer import (
@@ -12,6 +14,7 @@ from app.services.size_spec_normalizer import (
 )
 
 logger = logging.getLogger(__name__)
+_MOCK_DB_LOCK = threading.Lock()
 
 
 class SizeProfileResolver:
@@ -141,20 +144,32 @@ class SizeProfileResolver:
                 pass
 
         # 3순위 (의류): 비슷한 체형 타 사용자의 '맞다' 인증 데이터 탐색
-        if target_user and (target_user.get("height") is not None or target_user.get("weight") is not None):
-            t_height = target_user.get("height", 175.0)
-            t_weight = target_user.get("weight", 70.0)
+        if (
+            target_user
+            and target_user.get("height") is not None
+            and target_user.get("weight") is not None
+        ):
+            try:
+                t_height = float(target_user["height"])
+                t_weight = float(target_user["weight"])
+            except (TypeError, ValueError):
+                t_height = None
+                t_weight = None
 
-            for other in self.mock_db.get("other_users_fits", []):
-                if other.get("subcategory") == subcategory:
-                    o_height = other.get("height", 175.0)
-                    o_weight = other.get("weight", 70.0)
+            if t_height is not None and t_weight is not None:
+                for other in self.mock_db.get("other_users_fits", []):
+                    if other.get("subcategory") == subcategory:
+                        try:
+                            o_height = float(other.get("height", 175.0))
+                            o_weight = float(other.get("weight", 70.0))
+                        except (TypeError, ValueError):
+                            continue
 
-                    if abs(t_height - o_height) <= 3.0 and abs(t_weight - o_weight) <= 4.0:
-                        return {
-                            "source": "similar_body_profile",
-                            "data": other.get("measurement_spec")
-                        }
+                        if abs(t_height - o_height) <= 3.0 and abs(t_weight - o_weight) <= 4.0:
+                            return {
+                                "source": "similar_body_profile",
+                                "data": other.get("measurement_spec")
+                            }
 
         return {
             "source": "none",
@@ -166,32 +181,33 @@ class SizeProfileResolver:
         [3. Closed-Loop 학습 루프]
         설문에서 "FIT(잘 맞아요)" 응답 시 누적 이동 평균으로 선호 실측 갱신.
         """
-        prefs = self.mock_db.get("user_preferences", [])
-        existing = next((p for p in prefs if p.get("user_id") == user_id and p.get("subcategory") == subcategory), None)
+        with _MOCK_DB_LOCK:
+            prefs = self.mock_db.setdefault("user_preferences", [])
+            existing = next((p for p in prefs if p.get("user_id") == user_id and p.get("subcategory") == subcategory), None)
 
-        if not existing:
-            new_pref = {
-                "preference_id": len(prefs) + 1,
-                "user_id": user_id,
-                "subcategory": subcategory,
-                "fit_type": fit_type,
-                "preference_spec": purchased_size_spec,
-                "sample_count": 1
-            }
-            prefs.append(new_pref)
-        else:
-            n = existing.get("sample_count", 1)
-            spec = existing.get("preference_spec", {})
-            updated_spec = {}
+            if not existing:
+                new_pref = {
+                    "preference_id": len(prefs) + 1,
+                    "user_id": user_id,
+                    "subcategory": subcategory,
+                    "fit_type": fit_type,
+                    "preference_spec": purchased_size_spec,
+                    "sample_count": 1
+                }
+                prefs.append(new_pref)
+            else:
+                n = existing.get("sample_count", 1)
+                spec = existing.get("preference_spec", {})
+                updated_spec = {}
 
-            for key, val in purchased_size_spec.items():
-                if key in spec and spec[key] is not None and val is not None:
-                    updated_spec[key] = round((spec[key] * n + val) / (n + 1), 1)
-                else:
-                    updated_spec[key] = val if val is not None else spec.get(key)
+                for key, val in purchased_size_spec.items():
+                    if key in spec and spec[key] is not None and val is not None:
+                        updated_spec[key] = round((spec[key] * n + val) / (n + 1), 1)
+                    else:
+                        updated_spec[key] = val if val is not None else spec.get(key)
 
-            existing["preference_spec"] = updated_spec
-            existing["sample_count"] = n + 1
+                existing["preference_spec"] = updated_spec
+                existing["sample_count"] = n + 1
 
 
 class SizeCalculator:
@@ -295,12 +311,6 @@ CATEGORY_KO_TO_EN: dict[str, str] = {
     "shoes": "shoes",
     "hat": "hat",
 }
-
-
-import inspect
-import threading
-
-_MOCK_DB_LOCK = threading.Lock()
 
 
 def parse_user_body(user_body: dict[str, Any] | None) -> dict[str, float] | None:
@@ -516,11 +526,16 @@ def resolve_product_for_size(
         raw_sizes = meta["sizes"]
 
     if not raw_sizes and product_client is not None and hasattr(product_client, "get_product_measurements"):
-        measurements_map = product_client.get_product_measurements(
-            [product_id],
-            request_id_header=request_id_header,
-        )
-        if product_id in measurements_map:
+        try:
+            measurements_map = product_client.get_product_measurements(
+                [product_id],
+                request_id_header=request_id_header,
+            )
+        except Exception as exc:
+            logger.warning("product-service 실측 조회 실패 (productId=%s): %s", product_id, exc)
+            measurements_map = {}
+
+        if isinstance(measurements_map, dict) and product_id in measurements_map:
             seen_size_labels: set[str] = set()
             for opt in measurements_map.get(product_id) or []:
                 if not isinstance(opt, dict):
@@ -586,25 +601,38 @@ def evaluate_single_product_size(
             "evidence": "단일 사이즈(FREE)로 제공되는 상품입니다.",
         }
 
-    user_body = (
-        user_client.get_user_body(
-            user_id=user_id,
-            request_id_header=request_id_header,
-        )
-        if user_client is not None
-        else {}
-    )
-
     subcategory: str | None = product_data.get("subcategory")
     fit_type = str(product_data.get("fit_type") or "레귤러")
     category_type = str(product_data.get("category_type") or "top")
 
     db_pref: dict[str, float] | None = None
     if subcategory and repository is not None:
-        db_pref = repository.get_user_size_preference(
-            user_id=user_id,
-            subcategory=subcategory,
-        )
+        try:
+            db_pref = repository.get_user_size_preference(
+                user_id=user_id,
+                subcategory=subcategory,
+            )
+        except Exception as exc:
+            logger.warning(
+                "선호 실측 DB 조회 실패 (userId=%s, subcategory=%s): %s",
+                user_id,
+                subcategory,
+                exc,
+            )
+
+    user_body: dict[str, Any] | None = None
+    if not db_pref:
+        if user_client is not None:
+            try:
+                user_body = user_client.get_user_body(
+                    user_id=user_id,
+                    request_id_header=request_id_header,
+                )
+            except Exception as exc:
+                logger.warning("user-service 신체 정보 조회 실패 (userId=%s): %s", user_id, exc)
+                user_body = {}
+        else:
+            user_body = {}
 
     resolve_fn = size_resolver.resolve_and_calculate_size
     sig_params = inspect.signature(resolve_fn).parameters
@@ -659,10 +687,76 @@ def evaluate_single_product_size(
         raw_fit_score * 100.0 if raw_fit_score <= 1.0 else raw_fit_score,
         1,
     )
+    fit_percent = max(0.0, min(100.0, fit_percent))
 
     return {
         "recommendedSize": str(recommendation["size_label"]),
         "fitPercent": fit_percent,
         "evidence": FIT_SOURCE_EVIDENCE_MAP.get(source_type),
     }
+
+
+def process_size_feedback(
+    user_id: int,
+    product_id: int,
+    option_id: int,
+    size_feedback: str,
+    repository: Any,
+    product_client: Any,
+    qdrant_payload: dict[str, Any] | None = None,
+    size_resolver: Any = None,
+    cache_service: Any = None,
+    request_id_header: str | None = None,
+) -> None:
+    purchased_spec: dict[str, float] | None = None
+    if product_client is not None and hasattr(product_client, "find_option_measurement"):
+        try:
+            purchased_spec = product_client.find_option_measurement(
+                product_id=product_id,
+                option_id=option_id,
+                request_id_header=request_id_header,
+            )
+        except Exception as exc:
+            logger.warning(
+                "옵션 실측 조회 실패 (productId=%s, optionId=%s): %s",
+                product_id,
+                option_id,
+                exc,
+            )
+
+    subcategory: str | None = None
+    fit_type: str | None = None
+    if qdrant_payload is not None:
+        meta = extract_payload_metadata(qdrant_payload)
+        subcategory = meta["subcategory"] or None
+        fit_type = meta["fit_type"] or None
+
+    repository.save_size_feedback(
+        user_id=user_id,
+        product_id=product_id,
+        option_id=option_id,
+        size_feedback=size_feedback,
+        subcategory=subcategory,
+        fit_type=fit_type,
+        purchased_spec=purchased_spec,
+    )
+
+    if subcategory and size_resolver is not None:
+        try:
+            updated_pref = repository.get_user_size_preference(
+                user_id=user_id,
+                subcategory=subcategory,
+            )
+            sync_user_size_preference(
+                size_resolver=size_resolver,
+                user_id=str(user_id),
+                subcategory=subcategory,
+                fit_type=fit_type or "레귤러",
+                pref_spec=updated_pref,
+            )
+        except Exception as exc:
+            logger.warning("선호 실측 동기화 실패 (userId=%s): %s", user_id, exc)
+
+    if cache_service is not None and hasattr(cache_service, "invalidate_user_pipeline"):
+        cache_service.invalidate_user_pipeline(user_id=str(user_id))
 

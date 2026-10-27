@@ -136,6 +136,8 @@ class ProductSizeRecommendationResponse(BaseModel):
     )
     fitPercent: Optional[float] = Field(
         None,
+        ge=0.0,
+        le=100.0,
         description="사이즈 적합도 퍼센트 (0.0 ~ 100.0). 추천 불가 시 null",
         json_schema_extra={"example": 92.0},
     )

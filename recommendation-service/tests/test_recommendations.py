@@ -976,4 +976,12 @@ def test_get_product_size_recommendation_edge_cases() -> None:
             "evidence": "체형 정보를 등록하시면 맞춤 사이즈를 추천해 드립니다.",
         }
 
+        # 4. 유효하지 않은 productId (0 이하) -> 400 INVALID_REQUEST
+        invalid_id_res = client.get(
+            "/api/recommendations/0/size",
+            headers={"X-User-Id": "999"},
+        )
+        assert invalid_id_res.status_code == 400
+        assert invalid_id_res.json()["code"] == "INVALID_REQUEST"
+
 
