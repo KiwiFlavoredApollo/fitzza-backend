@@ -1,5 +1,66 @@
 # Crawler to Jev contract
 
+## Review import report
+
+For an existing run, create `reviews/report.json` without changing review JSON:
+
+```powershell
+python -m src.review_report `
+  --bucket fitzza-prod-foundation-databucket-wwng6wfc0hqy `
+  --prefix pipeline/runs/collection-20261025-01
+```
+
+## Full AWS collection with image files
+
+`crawler-full-run-job.yaml` runs the manually approved 3,000-product collection
+entirely on EKS. It restores product-screening checkpoints, combines qualified
+seed and new products, and streams product images, privacy-minimized reviews and
+review images directly to the run-specific S3 prefix. The Job does not invoke Jev,
+embeddings or Qdrant indexing.
+
+The 2026-10-25 run uses:
+
+```text
+s3://fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261025-01/
+status.json
+crawler/checkpoints.json
+curated/data/<category>/<product-id>.json
+curated/manifest.json
+images/products/<product-id>/
+reviews/data/<product-id>.json
+images/reviews/<product-id>/<review-id>/
+```
+
+The EKS Job has a 72-hour deadline and no retry. Candidate discovery starts with
+the larger of 18x the category quota or 10,000 products, while completed categories
+are skipped on checkpoint restore. Newer product IDs are screened first to avoid
+spending the initial batches on stale listings. Screening uses eight concurrent direct
+HTTP workers behind a shared request-rate gate. A server `Retry-After` response pauses
+all workers so parallel requests do not extend a temporary block. It does not wait for browser rendering because the server response
+already contains the validated `__NEXT_DATA__` contract. Recreating it with the same run ID
+restores crawler checkpoints and skips completed media objects. Its Pod Identity is
+limited to the exact run prefix. Inspect progress with `kubectl logs` or the S3
+`status.json`; application deployments are not restored automatically.
+
+Checkpoint restoration downloads and verifies 16 content-addressed S3 objects in
+parallel and prints progress every 500 objects. SHA-256 verification still completes
+before each restored file is written.
+
+Apparel still requires centimeter actual-size measurements. Shoes and hats may
+instead use the product's purchasable size options when Musinsa does not publish a
+measurement table. Fallback provenance is retained in internal checkpoints only;
+the curated product JSON keeps the existing external field set.
+
+Shoe and hat image evidence uses explicit color-chip images first. When absent, one
+declared color may use the product's primary image. An accessory with no color
+dimension keeps the primary image under the existing non-empty `color_raw` contract;
+products with multiple colors but no per-color images remain rejected.
+
+Product image downloads isolate source-side failures such as HTTP 404, timeouts, and
+invalid image payloads. Skipped URLs are written below the separate S3 `audit/`
+prefix so the existing product and review JSON contracts do not change. Review images
+are not downloaded. S3 upload and permission failures still stop the run.
+
 Cloud deployment and execution are separate. See [DEPLOYMENT.md](DEPLOYMENT.md) for the suspended Jobs, approved bundle contract and masked SSM key registration. The examples below describe the earlier local workflow, not permission to run collection or indexing.
 
 The prepared `src.cloud_curate` stage verifies seed/raw hashes, selects the 3000-product category/season quotas,
