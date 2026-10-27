@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 import uuid
@@ -39,9 +40,11 @@ from app.schemas.tryon import (
     FittingListResponse,
     FittingSummaryResponse,
     InternalFittingResponse,
+    InternalTokenUsageResponse,
 )
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
+    TryonResult,
     VtonConfigurationError,
     VtonError,
     VtonUpstreamError,
@@ -231,7 +234,7 @@ def _run_background_vton(
             )
 
         # 2. OpenAI 이미지 편집 피팅 실행 (아바타 몸 + 사용자 얼굴 + 의류)
-        output_png = generate_tryon_image(
+        tryon_res = generate_tryon_image(
             categories=categories,
             clothing_images=clothing_images,
             avatar_bytes=None,  # 기본 아바타 몸(avatar.png) 사용
@@ -241,6 +244,14 @@ def _run_background_vton(
             timeout_seconds=settings.openai_timeout_seconds,
             max_retries=settings.openai_max_retries,
         )
+        if isinstance(tryon_res, TryonResult):
+            output_png = tryon_res.image_bytes
+            prompt_tokens = tryon_res.prompt_tokens
+            completion_tokens = tryon_res.completion_tokens
+        else:
+            output_png = tryon_res
+            prompt_tokens = 0
+            completion_tokens = 0
 
         # 3. 결과 이미지 스토리지 저장 (S3 또는 Local Fallback)
         storage = get_storage_client()
@@ -258,7 +269,12 @@ def _run_background_vton(
 
         # 4. DB 상태 완료(COMPLETED) 갱신
         final_image_url = uploaded_result_url if storage.is_s3 else result_image_url
-        repo.mark_completed(fitting_id, result_image_url=final_image_url)
+        repo.mark_completed(
+            fitting_id,
+            result_image_url=final_image_url,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
 
         # 5. notification-service 피팅 완료 FCM 알림 전송
         notif_client.send_fitting_done(
@@ -1005,3 +1021,31 @@ def get_internal_fitting(
         resultImageUrl=detail["resultImageUrl"] if detail["status"] == "COMPLETED" else None,
         products=products_for_community,
     )
+
+
+@router.get(
+    "/vton/token-usage",
+    response_model=InternalTokenUsageResponse,
+    summary="[내부 서비스용] 기간별 가상 피팅 OpenAI 토큰 사용량 집계",
+    description="recommendation-service 전용 내부 API. X-Service-Token 헤더를 검증하고 지정된 기간 동안 완료된 피팅의 토큰 사용량 목록을 반환합니다.",
+)
+def get_internal_token_usage(
+    start_date: Annotated[datetime, Query(alias="startDate", description="조회 시작일시 (ISO-8601 UTC)")],
+    end_date: Annotated[datetime, Query(alias="endDate", description="조회 종료일시 (ISO-8601 UTC)")],
+    x_service_token: Annotated[str | None, Header(alias="X-Service-Token")] = None,
+) -> InternalTokenUsageResponse:
+    settings = get_settings()
+    if not settings.verify_service_token(x_service_token, allowed_callers=["recommendation"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 서비스 토큰입니다.",
+        )
+
+    s_dt = start_date if start_date.tzinfo is not None else start_date.replace(tzinfo=timezone.utc)
+    e_dt = end_date if end_date.tzinfo is not None else end_date.replace(tzinfo=timezone.utc)
+    start_iso = s_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso = e_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    repo = get_repo()
+    records = repo.get_token_usage_in_range(start_iso=start_iso, end_iso=end_iso)
+    return InternalTokenUsageResponse(records=records)

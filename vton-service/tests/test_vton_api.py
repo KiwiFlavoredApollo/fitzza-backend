@@ -638,6 +638,52 @@ def test_get_fitting_not_found() -> None:
     assert "존재하지 않는" in resp.json()["message"]
 
 
+def test_get_internal_token_usage() -> None:
+    client = TestClient(app)
+    valid_token = "recommendation-secret-token-32bytes-ok!"
+    settings = Settings(
+        db_path=":memory:",
+        recommendation_service_token=valid_token,
+    )
+    reset_settings_for_tests(settings)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    # Seed a completed fitting with tokens
+    fid = repo.create_fitting(user_id=1, photo_id=None, product_ids=[101])
+    repo.mark_completed(fid, result_image_url="http://cdn.com/f1.png", prompt_tokens=350, completion_tokens=700)
+
+    # 1. Unauthenticated -> 401
+    unauth = client.get("/vton/token-usage?startDate=2020-01-01T00:00:00Z&endDate=2030-01-01T00:00:00Z")
+    assert unauth.status_code == 401
+
+    # 2. Invalid service token -> 401
+    bad_token = client.get(
+        "/vton/token-usage?startDate=2020-01-01T00:00:00Z&endDate=2030-01-01T00:00:00Z",
+        headers={"X-Service-Token": "wrong-token-value-here"},
+    )
+    assert bad_token.status_code == 401
+
+    # 3. Valid token -> 200 with records
+    resp = client.get(
+        "/vton/token-usage?startDate=2020-01-01T00:00:00Z&endDate=2030-01-01T00:00:00Z",
+        headers={"X-Service-Token": valid_token},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "records" in data
+    assert len(data["records"]) == 1
+    assert data["records"][0]["promptTokens"] == 350
+    assert data["records"][0]["completionTokens"] == 700
+
+    # 4. Invalid date format -> 400 Bad Request (Custom RequestValidationError handler)
+    bad_date = client.get(
+        "/vton/token-usage?startDate=not-a-date&endDate=2030-01-01T00:00:00Z",
+        headers={"X-Service-Token": valid_token},
+    )
+    assert bad_date.status_code == 400
+
+
 def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
     client = TestClient(app)
     repo = VtonRepository(db_path=":memory:")

@@ -80,6 +80,9 @@ class Settings:
     community_service_token: str = field(
         default_factory=lambda: os.getenv("COMMUNITY_SERVICE_TOKEN", "")
     )
+    recommendation_service_token: str = field(
+        default_factory=lambda: os.getenv("RECOMMENDATION_SERVICE_TOKEN", "")
+    )
     db_path: str = field(
         default_factory=lambda: os.getenv("VTON_DB_PATH", _default_db_path())
     )
@@ -164,6 +167,7 @@ class Settings:
     def get_caller_tokens(self) -> dict[str, str]:
         return {
             "community": self.community_service_token,
+            "recommendation": self.recommendation_service_token,
         }
 
     def verify_service_token(
