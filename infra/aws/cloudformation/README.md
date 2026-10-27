@@ -279,7 +279,7 @@ $operatorCidr = "203.0.113.10/32"
 aws cloudformation deploy `
   --stack-name fitzza-prod-foundation `
   --template-file infra/aws/cloudformation/foundation.yaml `
-  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND `
+  --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND `
   --parameter-overrides `
     ProjectName=fitzza `
     Environment=prod `
