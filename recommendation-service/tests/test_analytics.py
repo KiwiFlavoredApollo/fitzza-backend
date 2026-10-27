@@ -246,3 +246,28 @@ def test_analytics_api_endpoint():
         headers={"X-User-Id": "4"},
     )
     assert compat_res.status_code == 200
+
+
+def test_analytics_with_mocked_vton_client(repo):
+    ref_dt = datetime(2026, 10, 27, 14, 0, 0, tzinfo=KST)
+
+    class MockVtonClient:
+        is_configured = True
+
+        def get_token_usage_in_range(self, start_iso: str, end_iso: str):
+            return [
+                {
+                    "promptTokens": 800,
+                    "completionTokens": 1600,
+                    "createdAt": "2026-10-27T05:00:00Z",  # 14:00 KST (12시 slot, 화요일)
+                }
+            ]
+
+    data = repo.get_analytics_data(reference_dt=ref_dt, vton_client=MockVtonClient())
+    daily_usage = {u["label"]: u for u in data["daily"]["usage"]}
+    assert daily_usage["12시"]["input"] == 800
+    assert daily_usage["12시"]["output"] == 1600
+
+    weekly_usage = {u["label"]: u for u in data["weekly"]["usage"]}
+    assert weekly_usage["화"]["input"] == 800
+    assert weekly_usage["화"]["output"] == 1600

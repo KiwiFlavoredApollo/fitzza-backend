@@ -22,6 +22,7 @@ from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
 from app.clients.redis_client import RedisClient
 from app.clients.user_client import UserServiceClient
+from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
 from app.core.database import RecommendationRepository
 from app.services.cache_service import CacheService
@@ -636,7 +637,8 @@ def get_recommendation_analytics(
     settings = _get_settings(request)
     _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
     repository = _get_repository(request)
-    data = repository.get_analytics_data()
+    vton_client = getattr(request.app.state, "vton_client", None) or VtonServiceClient(settings)
+    data = repository.get_analytics_data(vton_client=vton_client)
     return AnalyticsResponse(**data)
 
 

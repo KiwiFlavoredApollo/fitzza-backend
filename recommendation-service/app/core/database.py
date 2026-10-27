@@ -1024,7 +1024,11 @@ class RecommendationRepository:
             finally:
                 self._close_sqlite_if_transient(conn)
 
-    def get_analytics_data(self, reference_dt: datetime | None = None) -> dict[str, Any]:
+    def get_analytics_data(
+        self,
+        reference_dt: datetime | None = None,
+        vton_client: Any | None = None,
+    ) -> dict[str, Any]:
         """일간/주간/월간/연간 토큰 사용량, 인기 키워드, 추천 상품 통계를 한국 시간(KST) 현재 날짜 기준으로 집계하여 반환합니다."""
         if reference_dt is None:
             now = datetime.now(KST)
@@ -1049,10 +1053,10 @@ class RecommendationRepository:
         yearly_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         yearly_end = daily_end
 
-        daily_data = self._aggregate_period_analytics("daily", "일간", daily_start, daily_end)
-        weekly_data = self._aggregate_period_analytics("weekly", "주간", weekly_start, weekly_end)
-        monthly_data = self._aggregate_period_analytics("monthly", "월간", monthly_start, monthly_end)
-        yearly_data = self._aggregate_period_analytics("yearly", "연간", yearly_start, yearly_end)
+        daily_data = self._aggregate_period_analytics("daily", "일간", daily_start, daily_end, vton_client=vton_client)
+        weekly_data = self._aggregate_period_analytics("weekly", "주간", weekly_start, weekly_end, vton_client=vton_client)
+        monthly_data = self._aggregate_period_analytics("monthly", "월간", monthly_start, monthly_end, vton_client=vton_client)
+        yearly_data = self._aggregate_period_analytics("yearly", "연간", yearly_start, yearly_end, vton_client=vton_client)
 
         return {
             "daily": daily_data,
@@ -1120,33 +1124,35 @@ class RecommendationRepository:
             finally:
                 self._close_sqlite_if_transient(conn)
 
-    def _get_vton_tokens_in_range(self, start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
+    def _get_vton_tokens_in_range(
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
+        vton_client: Any | None = None,
+    ) -> list[dict[str, Any]]:
         """지정된 기간 동안 완료(COMPLETED)된 가상 피팅(VTON) 요청의 OpenAI 토큰 사용량을 조회합니다."""
         start_utc = start_dt.astimezone(timezone.utc)
         end_utc = end_dt.astimezone(timezone.utc)
         start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         end_iso = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        if self._use_postgres:
+        # 1. MSA 내부 통신 API 우선 호출 (vton-service HTTP 클라이언트)
+        if vton_client is not None and getattr(vton_client, "is_configured", False):
             try:
-                with self._lock:
-                    with self._get_pg_connection() as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                SELECT prompt_tokens, completion_tokens, created_at
-                                FROM vton.fittings
-                                WHERE created_at >= %s AND created_at <= %s
-                                  AND status = 'COMPLETED'
-                                ORDER BY created_at ASC
-                                """,
-                                (start_utc, end_utc),
-                            )
-                            rows = cur.fetchall()
-                return [dict(r) for r in rows]
+                records = vton_client.get_token_usage_in_range(start_iso=start_iso, end_iso=end_iso)
+                if records:
+                    return [
+                        {
+                            "prompt_tokens": int(r.get("promptTokens") or r.get("prompt_tokens") or 0),
+                            "completion_tokens": int(r.get("completionTokens") or r.get("completion_tokens") or 0),
+                            "created_at": r.get("createdAt") or r.get("created_at"),
+                        }
+                        for r in records
+                    ]
             except Exception:
-                return []
+                pass
 
+        # 2. 로컬 개발/테스트용 SQLite 또는 단일 DB 폴백
         with self._lock:
             conn = self._get_sqlite_connection()
             try:
@@ -1185,9 +1191,10 @@ class RecommendationRepository:
         label: str,
         start_dt: datetime,
         end_dt: datetime,
+        vton_client: Any | None = None,
     ) -> dict[str, Any]:
         records = self._get_requests_in_range(start_dt, end_dt)
-        vton_records = self._get_vton_tokens_in_range(start_dt, end_dt)
+        vton_records = self._get_vton_tokens_in_range(start_dt, end_dt, vton_client=vton_client)
 
         # 1. 토큰 사용량 집계 (슬롯 레이블 초기화)
         usage_buckets = self._init_usage_buckets(period, start_dt, end_dt)

@@ -58,6 +58,9 @@ class Settings:
     product_service_url: str = field(
         default_factory=lambda: os.getenv("PRODUCT_SERVICE_URL", "")
     )
+    vton_service_url: str = field(
+        default_factory=lambda: os.getenv("VTON_SERVICE_URL", "http://localhost:8091")
+    )
     order_service_url: str = field(
         default_factory=lambda: os.getenv("ORDER_SERVICE_URL", "")
     )
@@ -66,6 +69,9 @@ class Settings:
     )
     recommendation_service_token: str = field(
         default_factory=lambda: os.getenv("RECOMMENDATION_SERVICE_TOKEN", "")
+    )
+    vton_service_token: str = field(
+        default_factory=lambda: os.getenv("VTON_SERVICE_TOKEN", "")
     )
     community_service_token: str = field(
         default_factory=lambda: os.getenv("COMMUNITY_SERVICE_TOKEN", "")
