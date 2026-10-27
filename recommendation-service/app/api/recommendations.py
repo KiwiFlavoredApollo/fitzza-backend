@@ -8,6 +8,7 @@ from fastapi import (
     File,
     Form,
     Header,
+    Path,
     Query,
     Request,
     Response,
@@ -679,18 +680,12 @@ def get_recommendation_analytics(
     ),
 )
 def get_product_size_recommendation(
-    productId: int,
     request: Request,
+    product_id: int = Path(..., alias="productId", gt=0, description="상품 ID"),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
 ) -> ProductSizeRecommendationResponse:
     user_id = _require_user_id(x_user_id)
-    if productId <= 0:
-        raise RecommendationApiError(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVALID_REQUEST",
-            message="유효하지 않은 상품 ID입니다.",
-        )
 
     settings = _get_settings(request)
     repository = _get_repository(request)
@@ -703,7 +698,7 @@ def get_product_size_recommendation(
     size_resolver = _get_size_resolver(request.app)
 
     product_data = resolve_product_for_size(
-        product_id=productId,
+        product_id=product_id,
         qdrant_client=_get_qdrant_client(request.app),
         collection_name=settings.qdrant_collection_name,
         product_client=product_client,

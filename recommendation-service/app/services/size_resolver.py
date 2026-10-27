@@ -44,14 +44,23 @@ class SizeProfileResolver:
             subcategory: str,
             fit_type: str,
             candidate_products: list[dict[str, Any]],
-            category_type: str
+            category_type: str,
+            user_body: Optional[dict[str, Any]] = None,
+            learned_preference: Optional[dict[str, float]] = None,
     ) -> dict[str, Any]:
         """
         [1. 추천 진입점]
         우선순위 체인을 타서 가장 신뢰도 높은 베이스라인(기준 치수)을 확보한 뒤,
         SizeCalculator를 통해 최적의 사이즈를 도출한다.
         """
-        baseline_spec = self._get_baseline_spec(user_id, subcategory, fit_type, category_type=category_type)
+        baseline_spec = self._get_baseline_spec(
+            user_id,
+            subcategory,
+            fit_type,
+            category_type=category_type,
+            user_body=user_body,
+            learned_preference=learned_preference,
+        )
 
         if not baseline_spec or baseline_spec["data"] is None:
             return {
@@ -77,7 +86,9 @@ class SizeProfileResolver:
             user_id: str,
             subcategory: str,
             fit_type: str,
-            category_type: Optional[str] = None
+            category_type: Optional[str] = None,
+            user_body: Optional[dict[str, Any]] = None,
+            learned_preference: Optional[dict[str, float]] = None,
     ) -> dict[str, Any]:
         """
         [2. 우선순위 체인 (Fallback Chain) 라우팅]
@@ -86,7 +97,13 @@ class SizeProfileResolver:
         3순위 (신발): 사용자 등록 신발 사이즈 직접 반영 (body_profile)
         3순위 (의류): 키/몸무게 기반 비슷한 체형 타 사용자 인증 데이터 (similar_body_profile)
         """
-        # 1순위: 선호 실측 탐색 (subcategory 매칭)
+        # 1순위: 요청 스코프 또는 mock_db에서 선호 실측 탐색 (subcategory 매칭)
+        if learned_preference:
+            return {
+                "source": "learned_preference",
+                "data": dict(learned_preference),
+            }
+
         for pref in self.mock_db.get("user_preferences", []):
             if str(pref.get("user_id")) == str(user_id) and pref.get("subcategory") == subcategory:
                 return {
@@ -102,7 +119,10 @@ class SizeProfileResolver:
                     "data": order.get("measurement_spec")
                 }
 
-        target_user = next((u for u in self.mock_db.get("users", []) if str(u.get("user_id")) == str(user_id)), None)
+        if user_body is not None:
+            target_user = parse_user_body(user_body)
+        else:
+            target_user = next((u for u in self.mock_db.get("users", []) if str(u.get("user_id")) == str(user_id)), None)
 
         # 3순위 (신발 특화): 유저 등록 shoeSize를 발길이 기준 치수로 반영
         if category_type == "shoes" and target_user and target_user.get("shoe_size"):
@@ -121,7 +141,7 @@ class SizeProfileResolver:
                 pass
 
         # 3순위 (의류): 비슷한 체형 타 사용자의 '맞다' 인증 데이터 탐색
-        if target_user:
+        if target_user and (target_user.get("height") is not None or target_user.get("weight") is not None):
             t_height = target_user.get("height", 175.0)
             t_weight = target_user.get("weight", 70.0)
 
@@ -277,16 +297,18 @@ CATEGORY_KO_TO_EN: dict[str, str] = {
 }
 
 
-def sync_user_body(
-    size_resolver: Any,
-    user_id: str,
-    user_body: dict[str, Any] | None,
-) -> None:
-    if size_resolver is None or not user_body:
-        return
+import inspect
+import threading
+
+_MOCK_DB_LOCK = threading.Lock()
+
+
+def parse_user_body(user_body: dict[str, Any] | None) -> dict[str, float] | None:
+    if not user_body or not isinstance(user_body, dict):
+        return None
     raw_height = user_body.get("height")
     raw_weight = user_body.get("weight")
-    raw_shoe = user_body.get("shoeSize")
+    raw_shoe = user_body.get("shoeSize") if "shoeSize" in user_body else user_body.get("shoe_size")
 
     try:
         height = float(raw_height) if raw_height is not None else None
@@ -304,33 +326,44 @@ def sync_user_body(
         shoe_size = None
 
     if height is None and weight is None and shoe_size is None:
+        return None
+
+    parsed: dict[str, float] = {}
+    if height is not None:
+        parsed["height"] = height
+    if weight is not None:
+        parsed["weight"] = weight
+    if shoe_size is not None:
+        parsed["shoe_size"] = shoe_size
+    return parsed
+
+
+def sync_user_body(
+    size_resolver: Any,
+    user_id: str,
+    user_body: dict[str, Any] | None,
+) -> None:
+    if size_resolver is None:
+        return
+    parsed = parse_user_body(user_body)
+    if parsed is None:
         return
 
     mock_db = getattr(size_resolver, "mock_db", None)
     if not isinstance(mock_db, dict):
         return
 
-    users = mock_db.setdefault("users", [])
-    existing = next(
-        (u for u in users if str(u.get("user_id")) == str(user_id)),
-        None,
-    )
-    if existing is None:
-        entry: dict[str, Any] = {"user_id": str(user_id)}
-        if height is not None:
-            entry["height"] = height
-        if weight is not None:
-            entry["weight"] = weight
-        if shoe_size is not None:
-            entry["shoe_size"] = shoe_size
-        users.append(entry)
-    else:
-        if height is not None:
-            existing["height"] = height
-        if weight is not None:
-            existing["weight"] = weight
-        if shoe_size is not None:
-            existing["shoe_size"] = shoe_size
+    with _MOCK_DB_LOCK:
+        users = mock_db.setdefault("users", [])
+        existing = next(
+            (u for u in users if str(u.get("user_id")) == str(user_id)),
+            None,
+        )
+        if existing is None:
+            entry: dict[str, Any] = {"user_id": str(user_id), **parsed}
+            users.append(entry)
+        else:
+            existing.update(parsed)
 
 
 def sync_user_size_preference(
@@ -346,31 +379,32 @@ def sync_user_size_preference(
     if not isinstance(mock_db, dict):
         return
 
-    prefs = mock_db.setdefault("user_preferences", [])
-    existing = next(
-        (
-            p
-            for p in prefs
-            if str(p.get("user_id")) == str(user_id)
-            and p.get("subcategory") == subcategory
-        ),
-        None,
-    )
-    if existing is None:
-        prefs.append(
-            {
-                "preference_id": len(prefs) + 1,
-                "user_id": str(user_id),
-                "subcategory": subcategory,
-                "fit_type": fit_type or "레귤러",
-                "preference_spec": dict(pref_spec),
-                "sample_count": 1,
-            }
+    with _MOCK_DB_LOCK:
+        prefs = mock_db.setdefault("user_preferences", [])
+        existing = next(
+            (
+                p
+                for p in prefs
+                if str(p.get("user_id")) == str(user_id)
+                and p.get("subcategory") == subcategory
+            ),
+            None,
         )
-    else:
-        existing["preference_spec"] = dict(pref_spec)
-        if fit_type:
-            existing["fit_type"] = fit_type
+        if existing is None:
+            prefs.append(
+                {
+                    "preference_id": len(prefs) + 1,
+                    "user_id": str(user_id),
+                    "subcategory": subcategory,
+                    "fit_type": fit_type or "레귤러",
+                    "preference_spec": dict(pref_spec),
+                    "sample_count": 1,
+                }
+            )
+        else:
+            existing["preference_spec"] = dict(pref_spec)
+            if fit_type:
+                existing["fit_type"] = fit_type
 
 
 def infer_category_from_measurements(sizes: list[dict[str, Any]]) -> str:
@@ -560,20 +594,37 @@ def evaluate_single_product_size(
         if user_client is not None
         else {}
     )
-    sync_user_body(
-        size_resolver=size_resolver,
-        user_id=str(user_id),
-        user_body=user_body,
-    )
 
     subcategory: str | None = product_data.get("subcategory")
     fit_type = str(product_data.get("fit_type") or "레귤러")
     category_type = str(product_data.get("category_type") or "top")
 
+    db_pref: dict[str, float] | None = None
     if subcategory and repository is not None:
         db_pref = repository.get_user_size_preference(
             user_id=user_id,
             subcategory=subcategory,
+        )
+
+    resolve_fn = size_resolver.resolve_and_calculate_size
+    sig_params = inspect.signature(resolve_fn).parameters
+    resolve_kwargs: dict[str, Any] = {
+        "user_id": str(user_id),
+        "subcategory": subcategory or "",
+        "fit_type": fit_type,
+        "candidate_products": [product_data],
+        "category_type": category_type,
+    }
+    if "user_body" in sig_params or any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
+    ):
+        resolve_kwargs["user_body"] = user_body
+        resolve_kwargs["learned_preference"] = db_pref
+    else:
+        sync_user_body(
+            size_resolver=size_resolver,
+            user_id=str(user_id),
+            user_body=user_body,
         )
         sync_user_size_preference(
             size_resolver=size_resolver,
@@ -583,13 +634,7 @@ def evaluate_single_product_size(
             pref_spec=db_pref,
         )
 
-    size_result = size_resolver.resolve_and_calculate_size(
-        user_id=str(user_id),
-        subcategory=subcategory or "",
-        fit_type=fit_type,
-        candidate_products=[product_data],
-        category_type=category_type,
-    )
+    size_result = resolve_fn(**resolve_kwargs)
 
     source_type = str(size_result.get("source_type") or "none")
     baseline_spec = size_result.get("baseline_spec")
