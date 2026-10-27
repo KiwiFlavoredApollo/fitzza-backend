@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 import uuid
@@ -1029,8 +1030,8 @@ def get_internal_fitting(
     description="recommendation-service 전용 내부 API. X-Service-Token 헤더를 검증하고 지정된 기간 동안 완료된 피팅의 토큰 사용량 목록을 반환합니다.",
 )
 def get_internal_token_usage(
-    startDate: Annotated[str, Query(description="조회 시작일시 (ISO-8601 UTC)")],
-    endDate: Annotated[str, Query(description="조회 종료일시 (ISO-8601 UTC)")],
+    start_date: Annotated[datetime, Query(alias="startDate", description="조회 시작일시 (ISO-8601 UTC)")],
+    end_date: Annotated[datetime, Query(alias="endDate", description="조회 종료일시 (ISO-8601 UTC)")],
     x_service_token: Annotated[str | None, Header(alias="X-Service-Token")] = None,
 ) -> InternalTokenUsageResponse:
     settings = get_settings()
@@ -1040,6 +1041,11 @@ def get_internal_token_usage(
             detail="유효하지 않은 서비스 토큰입니다.",
         )
 
+    s_dt = start_date if start_date.tzinfo is not None else start_date.replace(tzinfo=timezone.utc)
+    e_dt = end_date if end_date.tzinfo is not None else end_date.replace(tzinfo=timezone.utc)
+    start_iso = s_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_iso = e_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     repo = get_repo()
-    records = repo.get_token_usage_in_range(start_iso=startDate, end_iso=endDate)
+    records = repo.get_token_usage_in_range(start_iso=start_iso, end_iso=end_iso)
     return InternalTokenUsageResponse(records=records)

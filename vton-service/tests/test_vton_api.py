@@ -676,6 +676,13 @@ def test_get_internal_token_usage() -> None:
     assert data["records"][0]["promptTokens"] == 350
     assert data["records"][0]["completionTokens"] == 700
 
+    # 4. Invalid date format -> 400 Bad Request (Custom RequestValidationError handler)
+    bad_date = client.get(
+        "/vton/token-usage?startDate=not-a-date&endDate=2030-01-01T00:00:00Z",
+        headers={"X-Service-Token": valid_token},
+    )
+    assert bad_date.status_code == 400
+
 
 def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
     client = TestClient(app)
