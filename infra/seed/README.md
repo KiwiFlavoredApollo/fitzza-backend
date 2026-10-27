@@ -29,6 +29,36 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "
 기존 `source_option_id`의 `option_id`는 보존한다(장바구니·주문에 묶인 옵션 ID 유지).
 wishlist·worldcup_history는 해당 상품 기준 사용자 구분 없이 삭제되므로 QA에서는 이 상품 관련 기록이 초기화된다.
 
+## 크롤링 상품 (collection-20261025-01)
+
+S3 curated 상품 JSON을 `product_service`에 upsert한다. 리뷰 적재와 분리되어 있으며, 리뷰는 별도 담당/스크립트를 쓴다.
+운영 계약·검증 항목은 [DB_IMPORT_GUIDE.md](../data-pipeline/DB_IMPORT_GUIDE.md)를 본다.
+
+```powershell
+# 1) S3 다운로드 (AWS profile fitzza 필요). 이미지는 용량이 크므로 필요할 때만 --include-images
+python -X utf8 scripts/download_curated_products.py --run-id collection-20261025-01
+
+# 2) staging SQL 렌더 (Git/S3에 SQL 올리지 말 것)
+python -X utf8 scripts/render_crawled_product_import.py `
+  --data .data/collection-20261025-01/curated/data `
+  --status .data/collection-20261025-01/status.json `
+  --manifest .data/collection-20261025-01/curated/manifest.json `
+  --images .data/collection-20261025-01/images/products `
+  --image-failures .data/collection-20261025-01/audit/image-download-failures/products `
+  --output .data/collection-20261025-01/product-import.sql
+
+# 3) 로컬 Compose QA
+python -X utf8 scripts/load_local_products.py --run-dir .data/collection-20261025-01
+```
+
+- `status.json`의 `state=succeeded`, `product_count=3000`과 `manifest.json` SHA-256을 검증한다.
+- 동일 `product_id` / `source_option_id`는 upsert라 재실행해도 중복 insert가 나지 않는다.
+- 이미지 inventory가 있으면 S3 object key를 `image_url`에 넣는다. 공개 URL은 product-service Presigned GET으로 만든다.
+- 이미지 다운로드 실패 audit(가이드 기준 64건)은 적재를 중단하지 않는다.
+- 상품 JSON 적재 후 object key로 바꾸려면 `images/products/*/manifest.json`만 sync한 뒤
+  `scripts/render_product_image_s3_key_update.py`로 remap SQL을 만들어 적용한다.
+- Compose `postgres`만 대상으로 하므로 **RDS에는 닿지 않는다**. 운영 반영은 렌더된 SQL을 private EKS 네트워크의 단기 pod에서 `product_service_app`로 실행한다.
+
 ## 크롤링 리뷰 (로컬 QA)
 
 무신사에서 수집한 리뷰(500개 상품, 약 3.5만 건)를 로컬 Compose DB에 넣어 상품 상세 후기 탭을 실제 데이터로 확인할 때 쓴다.

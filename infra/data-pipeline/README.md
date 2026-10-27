@@ -88,6 +88,31 @@ OtherColorGoods-only products remain unsupported pending an observed non-empty s
 
 `scripts/validate_jev_data.py` validates the files before any paid Jev request. Color keys follow the Jev implementation's `strip().lower()` rule. It does not create an intermediate input file.
 
+## Crawled product publication and import
+
+Curated products for run `collection-20261025-01` live under
+`s3://fitzza-prod-foundation-databucket-wwng6wfc0hqy/pipeline/runs/collection-20261025-01/`.
+Backend product DB load (not reviews) uses:
+
+```powershell
+python -X utf8 scripts/download_curated_products.py --run-id collection-20261025-01
+python -X utf8 scripts/render_crawled_product_import.py `
+  --data .data/collection-20261025-01/curated/data `
+  --status .data/collection-20261025-01/status.json `
+  --manifest .data/collection-20261025-01/curated/manifest.json `
+  --output .data/collection-20261025-01/product-import.sql
+```
+
+Execute the SQL with `product_service_app` from a short-lived private-network pod,
+verify `count(*)` for `source='musinsa'`, then delete the pod and local SQL. See
+[infra/seed/README.md](../seed/README.md#크롤링-상품-collection-20261025-01) and
+[DB_IMPORT_GUIDE.md](DB_IMPORT_GUIDE.md). Reviews remain a separate import
+(`render_crawled_review_import.py` / `review_service_app`).
+
+After product rows exist, remap stored image values to S3 object keys with
+`scripts/render_product_image_s3_key_update.py` when inventory manifests are available.
+API responses resolve those keys to Presigned GET URLs in product-service.
+
 ## Crawled review publication and import
 
 Review crawler output is stored under the immutable production prefix
