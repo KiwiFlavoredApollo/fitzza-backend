@@ -2,6 +2,8 @@ server:
   port: 8084
 spring:
   datasource:
+    username: ${COMMUNITY_SERVICE_DB_USER}
+    password: ${COMMUNITY_SERVICE_DB_PASSWORD}
     hikari:
       schema: community_service
   jpa:

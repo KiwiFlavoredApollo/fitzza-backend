@@ -2,6 +2,8 @@ server:
   port: 8086
 spring:
   datasource:
+    username: ${NOTIFICATION_SERVICE_DB_USER}
+    password: ${NOTIFICATION_SERVICE_DB_PASSWORD}
     hikari:
       schema: notification_service
   jpa:

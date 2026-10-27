@@ -2,6 +2,8 @@ server:
   port: 8083
 spring:
   datasource:
+    username: ${ORDER_SERVICE_DB_USER}
+    password: ${ORDER_SERVICE_DB_PASSWORD}
     hikari:
       schema: order_service
   jpa:

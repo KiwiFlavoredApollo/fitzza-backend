@@ -2,6 +2,8 @@ server:
   port: 8081
 spring:
   datasource:
+    username: ${USER_SERVICE_DB_USER}
+    password: ${USER_SERVICE_DB_PASSWORD}
     hikari:
       schema: user_service
   jpa:
