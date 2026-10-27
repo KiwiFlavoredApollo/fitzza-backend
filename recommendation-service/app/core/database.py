@@ -7,6 +7,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+KST = timezone(timedelta(hours=9))
+
 
 def _validate_identifier(identifier: str) -> str:
     if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", identifier):
@@ -1023,25 +1025,27 @@ class RecommendationRepository:
                 self._close_sqlite_if_transient(conn)
 
     def get_analytics_data(self, reference_dt: datetime | None = None) -> dict[str, Any]:
-        """일간/주간/월간/연간 토큰 사용량, 인기 키워드, 추천 상품 통계를 집계하여 반환합니다."""
-        now = reference_dt or datetime.now(timezone.utc)
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
+        """일간/주간/월간/연간 토큰 사용량, 인기 키워드, 추천 상품 통계를 한국 시간(KST) 현재 날짜 기준으로 집계하여 반환합니다."""
+        if reference_dt is None:
+            now = datetime.now(KST)
+        elif reference_dt.tzinfo is None:
+            now = reference_dt.replace(tzinfo=KST)
+        else:
+            now = reference_dt.astimezone(KST)
 
-        # 1. 일간 (오늘 00:00:00 ~ 23:59:59)
+        # 1. 일간 (오늘 00:00:00 ~ 오늘 23:59:59.999999 KST)
         daily_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         daily_end = daily_start + timedelta(days=1) - timedelta(microseconds=1)
 
-        # 2. 주간 (이번 주 월요일 00:00:00 ~ 일요일 23:59:59)
+        # 2. 주간 (이번 주 월요일 00:00:00 ~ 현재 날짜 23:59:59.999999 KST)
         weekly_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        weekly_end = weekly_start + timedelta(days=7) - timedelta(microseconds=1)
+        weekly_end = daily_end
 
-        # 3. 월간 (이번 달 1일 00:00:00 ~ 말일 23:59:59)
+        # 3. 월간 (이번 달 1일 00:00:00 ~ 현재 날짜 23:59:59.999999 KST)
         monthly_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        next_month = (monthly_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        monthly_end = next_month - timedelta(microseconds=1)
+        monthly_end = daily_end
 
-        # 4. 연간 (올해 1월 1일 00:00:00 ~ 12월 31일 23:59:59)
+        # 4. 연간 (올해 1월 1일 00:00:00 ~ 12월 31일 23:59:59.999999 KST)
         yearly_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
         yearly_end = yearly_start.replace(year=yearly_start.year + 1) - timedelta(microseconds=1)
 
@@ -1059,8 +1063,10 @@ class RecommendationRepository:
 
     def _get_requests_in_range(self, start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
         """지정된 기간 동안 완료(DONE)된 추천 요청 및 코디 상품 데이터를 조회합니다."""
-        start_iso = start_dt.isoformat()
-        end_iso = end_dt.isoformat()
+        start_utc = start_dt.astimezone(timezone.utc)
+        end_utc = end_dt.astimezone(timezone.utc)
+        start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_iso = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if self._use_postgres:
             with self._lock:
@@ -1081,7 +1087,7 @@ class RecommendationRepository:
                             GROUP BY r.request_id
                             ORDER BY r.created_at ASC
                             """,
-                            (start_dt, end_dt),
+                            (start_utc, end_utc),
                         )
                         rows = cur.fetchall()
             return [dict(r) for r in rows]
@@ -1114,6 +1120,65 @@ class RecommendationRepository:
             finally:
                 self._close_sqlite_if_transient(conn)
 
+    def _get_vton_tokens_in_range(self, start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
+        """지정된 기간 동안 완료(COMPLETED)된 가상 피팅(VTON) 요청의 OpenAI 토큰 사용량을 조회합니다."""
+        start_utc = start_dt.astimezone(timezone.utc)
+        end_utc = end_dt.astimezone(timezone.utc)
+        start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        end_iso = end_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        if self._use_postgres:
+            try:
+                with self._lock:
+                    with self._get_pg_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                SELECT prompt_tokens, completion_tokens, created_at
+                                FROM vton.fittings
+                                WHERE created_at >= %s AND created_at <= %s
+                                  AND status = 'COMPLETED'
+                                ORDER BY created_at ASC
+                                """,
+                                (start_utc, end_utc),
+                            )
+                            rows = cur.fetchall()
+                return [dict(r) for r in rows]
+            except Exception:
+                return []
+
+        with self._lock:
+            conn = self._get_sqlite_connection()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT prompt_tokens, completion_tokens, created_at
+                    FROM fittings
+                    WHERE created_at >= ? AND created_at <= ?
+                      AND status = 'COMPLETED'
+                    ORDER BY created_at ASC
+                    """,
+                    (start_iso, end_iso),
+                ).fetchall()
+                return [dict(r) for r in rows]
+            except Exception:
+                return []
+            finally:
+                self._close_sqlite_if_transient(conn)
+
+    @staticmethod
+    def _parse_record_kst_datetime(created_at_raw: Any, fallback_dt: datetime) -> datetime:
+        if isinstance(created_at_raw, datetime):
+            if created_at_raw.tzinfo is None:
+                return created_at_raw.replace(tzinfo=timezone.utc).astimezone(KST)
+            return created_at_raw.astimezone(KST)
+        if created_at_raw:
+            dt = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(KST)
+        return fallback_dt
+
     def _aggregate_period_analytics(
         self,
         period: str,
@@ -1122,6 +1187,7 @@ class RecommendationRepository:
         end_dt: datetime,
     ) -> dict[str, Any]:
         records = self._get_requests_in_range(start_dt, end_dt)
+        vton_records = self._get_vton_tokens_in_range(start_dt, end_dt)
 
         # 1. 토큰 사용량 집계 (슬롯 레이블 초기화)
         usage_buckets = self._init_usage_buckets(period, start_dt, end_dt)
@@ -1129,13 +1195,7 @@ class RecommendationRepository:
         product_counts: dict[tuple[str, str], int] = Counter()
 
         for rec in records:
-            created_at_raw = rec.get("created_at")
-            if isinstance(created_at_raw, datetime):
-                rec_dt = created_at_raw.astimezone(timezone.utc) if created_at_raw.tzinfo else created_at_raw.replace(tzinfo=timezone.utc)
-            elif created_at_raw:
-                rec_dt = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
-            else:
-                rec_dt = start_dt
+            rec_dt = self._parse_record_kst_datetime(rec.get("created_at"), start_dt)
 
             bucket_key = self._get_bucket_key(period, rec_dt, start_dt)
             p_tokens = int(rec.get("prompt_tokens") or 0)
@@ -1172,10 +1232,22 @@ class RecommendationRepository:
                         pass
 
             for it in items_to_count:
+                if not isinstance(it, dict):
+                    continue
                 p_name = it.get("productName") or it.get("product_name") or ""
                 p_brand = it.get("brandName") or it.get("brand_name") or ""
                 if p_name:
                     product_counts[(p_name, p_brand)] += 1
+
+        # 2. 가상 피팅(VTON) OpenAI 토큰 합산
+        for v_rec in vton_records:
+            v_dt = self._parse_record_kst_datetime(v_rec.get("created_at"), start_dt)
+            bucket_key = self._get_bucket_key(period, v_dt, start_dt)
+            vp_tokens = int(v_rec.get("prompt_tokens") or 0)
+            vc_tokens = int(v_rec.get("completion_tokens") or 0)
+            if bucket_key in usage_buckets:
+                usage_buckets[bucket_key]["input"] += vp_tokens
+                usage_buckets[bucket_key]["output"] += vc_tokens
 
         usage_list = [
             {"label": val["label"], "input": val["input"], "output": val["output"]}
@@ -1202,7 +1274,13 @@ class RecommendationRepository:
         }
 
     @staticmethod
-    def _init_usage_buckets(period: str, start_dt: datetime, end_dt: datetime) -> dict[str, dict[str, Any]]:
+    def _calendar_week_of_month(dt: datetime) -> int:
+        """달력 기준(월~일 한 주)으로 해당 날짜가 몇 주차인지 계산합니다."""
+        first_day = dt.replace(day=1)
+        return ((dt.day + first_day.weekday() - 1) // 7) + 1
+
+    @classmethod
+    def _init_usage_buckets(cls, period: str, start_dt: datetime, end_dt: datetime) -> dict[str, dict[str, Any]]:
         buckets: dict[str, dict[str, Any]] = {}
         if period == "daily":
             for h in (0, 4, 8, 12, 16, 20):
@@ -1210,10 +1288,12 @@ class RecommendationRepository:
                 buckets[label] = {"label": label, "input": 0, "output": 0}
         elif period == "weekly":
             day_labels = ["월", "화", "수", "목", "금", "토", "일"]
-            for d in day_labels:
+            max_weekday = end_dt.weekday()
+            for d in day_labels[: max_weekday + 1]:
                 buckets[d] = {"label": d, "input": 0, "output": 0}
         elif period == "monthly":
-            for w in range(1, 6):
+            max_week = cls._calendar_week_of_month(end_dt)
+            for w in range(1, max_week + 1):
                 label = f"{w}주"
                 buckets[label] = {"label": label, "input": 0, "output": 0}
         elif period == "yearly":
@@ -1222,8 +1302,8 @@ class RecommendationRepository:
                 buckets[label] = {"label": label, "input": 0, "output": 0}
         return buckets
 
-    @staticmethod
-    def _get_bucket_key(period: str, rec_dt: datetime, start_dt: datetime) -> str:
+    @classmethod
+    def _get_bucket_key(cls, period: str, rec_dt: datetime, start_dt: datetime) -> str:
         if period == "daily":
             h = rec_dt.hour
             slot_h = (h // 4) * 4
@@ -1232,9 +1312,7 @@ class RecommendationRepository:
             day_labels = ["월", "화", "수", "목", "금", "토", "일"]
             return day_labels[rec_dt.weekday()]
         if period == "monthly":
-            week_idx = ((rec_dt.day - 1) // 7) + 1
-            if week_idx > 5:
-                week_idx = 5
+            week_idx = cls._calendar_week_of_month(rec_dt)
             return f"{week_idx}주"
         if period == "yearly":
             return f"{rec_dt.month}월"

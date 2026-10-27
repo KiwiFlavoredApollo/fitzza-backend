@@ -1,9 +1,8 @@
-import json
 from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.database import RecommendationRepository
+from app.core.database import KST, RecommendationRepository
 from app.main import app
 from app.schemas.analytics import AnalyticsResponse
 
@@ -14,7 +13,9 @@ def repo():
 
 
 def test_analytics_empty_db(repo):
-    data = repo.get_analytics_data()
+    # Test with Tuesday 2026-10-27 15:00:00 KST (Oct 1, 2026 is Thursday -> Oct 27 is Tuesday of Week 5)
+    ref_dt = datetime(2026, 10, 27, 15, 0, 0, tzinfo=KST)
+    data = repo.get_analytics_data(reference_dt=ref_dt)
     assert "daily" in data
     assert "weekly" in data
     assert "monthly" in data
@@ -23,6 +24,8 @@ def test_analytics_empty_db(repo):
     # Check daily
     daily = data["daily"]
     assert daily["label"] == "일간"
+    assert daily["startDate"] == "2026-10-27"
+    assert daily["endDate"] == "2026-10-27"
     assert len(daily["usage"]) == 6  # 00시, 04시, 08시, 12시, 16시, 20시
     for u in daily["usage"]:
         assert u["input"] == 0
@@ -30,18 +33,22 @@ def test_analytics_empty_db(repo):
     assert daily["keywords"] == []
     assert daily["products"] == []
 
-    # Check weekly
+    # Check weekly: Tuesday -> only ["월", "화"] (#3)
     weekly = data["weekly"]
     assert weekly["label"] == "주간"
-    assert len(weekly["usage"]) == 7  # 월, 화, 수, 목, 금, 토, 일
+    assert weekly["startDate"] == "2026-10-26"
+    assert weekly["endDate"] == "2026-10-27"
+    assert [u["label"] for u in weekly["usage"]] == ["월", "화"]
     for u in weekly["usage"]:
         assert u["input"] == 0
         assert u["output"] == 0
 
-    # Check monthly
+    # Check monthly: Oct 1 ~ Oct 27 (#4), calendar weeks 1주 ~ 5주 (#5)
     monthly = data["monthly"]
     assert monthly["label"] == "월간"
-    assert len(monthly["usage"]) == 5  # 1주 ~ 5주
+    assert monthly["startDate"] == "2026-10-01"
+    assert monthly["endDate"] == "2026-10-27"
+    assert [u["label"] for u in monthly["usage"]] == ["1주", "2주", "3주", "4주", "5주"]
 
     # Check yearly
     yearly = data["yearly"]
@@ -49,11 +56,29 @@ def test_analytics_empty_db(repo):
     assert len(yearly["usage"]) == 12  # 1월 ~ 12월
 
 
-def test_analytics_data_aggregation(repo):
-    # Reference date: 2025-05-15 14:30:00 UTC (Thursday, Week 3 of May, Month 5)
-    ref_dt = datetime(2025, 5, 15, 14, 30, 0, tzinfo=timezone.utc)
+def test_analytics_calendar_weeks_and_partial_month(repo):
+    # Reference date: 2026-10-07 (Wednesday) KST
+    # 2026-10-01 is Thursday -> 1주: 10/1(목)~10/4(일), 2주: 10/5(월)~10/7(수, 현재 날짜)
+    ref_dt = datetime(2026, 10, 7, 14, 0, 0, tzinfo=KST)
+    analytics = repo.get_analytics_data(reference_dt=ref_dt)
 
-    # 1. Add request 1: Single request at 14:10 on 2025-05-15 (slot: 12시, weekday: 목, week: 3주, month: 5월)
+    weekly = analytics["weekly"]
+    assert weekly["startDate"] == "2026-10-05"
+    assert weekly["endDate"] == "2026-10-07"
+    assert [u["label"] for u in weekly["usage"]] == ["월", "화", "수"]
+
+    monthly = analytics["monthly"]
+    assert monthly["startDate"] == "2026-10-01"
+    assert monthly["endDate"] == "2026-10-07"
+    assert [u["label"] for u in monthly["usage"]] == ["1주", "2주"]
+
+
+def test_analytics_data_aggregation_and_vton_tokens(repo):
+    # Reference date: 2026-10-06 14:30:00 KST (Tuesday, 2주 of Oct)
+    # 2026-10-06 14:30:00 KST == 2026-10-06 05:30:00 UTC
+    ref_dt = datetime(2026, 10, 6, 14, 30, 0, tzinfo=KST)
+
+    # 1. Request 1: Single request at 14:10 KST (05:10 UTC) on 2026-10-06 (화, 2주)
     req1_id = repo.create_request(user_id=1, query_text="깔끔한 출근룩 미니멀 스타일 추천해줘")
     repo.complete_single_request(
         request_id=req1_id,
@@ -66,16 +91,16 @@ def test_analytics_data_aggregation(repo):
         prompt_tokens=1500,
         completion_tokens=500,
     )
-    # Manually update created_at to 2025-05-15 14:10:00 UTC
     with repo._lock:
         conn = repo._get_sqlite_connection()
         conn.execute(
-            "UPDATE recommendation_requests SET created_at = '2025-05-15T14:10:00+00:00' WHERE request_id = ?",
+            "UPDATE recommendation_requests SET created_at = '2026-10-06T05:10:00Z' WHERE request_id = ?",
             (req1_id,),
         )
         conn.commit()
 
-    # 2. Add request 2: Combo request at 08:30 on 2025-05-15 (slot: 08시, weekday: 목, week: 3주, month: 5월)
+    # 2. Request 2: Combo request at 08:30 KST on 2026-10-02 (금, 1주: Oct 1 Thu ~ Oct 4 Sun)
+    # 2026-10-02 08:30:00 KST == 2026-10-01 23:30:00 UTC
     req2_id = repo.create_request(user_id=2, query_text="데이트룩 캐주얼 코디")
     repo.complete_combo_request(
         request_id=req2_id,
@@ -97,34 +122,67 @@ def test_analytics_data_aggregation(repo):
     with repo._lock:
         conn = repo._get_sqlite_connection()
         conn.execute(
-            "UPDATE recommendation_requests SET created_at = '2025-05-15T08:30:00+00:00' WHERE request_id = ?",
+            "UPDATE recommendation_requests SET created_at = '2026-10-01T23:30:00Z' WHERE request_id = ?",
             (req2_id,),
+        )
+        # 3. Create VTON fittings table in SQLite to test VTON OpenAI token aggregation (#6)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS fittings (
+                fitting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        # VTON completed at 2026-10-06 14:20 KST (05:20 UTC) -> slot 12시, 화, 2주, 10월
+        conn.execute(
+            """
+            INSERT INTO fittings (status, prompt_tokens, completion_tokens, created_at)
+            VALUES ('COMPLETED', 600, 1200, '2026-10-06T05:20:00Z')
+            """
         )
         conn.commit()
 
-    # Query analytics with reference date
     analytics = repo.get_analytics_data(reference_dt=ref_dt)
 
+    # Check daily (2026-10-06 KST)
     daily = analytics["daily"]
-    # Check usage buckets
     usage_by_label = {u["label"]: u for u in daily["usage"]}
-    assert usage_by_label["12시"]["input"] == 1500
-    assert usage_by_label["12시"]["output"] == 500
-    assert usage_by_label["08시"]["input"] == 2000
-    assert usage_by_label["08시"]["output"] == 800
+    # 12시 slot should have req1 (1500/500) + VTON (600/1200) = 2100 / 1700
+    assert usage_by_label["12시"]["input"] == 2100
+    assert usage_by_label["12시"]["output"] == 1700
     assert usage_by_label["00시"]["input"] == 0
 
-    # Check keywords
-    kw_names = [k["name"] for k in daily["keywords"]]
+    # Check weekly (2026-10-05 Mon ~ 2026-10-06 Tue)
+    weekly = analytics["weekly"]
+    assert [u["label"] for u in weekly["usage"]] == ["월", "화"]
+    weekly_by_label = {u["label"]: u for u in weekly["usage"]}
+    assert weekly_by_label["월"]["input"] == 0
+    assert weekly_by_label["화"]["input"] == 2100
+    assert weekly_by_label["화"]["output"] == 1700
+
+    # Check monthly (2026-10-01 Thu ~ 2026-10-06 Tue -> 1주 and 2주)
+    monthly = analytics["monthly"]
+    assert [u["label"] for u in monthly["usage"]] == ["1주", "2주"]
+    monthly_by_label = {u["label"]: u for u in monthly["usage"]}
+    # 1주 (Oct 1~4) has req2 (2000/800)
+    assert monthly_by_label["1주"]["input"] == 2000
+    assert monthly_by_label["1주"]["output"] == 800
+    # 2주 (Oct 5~6) has req1 + VTON (2100/1700)
+    assert monthly_by_label["2주"]["input"] == 2100
+    assert monthly_by_label["2주"]["output"] == 1700
+
+    # Check monthly keywords & products
+    kw_names = [k["name"] for k in monthly["keywords"]]
     assert "출근룩" in kw_names
     assert "미니멀" in kw_names
     assert "데이트룩" in kw_names
     assert "캐주얼" in kw_names
 
-    # Check products
-    products = daily["products"]
-    assert len(products) > 0
-    # "릴렉스드 셔츠" was in both req1 and req2 -> count should be 2
+    products = monthly["products"]
     shirt = next((p for p in products if p["name"] == "릴렉스드 셔츠"), None)
     assert shirt is not None
     assert shirt["count"] == 2
@@ -147,7 +205,7 @@ def test_analytics_api_endpoint():
         completion_tokens=400,
     )
 
-    # Test GET /api/recommendations/analytics
+    # Test GET /api/recommendations/analytics (no date parameter needed)
     res = client.get("/api/recommendations/analytics")
     assert res.status_code == 200
     body = res.json()
@@ -157,17 +215,11 @@ def test_analytics_api_endpoint():
     assert validated.monthly.label == "월간"
     assert validated.yearly.label == "연간"
 
-    # Test with query param ?date=YYYY-MM-DD
-    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    res_with_date = client.get(f"/api/recommendations/analytics?date={today_str}")
-    assert res_with_date.status_code == 200
-    body_with_date = res_with_date.json()
-    assert body_with_date["daily"]["startDate"] == today_str
-
-    # Test invalid date query param
-    bad_res = client.get("/api/recommendations/analytics?date=not-a-date")
-    assert bad_res.status_code == 400
-    assert bad_res.json()["code"] == "INVALID_DATE_FORMAT"
+    today_kst_str = datetime.now(KST).strftime("%Y-%m-%d")
+    assert validated.daily.startDate == today_kst_str
+    assert validated.daily.endDate == today_kst_str
+    assert validated.weekly.endDate == today_kst_str
+    assert validated.monthly.endDate == today_kst_str
 
     # Test gateway backward compatibility path /api/v1/recommendations/analytics
     compat_res = client.get("/api/v1/recommendations/analytics")
