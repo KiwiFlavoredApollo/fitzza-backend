@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import re
 import sqlite3
@@ -7,6 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
 
 
@@ -1161,10 +1163,14 @@ class RecommendationRepository:
                         }
                         for r in records
                     ]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("VTON 토큰 사용량 내부 통신 실패: %s: %s", type(exc).__name__, exc)
 
-        # 2. 로컬 개발/테스트용 SQLite 또는 단일 DB 폴백
+        # 2. PostgreSQL 운영 환경에서는 SQLite 폴백을 타지 않고 즉시 반환
+        if self._use_postgres:
+            return []
+
+        # 3. 로컬 개발/테스트용 SQLite 또는 단일 DB 폴백
         with self._lock:
             conn = self._get_sqlite_connection()
             try:
