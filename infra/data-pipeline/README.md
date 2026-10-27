@@ -1,5 +1,15 @@
 # Crawler to Jev contract
 
+## Review import report
+
+For an existing run, create `reviews/report.json` without changing review JSON:
+
+```powershell
+python -m src.review_report `
+  --bucket fitzza-prod-foundation-databucket-wwng6wfc0hqy `
+  --prefix pipeline/runs/collection-20261025-01
+```
+
 ## Full AWS collection with image files
 
 `crawler-full-run-job.yaml` runs the manually approved 3,000-product collection
