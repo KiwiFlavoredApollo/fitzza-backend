@@ -450,8 +450,9 @@ def process_recommendation_request(
 
         tpo_summary = pipeline_result.get("tpo")
         comment = pipeline_result.get("comment")
-        prompt_tokens = int(pipeline_result.get("prompt_tokens") or 0)
-        completion_tokens = int(pipeline_result.get("completion_tokens") or 0)
+        is_cache_hit = cached_result is not None
+        prompt_tokens = 0 if is_cache_hit else int(pipeline_result.get("prompt_tokens") or 0)
+        completion_tokens = 0 if is_cache_hit else int(pipeline_result.get("completion_tokens") or 0)
 
         if result_type == "single":
             raw_items = pipeline_result.get("results") or []

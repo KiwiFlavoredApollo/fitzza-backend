@@ -730,3 +730,48 @@ def test_recommendation_request_stores_token_metrics() -> None:
     assert combo_data["promptTokens"] == 850
     assert combo_data["completionTokens"] == 430
 
+
+def test_process_recommendation_request_zeros_tokens_on_cache_hit() -> None:
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    from app.api.recommendations import process_recommendation_request
+
+    mock_app = SimpleNamespace()
+    mock_app.state = SimpleNamespace()
+    mock_repo = RecommendationRepository(db_path=":memory:")
+    mock_app.state.repository = mock_repo
+    mock_app.state.settings = Settings(db_path=":memory:")
+
+    mock_user_client = MagicMock()
+    mock_user_client.get_user_body.return_value = None
+    mock_app.state.user_client = mock_user_client
+
+    mock_notif_client = MagicMock()
+    mock_app.state.notification_client = mock_notif_client
+
+    # CacheService가 토큰이 포함된 캐시 결과를 반환하도록 설정
+    mock_cache = MagicMock()
+    cached_payload = {
+        "type": "single",
+        "tpo": "출근룩",
+        "comment": "캐시된 결과",
+        "results": [{"product_id": 101, "product_name": "셔츠", "price": 30000}],
+        "prompt_tokens": 1200,
+        "completion_tokens": 600,
+    }
+    mock_cache.get_pipeline_result.return_value = cached_payload
+    mock_app.state.cache_service = mock_cache
+
+    req_id = mock_repo.create_request(user_id=1, query_text="캐시 테스트 질의")
+    process_recommendation_request(
+        app=mock_app,
+        request_id=req_id,
+        user_id=1,
+        query_text="캐시 테스트 질의",
+    )
+
+    saved = mock_repo.get_request(req_id)
+    assert saved is not None
+    assert saved["promptTokens"] == 0
+    assert saved["completionTokens"] == 0
+
