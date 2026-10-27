@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | 신규 수집 | crawler-collection-prepared / src.cloud_batch | 500개 seed ID 제외, 실행별 체크포인트 |
 | 데이터 계약·선정 | data-curation-prepared / src.cloud_curate | 3000개 고유 상품·목표 비율·의류 계절·실측·색상 이미지 연결 검사; 실제 이미지 내용 검증은 별도 |
-| Jev 색상 정제 | jev-color-review-prepared / src.jev_job | SSM 키 등록 및 curated/bundle.tar.gz |
+| Jev 색상 정제 | jev-color-20261025-01 / src.jev_job | SSM 키 등록 및 curated/manifest.json + curated/data/ (기본) 또는 curated/bundle.tar.gz |
 | 사람 검수 | 로컬 review-bundle / src.review_gate | 미확정 색상 및 기존 overrides의 명시적 재검수 |
 | 인덱싱 | fashion-clip-indexer-prepared / indexer/entrypoint.py | 색상 승인 + 품질 승인 + 모델 revision 고정 |
 
@@ -43,6 +43,20 @@ jev/review-bundle.tar.gz           # data/ + config/, 사람 검수 다운로드
 approved/bundle.tar.gz             # 사람이 검수하고 품질 검증한 승인본
 indexer/report.json                # 적재 후 보고서, 서빙 전환 아님
 ```
+
+### Jev 입력 (2026-10-27)
+
+`collection-20261025-01`은 전체 수집 Job(`src.cloud_full_run`)이 만든 실행이라 `curated/bundle.tar.gz`가 없고
+`curated/manifest.json` + `curated/data/<카테고리>/<상품ID>.json`만 있다.
+`src.jev_job`의 기본 입력(`--input-layout manifest`)은 manifest의 각 행을 검사한 뒤 상품 JSON을 받는다.
+
+- 경로는 `<category>/<product_id>.json`, S3 키는 같은 실행의 `curated/data/` 아래여야 한다.
+- 상품 ID 중복, 파일 SHA-256 불일치, 본문 `product_id` 불일치가 하나라도 있으면 Jev를 호출하지 않고 실패한다.
+- 기존 `curated/bundle.tar.gz` 입력은 `--input-layout bundle`로 유지한다.
+- 이전 Jev 응답 파일은 정확한 키 목록 조회로 존재를 확인한다. 목록 권한 없이 없는 객체를 읽으면 S3가 403을 돌려주기 때문이다.
+- `jev-policy.json`은 이 실행의 manifest·상품 JSON 읽기, 이전 응답 파일 하나의 존재 확인, `jev/` 쓰기만 허용한다.
+- 기존 정지 Job `jev-color-review-prepared`는 템플릿을 바꿀 수 없으므로, 새 이름 `jev-color-20261025-01`로 만든다.
+  새 이미지 태그 `jev-manifest-20261027-01`을 ECR에 올린 뒤 적용한다. `suspend: true`와 실행 플래그 미포함은 그대로다.
 
 raw→curated 연결 코드·이미지·전용 IAM·정지 Job 대기 배포를 완료했다. 실제 실행 검증은 아직 하지 않았다.
 10/22 parser에 실제 Options.basic COLOR_CHIP → 활성 optionItem의 동일 goodsNo/optionValueNos 연결을 추가했다.
