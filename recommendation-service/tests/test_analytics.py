@@ -205,8 +205,24 @@ def test_analytics_api_endpoint():
         completion_tokens=400,
     )
 
-    # Test GET /api/recommendations/analytics (no date parameter needed)
-    res = client.get("/api/recommendations/analytics")
+    # 1. Unauthenticated request -> 401 UNAUTHORIZED
+    unauth_res = client.get("/api/recommendations/analytics")
+    assert unauth_res.status_code == 401
+    assert unauth_res.json()["code"] == "UNAUTHENTICATED"
+
+    # 2. Non-admin user (e.g., userId=1) -> 403 FORBIDDEN
+    forbidden_res = client.get(
+        "/api/recommendations/analytics",
+        headers={"X-User-Id": "1"},
+    )
+    assert forbidden_res.status_code == 403
+    assert forbidden_res.json()["code"] == "FORBIDDEN"
+
+    # 3. Admin user (fitzzaadm, userId=4) -> 200 OK
+    res = client.get(
+        "/api/recommendations/analytics",
+        headers={"X-User-Id": "4"},
+    )
     assert res.status_code == 200
     body = res.json()
     validated = AnalyticsResponse(**body)
@@ -221,6 +237,9 @@ def test_analytics_api_endpoint():
     assert validated.weekly.endDate == today_kst_str
     assert validated.monthly.endDate == today_kst_str
 
-    # Test gateway backward compatibility path /api/v1/recommendations/analytics
-    compat_res = client.get("/api/v1/recommendations/analytics")
+    # 4. Gateway backward compatibility path /api/v1/recommendations/analytics with admin header
+    compat_res = client.get(
+        "/api/v1/recommendations/analytics",
+        headers={"X-User-Id": "4"},
+    )
     assert compat_res.status_code == 200

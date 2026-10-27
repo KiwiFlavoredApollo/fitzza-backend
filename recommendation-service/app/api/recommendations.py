@@ -98,6 +98,23 @@ def _require_service_token(
         )
 
 
+def _require_admin(
+    settings: Settings,
+    x_user_id: str | None,
+    x_admin_token: str | None = None,
+) -> None:
+    if settings.verify_admin_token(x_admin_token):
+        return
+
+    user_id = _require_user_id(x_user_id)
+    if user_id not in settings.get_admin_user_ids():
+        raise RecommendationApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="FORBIDDEN",
+            message="관리자 권한이 필요합니다.",
+        )
+
+
 def _get_repository(request: Request) -> RecommendationRepository:
     repo = getattr(request.app.state, "repository", None)
     if repo is None:
@@ -613,7 +630,11 @@ def list_recommendations(
 )
 def get_recommendation_analytics(
     request: Request,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> AnalyticsResponse:
+    settings = _get_settings(request)
+    _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
     repository = _get_repository(request)
     data = repository.get_analytics_data()
     return AnalyticsResponse(**data)
