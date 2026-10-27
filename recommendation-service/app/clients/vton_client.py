@@ -12,8 +12,13 @@ REQUEST_ID_HEADER = "X-Request-Id"
 
 
 class VtonServiceClient:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        client: httpx.Client | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self._client = client
 
     @property
     def is_configured(self) -> bool:
@@ -21,6 +26,22 @@ class VtonServiceClient:
             self.settings.vton_service_url.strip()
             and self.settings.recommendation_service_token.strip()
         )
+
+    def _get_client(self) -> httpx.Client:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.Client(timeout=self.settings.http_timeout_seconds)
+        return self._client
+
+    def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            self._client.close()
+            self._client = None
+
+    def __enter__(self) -> "VtonServiceClient":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()
 
     def get_token_usage_in_range(
         self,
@@ -49,18 +70,18 @@ class VtonServiceClient:
         }
 
         try:
-            with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
-                response = client.get(url, headers=headers, params=params)
-                if response.status_code != 200:
-                    logger.warning(
-                        "vton-service 토큰 사용량 조회 응답 오류 (status=%s): %s",
-                        response.status_code,
-                        response.text,
-                    )
-                    return []
-                data = response.json()
-                records = data.get("records") if isinstance(data, dict) else []
-                return records if isinstance(records, list) else []
+            client = self._get_client()
+            response = client.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                logger.warning(
+                    "vton-service 토큰 사용량 조회 응답 오류 (status=%s): %s",
+                    response.status_code,
+                    response.text,
+                )
+                return []
+            data = response.json()
+            records = data.get("records") if isinstance(data, dict) else []
+            return records if isinstance(records, list) else []
         except Exception as exc:
             logger.warning(
                 "vton-service 토큰 사용량 조회 HTTP 통신 실패: %s: %s",

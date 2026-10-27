@@ -124,6 +124,8 @@ class VtonRepository:
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
                                 ON {schema}.fittings (user_id, fitting_id DESC);
+                            CREATE INDEX IF NOT EXISTS idx_fittings_status_created
+                                ON {schema}.fittings (status, created_at DESC);
 
                             CREATE TABLE IF NOT EXISTS {schema}.fitting_products (
                                 id BIGSERIAL PRIMARY KEY,
@@ -204,6 +206,12 @@ class VtonRepository:
                         """
                         CREATE INDEX IF NOT EXISTS idx_fittings_user_created
                             ON fittings (user_id, fitting_id DESC);
+                        """
+                    )
+                    cur.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS idx_fittings_status_created
+                            ON fittings (status, created_at DESC);
                         """
                     )
                     cur.execute(
@@ -880,10 +888,20 @@ class VtonRepository:
         self,
         start_iso: str,
         end_iso: str,
+        limit: int = 3000,
     ) -> list[dict[str, Any]]:
-        """지정된 기간 동안 완료(COMPLETED)된 피팅의 OpenAI 토큰 사용량과 생성일시를 조회합니다."""
+        """지정된 기간 동안 완료(COMPLETED)된 피팅의 OpenAI 토큰 사용량과 생성일시를 조회합니다 (최대 limit건)."""
         if self._use_postgres:
             schema = self.postgres_schema
+            try:
+                start_param: Any = datetime.fromisoformat(str(start_iso).replace("Z", "+00:00"))
+            except Exception:
+                start_param = start_iso
+            try:
+                end_param: Any = datetime.fromisoformat(str(end_iso).replace("Z", "+00:00"))
+            except Exception:
+                end_param = end_iso
+
             with self._lock:
                 with self._get_pg_connection() as conn:
                     with conn.cursor() as cur:
@@ -893,9 +911,10 @@ class VtonRepository:
                             FROM {schema}.fittings
                             WHERE created_at >= %s AND created_at <= %s
                               AND status = 'COMPLETED'
-                            ORDER BY created_at ASC;
+                            ORDER BY created_at DESC
+                            LIMIT %s;
                             """,
-                            (start_iso, end_iso),
+                            (start_param, end_param, limit),
                         )
                         rows = cur.fetchall() or []
                         return [
@@ -904,7 +923,7 @@ class VtonRepository:
                                 "completionTokens": int(r.get("completion_tokens") or 0),
                                 "createdAt": self._format_utc_timestamp(r["created_at"]),
                             }
-                            for r in rows
+                            for r in reversed(rows)
                         ]
         else:
             with self._lock:
@@ -917,9 +936,10 @@ class VtonRepository:
                         FROM fittings
                         WHERE created_at >= ? AND created_at <= ?
                           AND status = 'COMPLETED'
-                        ORDER BY created_at ASC;
+                        ORDER BY created_at DESC
+                        LIMIT ?;
                         """,
-                        (start_iso, end_iso),
+                        (start_iso, end_iso, limit),
                     )
                     rows = [dict(r) for r in cur.fetchall()]
                     return [
@@ -928,7 +948,7 @@ class VtonRepository:
                             "completionTokens": int(r.get("completion_tokens") or 0),
                             "createdAt": self._format_utc_timestamp(r["created_at"]),
                         }
-                        for r in rows
+                        for r in reversed(rows)
                     ]
                 finally:
                     self._close_sqlite_if_transient(conn)

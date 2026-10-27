@@ -160,6 +160,15 @@ def _get_cache_service(app: Any) -> CacheService:
     return cache_service
 
 
+def _get_vton_client(request: Request) -> VtonServiceClient:
+    vton_client = getattr(request.app.state, "vton_client", None)
+    if vton_client is None:
+        settings = _get_settings(request)
+        vton_client = VtonServiceClient(settings)
+        request.app.state.vton_client = vton_client
+    return vton_client
+
+
 def _get_coordinator(app: Any) -> Any:
     coordinator = getattr(app.state, "coordinator", None)
     if coordinator is None:
@@ -637,7 +646,7 @@ def get_recommendation_analytics(
     settings = _get_settings(request)
     _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
     repository = _get_repository(request)
-    vton_client = getattr(request.app.state, "vton_client", None) or VtonServiceClient(settings)
+    vton_client = _get_vton_client(request)
     data = repository.get_analytics_data(vton_client=vton_client)
     return AnalyticsResponse(**data)
 

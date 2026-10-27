@@ -92,6 +92,8 @@ class RecommendationRepository:
 
                             CREATE INDEX IF NOT EXISTS idx_rec_requests_user_created
                                 ON {schema}.recommendation_requests (user_id, request_id DESC);
+                            CREATE INDEX IF NOT EXISTS idx_rec_requests_status_created
+                                ON {schema}.recommendation_requests (status, created_at DESC);
 
                             CREATE TABLE IF NOT EXISTS {schema}.recommendation_combos (
                                 combo_id BIGSERIAL PRIMARY KEY,
@@ -226,6 +228,8 @@ class RecommendationRepository:
 
                     CREATE INDEX IF NOT EXISTS idx_recommendation_requests_user_created
                         ON recommendation_requests (user_id, request_id DESC);
+                    CREATE INDEX IF NOT EXISTS idx_rec_requests_status_created
+                        ON recommendation_requests (status, created_at DESC);
 
                     CREATE TABLE IF NOT EXISTS recommendation_combos (
                         combo_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1065,8 +1069,13 @@ class RecommendationRepository:
             "yearly": yearly_data,
         }
 
-    def _get_requests_in_range(self, start_dt: datetime, end_dt: datetime) -> list[dict[str, Any]]:
-        """지정된 기간 동안 완료(DONE)된 추천 요청 및 코디 상품 데이터를 조회합니다."""
+    def _get_requests_in_range(
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
+        limit: int = 3000,
+    ) -> list[dict[str, Any]]:
+        """지정된 기간 동안 완료(DONE)된 추천 요청 및 코디 상품 데이터를 조회합니다 (최대 limit건)."""
         start_utc = start_dt.astimezone(timezone.utc)
         end_utc = end_dt.astimezone(timezone.utc)
         start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1089,12 +1098,13 @@ class RecommendationRepository:
                             WHERE r.created_at >= %s AND r.created_at <= %s
                               AND r.status = 'DONE'
                             GROUP BY r.request_id
-                            ORDER BY r.created_at ASC
+                            ORDER BY r.created_at DESC
+                            LIMIT %s
                             """,
-                            (start_utc, end_utc),
+                            (start_utc, end_utc, limit),
                         )
                         rows = cur.fetchall()
-            return [dict(r) for r in rows]
+            return [dict(r) for r in reversed(rows)]
 
         with self._lock:
             conn = self._get_sqlite_connection()
@@ -1106,12 +1116,13 @@ class RecommendationRepository:
                     FROM recommendation_requests
                     WHERE created_at >= ? AND created_at <= ?
                       AND status = 'DONE'
-                    ORDER BY created_at ASC
+                    ORDER BY created_at DESC
+                    LIMIT ?
                     """,
-                    (start_iso, end_iso),
+                    (start_iso, end_iso, limit),
                 ).fetchall()
                 results = []
-                for r in rows:
+                for r in reversed(rows):
                     req_dict = dict(r)
                     req_id = req_dict["request_id"]
                     c_rows = conn.execute(
@@ -1129,8 +1140,9 @@ class RecommendationRepository:
         start_dt: datetime,
         end_dt: datetime,
         vton_client: Any | None = None,
+        limit: int = 3000,
     ) -> list[dict[str, Any]]:
-        """지정된 기간 동안 완료(COMPLETED)된 가상 피팅(VTON) 요청의 OpenAI 토큰 사용량을 조회합니다."""
+        """지정된 기간 동안 완료(COMPLETED)된 가상 피팅(VTON) 요청의 OpenAI 토큰 사용량을 조회합니다 (최대 limit건)."""
         start_utc = start_dt.astimezone(timezone.utc)
         end_utc = end_dt.astimezone(timezone.utc)
         start_iso = start_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1162,11 +1174,12 @@ class RecommendationRepository:
                     FROM fittings
                     WHERE created_at >= ? AND created_at <= ?
                       AND status = 'COMPLETED'
-                    ORDER BY created_at ASC
+                    ORDER BY created_at DESC
+                    LIMIT ?
                     """,
-                    (start_iso, end_iso),
+                    (start_iso, end_iso, limit),
                 ).fetchall()
-                return [dict(r) for r in rows]
+                return [dict(r) for r in reversed(rows)]
             except Exception:
                 return []
             finally:
