@@ -39,7 +39,7 @@ FITZZA-221의 [payer 관리자용 예산 설정 요청안·수동 점검표](../
    [AWS 전환 동작](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html).
 3. 자격 증명은 승인된 SSM SecureString에 보관한다. 비밀값을 CLI 인자,
    터미널 출력, Git, Jira, 로그, 빌드 아티팩트에 기록하지 않는다.
-   애플리케이션 키 계약은 `infra/k8s/base/secret.example.yaml`의 12개 키다.
+   애플리케이션 키 계약은 `infra/k8s/base/secret.example.yaml`의 13개 키다.
    하나의 JSON 파라미터 `/fitzza/prod/app-secrets`를 사용할 경우 4 KiB 이하인지 검증한다.
    `python scripts/prepare_app_secrets.py`로 터미널에서 DB 암호를 숨김 입력하고
    키 계약을 검사할 수 있다. 기본 모드는 값 출력·파일 저장·AWS 호출이 없다.
@@ -67,6 +67,17 @@ FITZZA-221의 [payer 관리자용 예산 설정 요청안·수동 점검표](../
    stdout에 Secret을 출력하거나 파일로 저장하지 않는다.
    Redis URL의 비밀번호는 URL 인코딩하고 내부 주소 `redis:6379`를 사용한다.
    recommendation DB는 `/1`, VTON DB는 `/0`이다.
+   Secret 적용 직후 `vton-service`와 `vton-worker`를 모두 재시작하고 롤아웃을
+   기다린다. `envFrom`으로 주입된 값은 기존 Pod 환경에 자동 반영되지 않는다.
+
+   ```bash
+   kubectl --context VERIFIED_FITZZA_CONTEXT -n fitzza rollout restart \
+     deployment/vton-service deployment/vton-worker
+   kubectl --context VERIFIED_FITZZA_CONTEXT -n fitzza rollout status \
+     deployment/vton-service --timeout=300s
+   kubectl --context VERIFIED_FITZZA_CONTEXT -n fitzza rollout status \
+     deployment/vton-worker --timeout=300s
+   ```
 6. DB 인증, Redis 인증, 앱 연결 및 재기동을 확인한다. 회전은 이제 운영자가
    담당하므로 SSM·DB·Kubernetes 값을 함께 갱신하는 절차를 기록한다.
    전환 실패 시 SSM의 이전 값만 복원해 끝내지 말고 실제 DB 비밀번호와
@@ -91,6 +102,20 @@ FITZZA-221의 [payer 관리자용 예산 설정 요청안·수동 점검표](../
   private 기본 NAT 경로와 S3 Gateway Endpoint 연결이 구성되어 있다.
   이는 정적 구성 확인이며 실제 AWS 연결·라우팅 성공을 증명하지 않는다.
 
+### FITZZA-284: 운영 분산 추적 결정
+
+- 시범 클러스터에는 아직 Jaeger/OpenTelemetry collector를 배치하지 않는다. 위 13개 Pod
+  용량 계산에는 collector가 포함되지 않았고 단일 노드에는 애플리케이션 롤링 업데이트용
+  여유가 없다.
+- `MANAGEMENT_TRACING_SAMPLING_PROBABILITY`를 설정하지 않아 Java와 FastAPI 서비스의
+  기본값 `0.0`을 유지한다. 추적이 꺼진 동안 운영 ConfigMap에
+  `MANAGEMENT_OTLP_TRACING_ENDPOINT`를 추가하지 않는다.
+- 활성화 전에 collector CPU·메모리 requests, 영속 trace 저장소와 보존 기간, UI 접근 통제,
+  예상 비용을 확정하고 collector를 포함해 allocatable 용량을 다시 확인한다.
+- 승인되면 `/v1/traces`를 포함한 OTLP/HTTP endpoint와 초기 샘플링 `0.1`을 설정하고,
+  ConfigMap 적용 뒤 추적 대상 Deployment를 재기동한다. 활성화·검증·롤백 절차는
+  `infra/k8s/README.md`를 따른다.
+
 ### 운영 시간 실행 순서
 
 1. 위 Secret 전환과 배포 관련 PR 병합 완료 확인.
@@ -98,7 +123,7 @@ FITZZA-221의 [payer 관리자용 예산 설정 요청안·수동 점검표](../
    실제 노드 allocatable에 들어가는지 확인하고 부족하면 배포를 멈춘다.
 3. 실제 RDS endpoint, private subnet, ALB SG, frontend origin 입력.
    TLS를 쓰면 API 도메인과 인증서를 모두 입력한다.
-4. Change Set을 검토한 후 배포 단계 활성화. develop 기준 실행과 모든 rollout 확인.
+4. Change Set을 검토한 후 배포 단계 활성화. main 기준 실행과 모든 rollout 확인.
 5. ALB 외부 health 및 핵심 사용자 흐름 확인. RDS 비공개, Redis ClusterIP,
    Pod 외부 통신, NAT·S3 Gateway Endpoint 경로를 확인한다.
 6. FITZZA-221 비용 알림 확인. 이전 이미지 버전으로 롤백 후 복구를 시험한다.

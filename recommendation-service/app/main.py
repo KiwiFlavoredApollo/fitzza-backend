@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 import logging
 import os
 
@@ -8,6 +10,7 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger(__name__)
 
 from app.api.recommendations import (
     RecommendationApiError,
@@ -16,7 +19,35 @@ from app.api.recommendations import (
 )
 from app.schemas.common import HealthResponse
 
-app = FastAPI(title="Fitzza Recommendation Service", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm-up: 서버 기동 시 Fashion-CLIP 모델 및 추천 컴포넌트 사전 적재
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        settings = getattr(app.state, "settings", None)
+        if settings is None:
+            from app.core.config import get_settings
+
+            settings = get_settings()
+            app.state.settings = settings
+
+        if getattr(settings, "enable_lifespan_warmup", True):
+            try:
+                from app.api.recommendations import _get_coordinator
+
+                logger.info("Fashion-CLIP 모델 및 추천 컴포넌트 사전 적재(Warm-up) 시작...")
+                await asyncio.to_thread(_get_coordinator, app)
+                logger.info("Fashion-CLIP 모델 및 추천 컴포넌트 사전 적재 완료")
+            except Exception as e:
+                logger.warning("사전 적재 실패 (지연 로딩으로 폴백): %s", e)
+    yield
+
+
+app = FastAPI(
+    title="Fitzza Recommendation Service",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 app.state.ready = True
 
 
@@ -24,6 +55,7 @@ def _mount_router_routes(
     target_app: FastAPI,
     router: APIRouter,
     prefix: str = "",
+    include_in_schema: bool = True,
 ) -> None:
     for route in router.routes:
         if isinstance(route, APIRoute):
@@ -35,6 +67,7 @@ def _mount_router_routes(
                 tags=route.tags,
                 summary=route.summary,
                 methods=list(route.methods or []),
+                include_in_schema=include_in_schema,
             )
 
 
@@ -124,5 +157,10 @@ def health(request: Request, response: Response) -> HealthResponse:
     )
 
 
-_mount_router_routes(app, public_router, prefix="/api/v1/recommendations")
-_mount_router_routes(app, internal_router)
+# 표준 마이크로서비스 경로 (/api/recommendations) -> Swagger 문서 노출
+_mount_router_routes(app, public_router, prefix="/api/recommendations", include_in_schema=True)
+
+# 게이트웨이 하위 호환 경로 (/api/v1/recommendations) -> 정상 동작하되 Swagger 중복 방지를 위해 문서에서 숨김
+_mount_router_routes(app, public_router, prefix="/api/v1/recommendations", include_in_schema=False)
+
+_mount_router_routes(app, internal_router, include_in_schema=True)

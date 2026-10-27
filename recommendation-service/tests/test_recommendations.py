@@ -222,6 +222,7 @@ def test_post_recommendations_returns_accepted_and_triggers_fcm_notification() -
         assert detail_res.status_code == 200
         detail = detail_res.json()
         assert detail["requestId"] == request_id
+        assert detail["queryText"] == "성수동 주말 나들이 코디 추천해줘"
         assert detail["status"] == "DONE"
         assert detail["searchType"] == "COMBO"
         assert detail["tpoSummary"] == "성수동 주말 나들이 미니멀"
@@ -233,7 +234,8 @@ def test_post_recommendations_returns_accepted_and_triggers_fcm_notification() -
         assert combo["harmonyScore"] == 92.0
         assert len(combo["items"]) == 2
         assert combo["items"][0]["productId"] == 201
-        assert combo["items"][0]["size"] == "L"
+        assert combo["items"][0]["recommendedSize"] == "L"
+        assert combo["items"][0]["availableSizes"] is None
         assert combo["items"][0]["fitPercent"] == 95.0
 
 
@@ -255,12 +257,15 @@ def test_single_item_recommendation_saves_items_and_notifies_fcm() -> None:
         )
         assert detail_res.status_code == 200
         detail = detail_res.json()
+        assert detail["requestId"] == request_id
+        assert detail["queryText"] == "검정 가디건 단품 추천해줘"
         assert detail["status"] == "DONE"
         assert detail["searchType"] == "SINGLE"
         assert len(detail["items"]) == 1
         assert detail["items"][0]["productId"] == 101
         assert detail["items"][0]["color"] == "블랙"
-        assert detail["items"][0]["size"] == "L"
+        assert detail["items"][0]["recommendedSize"] == "L"
+        assert detail["items"][0]["availableSizes"] is None
         assert detail["items"][0]["fitPercent"] == 92.0
         assert detail["combos"] == []
 
@@ -366,11 +371,28 @@ def test_list_recommendations_returns_user_history_newest_first() -> None:
         assert list_res.status_code == 200
         data = list_res.json()
         assert data["page"] == 0
+        assert data["size"] == 10
+        assert data["totalElements"] == 2
         assert data["totalPages"] == 1
+        assert data["hasNext"] is False
         assert [item["queryText"] for item in data["content"]] == [
             "두 번째 질문",
             "첫 번째 질문",
         ]
+
+        # 페이징 size=1 -> hasNext is True 확인
+        paged_res = client.get(
+            "/api/v1/recommendations?page=0&size=1",
+            headers={"X-User-Id": "7"},
+        )
+        assert paged_res.status_code == 200
+        paged_data = paged_res.json()
+        assert paged_data["page"] == 0
+        assert paged_data["size"] == 1
+        assert paged_data["totalElements"] == 2
+        assert paged_data["totalPages"] == 2
+        assert paged_data["hasNext"] is True
+        assert len(paged_data["content"]) == 1
 
 
 def test_internal_combo_lookup_verifies_service_token_and_ownership() -> None:
@@ -583,4 +605,93 @@ def test_coordinator_empty_coordination_fallback_logic(monkeypatch: pytest.Monke
     coordinator.harmonizer.select_best_outfits.assert_not_called()
     coordinator.responder.generate_coordination_response.assert_not_called()
     coordinator.responder.generate_single_response.assert_not_called()
+
+
+def test_extract_sizes_list_logic() -> None:
+    from app.api.recommendations import _extract_sizes_list
+
+    # 1. Qdrant payload 구조 (sequence 순서대로 리스트 추출)
+    qdrant_sizes = [
+        {"size": "small", "sequence": 0, "measurements": {"top_length": 70}},
+        {"size": "medium", "sequence": 1, "measurements": {"top_length": 75}},
+        {"size": "large", "sequence": 2, "measurements": {"top_length": 78}},
+    ]
+    assert _extract_sizes_list({"sizes": qdrant_sizes}) == ["small", "medium", "large"]
+
+    # 2. 원사이즈 (FREE)
+    free_sizes = [{"size": "FREE", "sequence": 0}]
+    assert _extract_sizes_list({"sizes": free_sizes}) == ["FREE"]
+
+    # 3. 신발 사이즈 목록
+    shoes_sizes = [{"size": "260"}, {"size": "265"}, {"size": "270"}]
+    assert _extract_sizes_list({"sizes": shoes_sizes}) == ["260", "265", "270"]
+
+    # 4. 문자열 리스트로 들어온 경우도 정상 지원
+    assert _extract_sizes_list({"sizes": ["S", "M", "L"]}) == ["S", "M", "L"]
+
+    # 5. 빈 리스트이거나 None이거나 없는 경우 -> None 반환
+    assert _extract_sizes_list({"sizes": []}) is None
+    assert _extract_sizes_list({"sizes": None}) is None
+    assert _extract_sizes_list({}) is None
+    assert _extract_sizes_list({"sizes": [{"size": "  "}, {"size": None}]}) is None
+
+
+def test_map_product_item_includes_sizes() -> None:
+    from app.api.recommendations import _map_product_item
+
+    # availableSizes가 있는 경우
+    item_with_sizes = {
+        "product_id": 101,
+        "product_name": "테스트 셔츠",
+        "price": 30000,
+        "size_recommendation": {"size_label": "medium"},
+        "sizes": [
+            {"size": "small", "sequence": 0},
+            {"size": "medium", "sequence": 1},
+            {"size": "large", "sequence": 2},
+        ],
+    }
+    mapped = _map_product_item(item_with_sizes)
+    assert mapped["recommendedSize"] == "medium"
+    assert mapped["availableSizes"] == ["small", "medium", "large"]
+
+    # sizes가 없는 경우
+    item_without_sizes = {
+        "product_id": 102,
+        "product_name": "사이즈 없는 모자",
+        "price": 20000,
+    }
+    mapped_none = _map_product_item(item_without_sizes)
+    assert mapped_none["recommendedSize"] is None
+    assert mapped_none["availableSizes"] is None
+
+
+def test_recommendation_detail_with_null_query_text_falls_back_to_empty_string() -> None:
+    from unittest.mock import patch
+
+    with TestClient(app) as client:
+        post_res = client.post(
+            "/api/v1/recommendations",
+            headers={"X-User-Id": "15"},
+            json={"query": "테스트 코디"},
+        )
+        assert post_res.status_code == 202
+        request_id = post_res.json()["requestId"]
+
+        repo = app.state.repository
+        original_get_request = repo.get_request
+
+        def mock_get_request(req_id: int):
+            data = original_get_request(req_id)
+            if data and req_id == request_id:
+                data["queryText"] = None
+            return data
+
+        with patch.object(repo, "get_request", side_effect=mock_get_request):
+            detail_res = client.get(
+                f"/api/v1/recommendations/{request_id}",
+                headers={"X-User-Id": "15"},
+            )
+            assert detail_res.status_code == 200
+            assert detail_res.json()["queryText"] == ""
 

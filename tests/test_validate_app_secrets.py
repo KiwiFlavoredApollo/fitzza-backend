@@ -22,14 +22,18 @@ def valid_values():
 def test_valid_secret_matches_documented_keys():
     values = valid_values()
     example = Path("infra/k8s/base/secret.example.yaml").read_text()
-    documented = {line.strip().split(":", 1)[0] for line in example.split("stringData:\n", 1)[1].splitlines()
-                  if line.startswith("  ")}
+    documented = {
+        line.strip().split(":", 1)[0]
+        for line in example.split("stringData:\n", 1)[1].splitlines()
+        if line.startswith("  ") and not line.strip().startswith("#")
+    }
     assert set(REQUIRED_KEYS) == documented
     assert validate(values) == values
 
 
 @pytest.mark.parametrize("key,value", [
     ("POSTGRES_PASSWORD", "CHANGE_ME"),
+    ("OPENAI_API_KEY", ""),
     ("JWT_SECRET", "short"),
     ("ORDER_SERVICE_TOKEN", None),
     ("POSTGRES_PASSWORD", "x" * 4096),

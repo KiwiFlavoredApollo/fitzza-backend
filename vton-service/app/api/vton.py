@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
-import uuid
+import math
 from pathlib import Path
 from typing import Annotated, Any
-
-import json
+import uuid
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -22,12 +22,13 @@ from fastapi import (
     status,
 )
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
+from app.clients.sqs_client import SqsClient
 from app.clients.storage_client import StorageClient
 from app.core.config import Settings, get_settings
 from app.core.database import VtonRepository
@@ -59,6 +60,7 @@ _REPO: VtonRepository | None = None
 _PRODUCT_CLIENT: ProductServiceClient | None = None
 _NOTIFICATION_CLIENT: NotificationServiceClient | None = None
 _STORAGE_CLIENT: StorageClient | None = None
+_SQS_CLIENT: SqsClient | None = None
 
 
 def get_repo() -> VtonRepository:
@@ -94,17 +96,27 @@ def get_storage_client() -> StorageClient:
     return _STORAGE_CLIENT
 
 
+def get_sqs_client() -> SqsClient:
+    global _SQS_CLIENT
+    if _SQS_CLIENT is None:
+        _SQS_CLIENT = SqsClient()
+    return _SQS_CLIENT
+
+
 def set_dependencies_for_tests(
     repo: VtonRepository | None = None,
     product_client: ProductServiceClient | None = None,
     notification_client: NotificationServiceClient | None = None,
     storage_client: StorageClient | None = None,
+    sqs_client: SqsClient | None = None,
 ) -> None:
-    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT
+    global _REPO, _PRODUCT_CLIENT, _NOTIFICATION_CLIENT, _STORAGE_CLIENT, _SQS_CLIENT
     _REPO = repo
     _PRODUCT_CLIENT = product_client
     _NOTIFICATION_CLIENT = notification_client
     _STORAGE_CLIENT = storage_client
+    _SQS_CLIENT = sqs_client
+
 
 
 def _resolve_result_image_url(fitting_id: int, request: Request | None) -> str:
@@ -134,8 +146,10 @@ def _run_background_vton(
     result_image_url: str,
     request_id_header: str | None = None,
     user_face_bytes: bytes | None = None,
-) -> None:
-    """백그라운드에서 상품 조회, AI 피팅 합성, 결과 이미지 저장, DB 업데이트 및 FCM 알림을 수행합니다."""
+    item_image_urls: dict[int, str] | None = None,
+    finalize_failure: bool = True,
+) -> bool:
+    """백그라운드 피팅을 수행하고 최종 실패일 때만 상태와 알림을 확정합니다."""
     settings = get_settings()
     repo = get_repo()
     prod_client = get_product_client()
@@ -154,10 +168,12 @@ def _run_background_vton(
                 (c for c in SUPPORTED_CATEGORIES if c not in used_categories),
                 "상의",
             )
+            override_url = (item_image_urls or {}).get(pid)
             item = prod_client.resolve_product_item(
                 pid,
                 fallback_category=fallback_category,
                 request_id_header=request_id_header,
+                override_image_url=override_url,
             )
             cat = item.get("categoryName") or "상의"
             if cat in used_categories:
@@ -251,6 +267,7 @@ def _run_background_vton(
             request_id_header=request_id_header,
         )
         logger.info("비동기 가상 피팅 성공 완료 (fittingId=%s)", fitting_id)
+        return True
 
     except Exception as exc:
         err_msg = str(exc) or type(exc).__name__
@@ -261,18 +278,25 @@ def _run_background_vton(
             err_msg,
             exc_info=True,
         )
-        # 내부 시스템 경로 등 상세 스택트레이스를 숨기고 정제된 안내 메시지 저장
-        user_error_message = (
-            str(exc)
-            if isinstance(exc, VtonValidationError)
-            else "가상 피팅 생성 중 오류가 발생했습니다."
-        )
-        repo.mark_failed(fitting_id, error_message=user_error_message)
-        notif_client.send_fitting_failed(
-            user_id=user_id,
-            fitting_id=fitting_id,
-            request_id_header=request_id_header,
-        )
+        if finalize_failure:
+            # 내부 시스템 경로 등 상세 스택트레이스를 숨기고 정제된 안내 메시지 저장
+            user_error_message = (
+                str(exc)
+                if isinstance(exc, VtonValidationError)
+                else "가상 피팅 생성 중 오류가 발생했습니다."
+            )
+            repo.mark_failed(fitting_id, error_message=user_error_message)
+            notif_client.send_fitting_failed(
+                user_id=user_id,
+                fitting_id=fitting_id,
+                request_id_header=request_id_header,
+            )
+        else:
+            logger.info(
+                "SQS 재시도를 위해 피팅 상태를 PENDING으로 유지합니다 (fittingId=%s)",
+                fitting_id,
+            )
+        return False
 
 
 MAX_PHOTO_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
@@ -287,8 +311,14 @@ ALLOWED_PHOTO_EXTENSIONS = {"image/png", "image/jpeg", "image/jpg", "image/webp"
 )
 def list_user_fittings(
     request: Request,
+    request_id: Annotated[
+        int | None,
+        Query(alias="requestId", ge=1, description="추천 대화 ID (대화별 피팅 필터링)"),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=100, description="조회 건수")] = 20,
     offset: Annotated[int, Query(ge=0, description="시작 위치")] = 0,
+    page: Annotated[int | None, Query(ge=0, description="페이지 번호 (0부터 시작, page 지정 시 offset 자동 계산)")] = None,
+    size: Annotated[int | None, Query(ge=1, le=100, description="페이지 크기 (기본값: limit)")] = None,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FittingListResponse:
     if not x_user_id or x_user_id <= 0:
@@ -297,18 +327,45 @@ def list_user_fittings(
             detail="로그인이 필요한 서비스입니다.",
         )
 
-    repo = get_repo()
-    raw_items, total_count = repo.get_user_fittings(user_id=x_user_id, limit=limit, offset=offset)
+    # page / size 지원 (타 마이크로서비스 표준 페이징 연동)
+    effective_limit = size if size is not None else limit
+    effective_offset = (page * effective_limit) if page is not None else offset
+    if page is not None:
+        current_page = page
+    elif effective_limit > 0 and (offset % effective_limit == 0):
+        current_page = offset // effective_limit
+    else:
+        current_page = None
 
+    repo = get_repo()
+    raw_items, total_count = repo.get_user_fittings(
+        user_id=x_user_id,
+        limit=effective_limit,
+        offset=effective_offset,
+        request_id=request_id,
+    )
+
+    storage = get_storage_client()
     items: list[FittingSummaryResponse] = []
     for item in raw_items:
         user_img_url = _resolve_user_image_url(item["fittingId"], request) if item.get("photoId") else None
+        raw_res_url = item.get("resultImageUrl")
+        if item.get("status") == "COMPLETED" and raw_res_url:
+            target_key = (
+                f"fittings/{item['fittingId']}.png"
+                if storage.is_s3 and raw_res_url.startswith("/api/vton/")
+                else raw_res_url
+            )
+            res_img_url = storage.get_presigned_url(target_key)
+        else:
+            res_img_url = None
         items.append(
             FittingSummaryResponse(
                 fittingId=item["fittingId"],
                 userId=item["userId"],
+                requestId=item.get("requestId"),
                 status=item["status"],
-                resultImageUrl=item["resultImageUrl"] if item["status"] == "COMPLETED" else None,
+                resultImageUrl=res_img_url,
                 userImageUrl=user_img_url,
                 productCount=item.get("productCount", len(item.get("products", []))),
                 products=item.get("products", []),
@@ -316,7 +373,17 @@ def list_user_fittings(
             )
         )
 
-    return FittingListResponse(items=items, totalCount=total_count)
+    has_next = (effective_offset + len(items)) < total_count
+    total_pages = math.ceil(total_count / effective_limit) if effective_limit > 0 else 0
+
+    return FittingListResponse(
+        items=items,
+        totalCount=total_count,
+        page=current_page,
+        size=effective_limit,
+        totalPages=total_pages,
+        hasNext=has_next,
+    )
 
 
 @router.post(
@@ -332,26 +399,50 @@ def list_user_fittings(
     openapi_extra={
         "requestBody": {
             "required": True,
-            "description": "JSON 본문(상품 ID 목록) 또는 multipart/form-data(상품 ID 목록 + 사용자 얼굴 이미지)",
+            "description": "JSON 본문(피팅할 상품 items 목록) 또는 multipart/form-data(상품 items 목록 + 사용자 얼굴/상반신 이미지)",
             "content": {
                 "application/json": {
                     "schema": {
                         "type": "object",
-                        "required": ["productIds"],
+                        "required": ["items"],
                         "properties": {
+                            "requestId": {
+                                "type": "integer",
+                                "nullable": True,
+                                "description": "추천 요청 ID (추천 대화 연동용)",
+                                "example": 6,
+                            },
                             "photoId": {
                                 "type": "integer",
                                 "nullable": True,
-                                "description": "사용자 사진 ID (선택)",
+                                "description": "사용자 사진 ID (마네킹 아바타로 피팅 시 null)",
                                 "example": None,
                             },
-                            "productIds": {
+                            "items": {
                                 "type": "array",
-                                "items": {"type": "integer"},
+                                "items": {
+                                    "type": "object",
+                                    "required": ["productId"],
+                                    "properties": {
+                                        "productId": {
+                                            "type": "integer",
+                                            "description": "상품 ID",
+                                            "example": 101,
+                                        },
+                                        "imageUrl": {
+                                            "type": "string",
+                                            "description": "추천된 특정 색상의 상품 이미지 URL",
+                                            "example": "https://image.msscdn.net/images/goods_img/green.jpg",
+                                        },
+                                    },
+                                },
                                 "minItems": 1,
                                 "maxItems": 5,
-                                "description": "피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
-                                "example": [101, 102],
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (최소 1개, 최대 5개)",
+                                "example": [
+                                    {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},
+                                    {"productId": 201, "imageUrl": "https://image.msscdn.net/images/goods_img/black.jpg"},
+                                ],
                             },
                         },
                     }
@@ -359,12 +450,17 @@ def list_user_fittings(
                 "multipart/form-data": {
                     "schema": {
                         "type": "object",
-                        "required": ["productIds"],
+                        "required": ["items"],
                         "properties": {
-                            "productIds": {
+                            "requestId": {
+                                "type": "integer",
+                                "description": "추천 요청 ID (추천 대화 연동용)",
+                                "example": 6,
+                            },
+                            "items": {
                                 "type": "string",
-                                "description": "피팅할 상품 ID 목록 (예: '[101, 102]' 또는 '101,102')",
-                                "example": "[101, 102]",
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 JSON 문자열 (예: '[{\"productId\": 101, \"imageUrl\": \"https://...\"}]')",
+                                "example": '[{"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"}]',
                             },
                             "userImage": {
                                 "type": "string",
@@ -393,43 +489,71 @@ async def request_fitting(
     content_type = request.headers.get("content-type", "").lower()
     product_ids: list[int] = []
     photo_id: int | None = None
+    request_id: int | None = None
     user_face_bytes: bytes | None = None
+    item_image_urls: dict[int, str] = {}
 
-    # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds 동시 수신)
+    # 1. 멀티파트 폼 데이터 처리 (userImage 파일 업로드와 productIds/items 동시 수신)
     if "multipart/form-data" in content_type:
         form = await request.form()
+        raw_req_id = form.get("requestId")
+        if raw_req_id is not None and str(raw_req_id).strip():
+            try:
+                request_id = int(str(raw_req_id).strip())
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="requestId는 유효한 정수여야 합니다.",
+                ) from exc
+        raw_items_str = form.get("items")
         raw_values = form.getlist("productIds")
-        if not raw_values:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="productIds가 누락되었습니다.",
-            )
 
-        parsed_pids: list[Any] = []
-        try:
-            for raw in raw_values:
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("["):
-                        loaded = json.loads(cleaned)
-                        if not isinstance(loaded, list):
-                            raise ValueError("JSON 배열 형식이어야 합니다.")
-                        parsed_pids.extend(loaded)
+        if raw_items_str and isinstance(raw_items_str, str) and raw_items_str.strip():
+            try:
+                loaded_items = json.loads(raw_items_str.strip())
+                if not isinstance(loaded_items, list):
+                    raise ValueError("items는 JSON 배열이어야 합니다.")
+                validated_req = FittingCreateRequest(items=loaded_items)
+                product_ids = validated_req.productIds or []
+                for it in (validated_req.items or []):
+                    if it.imageUrl and it.imageUrl.strip():
+                        item_image_urls[it.productId] = it.imageUrl.strip()
+            except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="items는 유효한 JSON 배열 형식이어야 합니다.",
+                ) from exc
+        elif raw_values:
+            parsed_pids: list[Any] = []
+            try:
+                for raw in raw_values:
+                    if isinstance(raw, str):
+                        cleaned = raw.strip()
+                        if cleaned.startswith("["):
+                            loaded = json.loads(cleaned)
+                            if not isinstance(loaded, list):
+                                raise ValueError("JSON 배열 형식이어야 합니다.")
+                            parsed_pids.extend(loaded)
+                        else:
+                            parsed_pids.extend(
+                                [x.strip() for x in cleaned.split(",") if x.strip()]
+                            )
                     else:
-                        parsed_pids.extend(
-                            [x.strip() for x in cleaned.split(",") if x.strip()]
-                        )
-                else:
-                    raise TypeError("productIds는 문자열이어야 합니다.")
+                        raise TypeError("productIds는 문자열이어야 합니다.")
 
-            # Pydantic 모델로 productIds 유효성 및 개수 제약(1~5개 정수) 검증
-            validated_req = FittingCreateRequest(productIds=parsed_pids)
-            product_ids = validated_req.productIds
-        except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                # Pydantic 모델로 productIds 유효성 및 개수 제약(1~5개 정수) 검증
+                validated_req = FittingCreateRequest(productIds=parsed_pids)
+                product_ids = validated_req.productIds or []
+            except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
+                ) from exc
+        else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
-            ) from exc
+                detail="productIds 또는 items가 누락되었습니다.",
+            )
 
         # 상품 검증 선행: 중복 제거 및 최대 개수 확인 (실패 시 이미지 I/O 자체를 방지)
         unique_product_ids = list(dict.fromkeys(product_ids))
@@ -460,7 +584,7 @@ async def request_fitting(
 
                 storage = get_storage_client()
                 photo_filename = f"user_{x_user_id}_{uuid.uuid4().hex[:12]}.png"
-                photo_key = f"photos/{x_user_id}/{photo_filename}"
+                photo_key = f"user-images/{x_user_id}/{photo_filename}"
 
                 # S3 또는 로컬 스토리지 업로드
                 try:
@@ -505,8 +629,13 @@ async def request_fitting(
 
         try:
             req = FittingCreateRequest.model_validate(body)
-            product_ids = req.productIds
+            product_ids = req.productIds or []
             photo_id = req.photoId
+            request_id = req.requestId
+            if req.items:
+                for it in req.items:
+                    if it.imageUrl and it.imageUrl.strip():
+                        item_image_urls[it.productId] = it.imageUrl.strip()
         except ValidationError as exc:
             raise RequestValidationError(exc.errors()) from exc
 
@@ -536,33 +665,56 @@ async def request_fitting(
         user_id=x_user_id,
         photo_id=photo_id,
         product_ids=unique_product_ids,
+        request_id=request_id,
     )
 
     result_image_url = _resolve_result_image_url(fitting_id, request)
 
-    # 백그라운드 태스크 등록
-    background_tasks.add_task(
-        _run_background_vton,
-        fitting_id=fitting_id,
-        user_id=x_user_id,
-        photo_id=photo_id,
-        product_ids=unique_product_ids,
-        result_image_url=result_image_url,
-        request_id_header=x_request_id,
-        user_face_bytes=user_face_bytes,
-    )
+    settings = get_settings()
+    if settings.queue_backend == "sqs":
+        sqs_client = get_sqs_client()
+        sqs_payload = {
+            "fitting_id": fitting_id,
+            "user_id": x_user_id,
+            "photo_id": photo_id,
+            "request_id": request_id,
+            "product_ids": unique_product_ids,
+            "result_image_url": result_image_url,
+            "request_id_header": x_request_id,
+            "item_image_urls": item_image_urls,
+        }
+        sqs_client.send_message(sqs_payload)
+        logger.info(
+            "SQS 피팅 작업 발행 완료 (queue_backend=sqs, fittingId=%s, userId=%s)",
+            fitting_id,
+            x_user_id,
+        )
+    else:
+        # 백그라운드 태스크 등록 (QUEUE_BACKEND=memory)
+        background_tasks.add_task(
+            _run_background_vton,
+            fitting_id=fitting_id,
+            user_id=x_user_id,
+            photo_id=photo_id,
+            product_ids=unique_product_ids,
+            result_image_url=result_image_url,
+            request_id_header=x_request_id,
+            user_face_bytes=user_face_bytes,
+            item_image_urls=item_image_urls,
+        )
 
     return FittingCreateResponse(fittingId=fitting_id, status="PENDING")
 
 
+
 @router.get(
-    "/api/vton/{fittingId}",
+    "/api/vton/{fitting_id}",
     response_model=FittingDetailResponse,
     summary="가상 피팅 결과 상세 조회",
     description="피팅 ID로 현재 진행 상태(PENDING/COMPLETED/FAILED) 및 결과 이미지 URL, 상품 목록을 조회합니다.",
 )
 def get_fitting(
-    fittingId: int,
+    fitting_id: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> FittingDetailResponse:
     if not x_user_id or x_user_id <= 0:
@@ -572,7 +724,7 @@ def get_fitting(
         )
 
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -586,13 +738,26 @@ def get_fitting(
             detail="본인의 피팅 결과만 조회할 수 있습니다.",
         )
 
+    storage = get_storage_client()
+    raw_res_url = detail.get("resultImageUrl")
+    if detail.get("status") == "COMPLETED" and raw_res_url:
+        target_key = (
+            f"fittings/{fitting_id}.png"
+            if storage.is_s3 and raw_res_url.startswith("/api/vton/")
+            else raw_res_url
+        )
+        result_img_url = storage.get_presigned_url(target_key)
+    else:
+        result_img_url = None
+
     user_img_url = _resolve_user_image_url(detail["fittingId"], None) if detail.get("photoId") else None
     return FittingDetailResponse(
         fittingId=detail["fittingId"],
         userId=detail["userId"],
+        requestId=detail.get("requestId"),
         userImageUrl=user_img_url,
         status=detail["status"],
-        resultImageUrl=detail["resultImageUrl"] if detail["status"] == "COMPLETED" else None,
+        resultImageUrl=result_img_url,
         errorMessage=detail["errorMessage"],
         products=detail["products"],
         createdAt=detail["createdAt"],
@@ -601,13 +766,13 @@ def get_fitting(
 
 
 @router.delete(
-    "/api/vton/{fittingId}",
+    "/api/vton/{fitting_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="가상 피팅 기록 삭제 (소프트 삭제)",
     description="본인의 가상 피팅 기록을 삭제(소프트 삭제)합니다. 삭제된 피팅은 상세 조회 및 이미지 서빙이 차단됩니다.",
 )
 def delete_fitting(
-    fittingId: int,
+    fitting_id: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
     if not x_user_id or x_user_id <= 0:
@@ -617,7 +782,7 @@ def delete_fitting(
         )
 
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId, include_deleted=True)
+    detail = repo.get_fitting_detail(fitting_id, include_deleted=True)
     if not detail or detail.get("isDeleted"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -630,7 +795,7 @@ def delete_fitting(
             detail="본인의 피팅 결과만 삭제할 수 있습니다.",
         )
 
-    deleted = repo.delete_fitting(fitting_id=fittingId, user_id=x_user_id)
+    deleted = repo.delete_fitting(fitting_id=fitting_id, user_id=x_user_id)
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -641,48 +806,84 @@ def delete_fitting(
 
 
 @router.get(
-    "/api/vton/{fittingId}/image",
+    "/api/vton/{fitting_id}/image",
     summary="가상 피팅 결과 PNG 이미지 서빙",
-    description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다.",
+    description="피팅이 완료된 실제 바이너리 PNG 이미지를 브라우저나 앱에서 바로 렌더링할 수 있도록 반환합니다. 본인 소유 피팅만 접근 가능합니다.",
     responses={
         200: {"content": {"image/png": {}}, "description": "가상 피팅 완성 PNG 이미지"},
+        307: {"description": "S3 Pre-signed URL 임시 리다이렉트"},
+        401: {"description": "로그인 필요"},
+        403: {"description": "본인의 피팅 이미지만 조회 가능"},
         404: {"description": "이미지를 찾을 수 없거나 아직 생성되지 않음/삭제됨"},
     },
 )
-def get_fitting_image(fittingId: int) -> Response:
+def get_fitting_image(
+    fitting_id: int,
+    x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
+) -> Response:
+    if not x_user_id or x_user_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="로그인이 필요한 서비스입니다.",
+        )
+
     # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail or detail.get("isDeleted"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="존재하지 않거나 삭제된 가상 피팅입니다.",
         )
+
+    # 2. 본인 피팅인지 검증 (IDOR 보안 취약점 방어)
+    if detail["userId"] != x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="본인의 피팅 결과 이미지만 조회할 수 있습니다.",
+        )
+
     if detail["status"] != "COMPLETED":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"가상 피팅이 아직 완료되지 않았습니다. 현재 상태: {detail['status']}",
         )
 
+    # 3. S3 백엔드인 경우 서명 URL로 307 임시 리다이렉트
+    storage = get_storage_client()
+    if storage.is_s3:
+        raw_target = detail.get("resultImageUrl")
+        key_or_url = (
+            f"fittings/{fitting_id}.png"
+            if not raw_target or raw_target.startswith("/api/vton/")
+            else raw_target
+        )
+        presigned_url = storage.get_presigned_url(key_or_url, expires_in=3600)
+        if presigned_url.startswith(("http://", "https://")):
+            return RedirectResponse(
+                url=presigned_url,
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            )
+
     settings = get_settings()
     storage_dir = Path(settings.storage_dir)
-    image_file = storage_dir / f"{fittingId}.png"
+    image_file = storage_dir / f"{fitting_id}.png"
 
     if image_file.is_file():
         return FileResponse(
             path=str(image_file),
             media_type="image/png",
-            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+            headers={"Content-Disposition": f'inline; filename="fitting-{fitting_id}.png"'},
         )
 
-    # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3)에서 스트리밍 조회 시도
-    storage = get_storage_client()
+    # 로컬 캐시에 없을 경우 스토리지 클라이언트(S3/Mock)에서 스트리밍 조회 시도
     try:
-        img_bytes = storage.download_bytes(f"fittings/{fittingId}.png")
+        img_bytes = storage.download_bytes(f"fittings/{fitting_id}.png")
         return Response(
             content=img_bytes,
             media_type="image/png",
-            headers={"Content-Disposition": f'inline; filename="fitting-{fittingId}.png"'},
+            headers={"Content-Disposition": f'inline; filename="fitting-{fitting_id}.png"'},
         )
     except Exception:
         raise HTTPException(
@@ -692,7 +893,7 @@ def get_fitting_image(fittingId: int) -> Response:
 
 
 @router.get(
-    "/api/vton/{fittingId}/user-image",
+    "/api/vton/{fitting_id}/user-image",
     summary="사용자 얼굴/상반신 이미지 파일 서빙 (로컬 개발용)",
     description="가상 피팅 요청 시 첨부했던 사용자 얼굴/상반신 원본 이미지를 브라우저나 앱에서 확인할 수 있도록 스트리밍합니다.",
     responses={
@@ -701,7 +902,7 @@ def get_fitting_image(fittingId: int) -> Response:
     },
 )
 def get_fitting_user_image(
-    fittingId: int,
+    fitting_id: int,
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
     if not x_user_id or x_user_id <= 0:
@@ -711,7 +912,7 @@ def get_fitting_user_image(
         )
 
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail or detail.get("isDeleted"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -762,14 +963,14 @@ def get_fitting_user_image(
 
 
 @router.get(
-    "/fittings/{fittingId}",
+    "/fittings/{fitting_id}",
     response_model=InternalFittingResponse,
     summary="[내부 서비스용] 커뮤니티 공유 유효성 검증",
     description="community-service 전용 내부 API. X-Service-Token 헤더를 검증하고 해당 사용자의 소유권과 상품 목록을 반환합니다.",
 )
 def get_internal_fitting(
-    fittingId: int,
-    userId: int,
+    fitting_id: int,
+    user_id: Annotated[int, Query(alias="userId")],
     x_service_token: Annotated[str | None, Header(alias="X-Service-Token")] = None,
 ) -> InternalFittingResponse:
     settings = get_settings()
@@ -780,14 +981,14 @@ def get_internal_fitting(
         )
 
     repo = get_repo()
-    detail = repo.get_fitting_detail(fittingId)
+    detail = repo.get_fitting_detail(fitting_id)
     if not detail:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="피팅 정보를 찾을 수 없습니다.",
         )
 
-    is_owned = (detail["userId"] == userId)
+    is_owned = (detail["userId"] == user_id)
     products_for_community = [
         {
             "productId": p["productId"],

@@ -11,7 +11,7 @@ Metadata:
     arch: public ALB subnets -> private EKS nodes; Scheduler -> Lambda -> node desired 1/0; S3 bypasses NAT; one NAT for cost
     must:
       - deploy only in ap-northeast-2 for the approved estimate
-      - keep worker desired=0 outside approved operating hours, on weekends, and on blocked dates
+      - keep worker desired=0 outside approved hours; 2026-10-24 through 26 permit 12:00-23:00 KST
       - never store credentials or application secrets in this template
     ref:
       - at: infra/aws/cloudformation/README.md
@@ -372,6 +372,47 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
+  ProductImageOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Description: !Sub '${ProjectName}-${Environment} private product image origin'
+        Name: !Sub '${ProjectName}-${Environment}-product-images'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ProductImageDistribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: serve mirrored product images without exposing the pipeline bucket
+        must:
+          - allow only the public/product-images prefix through OAC
+          - redirect viewers to HTTPS
+          - keep immutable image objects cached
+    Properties:
+      DistributionConfig:
+        Comment: !Sub '${ProjectName}-${Environment} mirrored product images'
+        DefaultCacheBehavior:
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          CachedMethods: [GET, HEAD, OPTIONS]
+          Compress: true
+          TargetOriginId: ProductImageS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+          - DomainName: !GetAtt DataBucket.RegionalDomainName
+            Id: ProductImageS3Origin
+            OriginAccessControlId: !Ref ProductImageOriginAccessControl
+            OriginPath: /public/product-images
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        PriceClass: PriceClass_100
+
   DataBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Metadata:
@@ -394,6 +435,17 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: 'false'
+          - Sid: AllowProductImageCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DataBucket.Arn}/public/product-images/*'
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+              ArnEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${ProductImageDistribution}'
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -404,6 +456,7 @@ Resources:
           - stay attached to the private route table
           - allow read access to the regional ECR layer bucket for EKS system images
           - allow delivery artifacts only for the explicit bucket and this account
+          - allow the VTON Pod Identity role to access only the VTON asset bucket
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -446,11 +499,98 @@ Resources:
                 StringEquals:
                   aws:PrincipalAccount: !Ref AWS::AccountId
             - !Ref AWS::NoValue
+          - Sid: AllowVtonRuntimeAssets
+            Effect: Allow
+            Principal: '*'
+            Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${ProjectName}-${Environment}-assets-vton/*'
+            Condition:
+              StringEquals:
+                aws:PrincipalArn: !GetAtt VtonRuntimeRole.Arn
       RouteTableIds:
         - !Ref PrivateRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: Gateway
       VpcId: !Ref Vpc
+
+  VtonJobDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: retain VTON jobs that still fail after bounded source-queue retries for investigation and controlled replay
+        must:
+          - accept redrive only from VtonJobQueue
+          - retain failed jobs for 14 days
+          - keep SSE-SQS enabled within the approved pilot budget
+        mutable: change-with-constraints
+        mutability:
+          QueueName: must-never-change
+    Properties:
+      MessageRetentionPeriod: 1209600
+      QueueName: !Sub '${ProjectName}-${Environment}-vton-jobs-dlq'
+      RedriveAllowPolicy:
+        redrivePermission: byQueue
+        sourceQueueArns:
+          - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-vton-jobs'
+      SqsManagedSseEnabled: true
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  VtonJobQueue:
+    Type: AWS::SQS::Queue
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: buffer VTON generation jobs so API requests and workers scale independently; Standard queue chosen because job ordering is not required
+        must:
+          - visibility timeout stays >= max VTON processing attempt duration
+          - redrive after 3 receives to VtonJobDeadLetterQueue
+          - long poll for 20s to reduce empty receives
+          - keep SSE-SQS enabled within the approved pilot budget
+        mutable: change-with-constraints
+        mutability:
+          QueueName: must-never-change
+    Properties:
+      MessageRetentionPeriod: 345600
+      QueueName: !Sub '${ProjectName}-${Environment}-vton-jobs'
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt VtonJobDeadLetterQueue.Arn
+        maxReceiveCount: 3
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 300
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  VtonQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: reject non-TLS access even when a caller otherwise has queue permissions
+        must:
+          - keep aws:SecureTransport deny on both queues
+    Properties:
+      Queues:
+        - !Ref VtonJobQueue
+        - !Ref VtonJobDeadLetterQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: sqs:*
+            Resource:
+              - !GetAtt VtonJobQueue.Arn
+              - !GetAtt VtonJobDeadLetterQueue.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
 
   AlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -708,7 +848,7 @@ Resources:
         why: one larger ARM64 worker for pilot application and system Pod capacity; starts at zero to avoid accidental spend
         must:
           - maxSize stays 1 for the approved estimate
-          - desiredSize returns to 0 outside weekday 09:00-18:00 operating windows and on blocked dates
+          - desiredSize returns to 0 outside approved hours, including the dated crawler exception
           - workloads must publish linux/arm64 images
         mutable: change-with-constraints
         mutability:
@@ -797,7 +937,8 @@ Resources:
         why: validate desired capacity and operating date before calling EKS instead of mutating the backing ASG directly
         must:
           - accept only integer desiredSize 0 or 1
-          - reject scale-up on Asia/Seoul weekends and configured blocked dates
+          - reject scale-up on weekends and blocked dates except the approved 2026-10-24 through 26 window
+          - exception window never changes node count or starts crawler Jobs
           - preserve min=0 and max=1 budget limits
         mutable: change-with-constraints
     Properties:
@@ -814,6 +955,8 @@ Resources:
 
 
           def is_scale_up_blocked(now):
+              if "2026-10-24" <= now.date().isoformat() <= "2026-10-26":
+                  return not 12 <= now.hour < 23
               blocked_dates = {
                   value.strip()
                   for value in os.environ["BLOCKED_SCALE_UP_DATES"].split(",")
@@ -828,7 +971,12 @@ Resources:
                   raise ValueError("desiredSize must be integer 0 or 1")
 
               now = datetime.now(operating_time_zone)
-              if desired_size == 1 and is_scale_up_blocked(now):
+              exception_shutdown = (
+                  desired_size == 0 and event.get("scheduledWeekdayShutdown") is True
+                  and "2026-10-24" <= now.date().isoformat() <= "2026-10-26"
+                  and 12 <= now.hour < 23
+              )
+              if exception_shutdown or (desired_size == 1 and is_scale_up_blocked(now)):
                   return {
                       "desiredSize": desired_size,
                       "date": now.date().isoformat(),
@@ -931,7 +1079,7 @@ Resources:
       State: ENABLED
       Target:
         Arn: !GetAtt NodeScalerFunction.Arn
-        Input: '{"desiredSize":0}'
+        Input: '{"desiredSize":0,"scheduledWeekdayShutdown":true}'
         RetryPolicy:
           MaximumEventAgeInSeconds: 3600
           MaximumRetryAttempts: 2
@@ -971,6 +1119,65 @@ Resources:
       AddonName: eks-pod-identity-agent
       ClusterName: !Ref EksCluster
       ResolveConflicts: OVERWRITE
+
+  VtonRuntimeRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: isolate VTON object-storage and job-queue permissions from the shared application service account
+        must:
+          - trust only EKS Pod Identity
+          - scope S3 access to the VTON asset bucket
+          - scope SQS mutation to VtonJobQueue; DLQ movement remains SQS-managed
+        mutable: change-with-constraints
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+      Policies:
+        - PolicyName: vton-runtime-storage-and-queue
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: UseVtonAssets
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${ProjectName}-${Environment}-assets-vton/*'
+              - Sid: ProduceAndConsumeVtonJobs
+                Effect: Allow
+                Action:
+                  - sqs:ChangeMessageVisibility
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                  - sqs:ReceiveMessage
+                  - sqs:SendMessage
+                Resource: !GetAtt VtonJobQueue.Arn
+      Tags:
+        - { Key: Project, Value: !Ref ProjectName }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: Owner, Value: !Ref Owner }
+        - { Key: CostCenter, Value: !Ref CostCenter }
+
+  VtonRuntimePodIdentityAssociation:
+    Type: AWS::EKS::PodIdentityAssociation
+    DependsOn: PodIdentityAgentAddon
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: bind only VTON API and worker pods to the dedicated AWS runtime role
+        must:
+          - namespace stays fitzza
+          - service account stays fitzza-vton and is used only by VTON workloads
+    Properties:
+      ClusterName: !Ref EksCluster
+      Namespace: fitzza
+      RoleArn: !GetAtt VtonRuntimeRole.Arn
+      ServiceAccount: fitzza-vton
 
   EbsCsiRole:
     Type: AWS::IAM::Role
@@ -1324,6 +1531,21 @@ Outputs:
   DataBucketName:
     Description: Private pipeline data bucket name
     Value: !Ref DataBucket
+  VtonJobQueueUrl:
+    Description: SQS URL used by the VTON API producer and worker consumer
+    Value: !Ref VtonJobQueue
+  VtonJobDeadLetterQueueUrl:
+    Description: SQS URL retaining VTON jobs that exceeded the retry limit
+    Value: !Ref VtonJobDeadLetterQueue
+  VtonRuntimeRoleArn:
+    Description: EKS Pod Identity role for the dedicated fitzza-vton service account
+    Value: !GetAtt VtonRuntimeRole.Arn
+  ProductImageDistributionId:
+    Description: CloudFront distribution ID for mirrored product images
+    Value: !Ref ProductImageDistribution
+  ProductImageBaseUrl:
+    Description: Public base URL for objects below public/product-images
+    Value: !Sub 'https://${ProductImageDistribution.DomainName}'
   EcrRepositoryPrefixUri:
     Description: Registry URI prefix used by buildspec.yml
     Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepositoryPrefix}'

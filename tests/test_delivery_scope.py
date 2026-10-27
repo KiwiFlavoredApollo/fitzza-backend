@@ -17,11 +17,78 @@ def test_delivery_template_does_not_grant_cluster_admin():
     assert "get secret" not in spec
 
 
+def test_production_delivery_uses_main_branch():
+    template = (ROOT / "infra/aws/cloudformation/delivery.yaml").read_text()
+    parameters = (ROOT / "infra/aws/cloudformation/delivery-parameters.example.json").read_text()
+    assert "SourceBranch:\n    Type: String\n    Default: main" in template
+    assert '"SourceBranch", "ParameterValue": "main"' in parameters
+
+
 def test_artifact_endpoint_is_opt_in_and_account_scoped():
     template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
     assert "HasDeliveryArtifactBucket: !Not" in template
     assert "aws:PrincipalAccount: !Ref AWS::AccountId" in template
     assert "s3:::${DeliveryArtifactBucketName}/*" in template
+
+
+def test_product_images_use_private_s3_origin_and_prefix_scoped_cloudfront_access():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "Type: AWS::CloudFront::OriginAccessControl" in template
+    assert "SigningBehavior: always" in template
+    assert "OriginPath: /public/product-images" in template
+    assert "ViewerProtocolPolicy: redirect-to-https" in template
+    assert "Resource: !Sub '${DataBucket.Arn}/public/product-images/*'" in template
+    assert "AWS:SourceAccount: !Ref AWS::AccountId" in template
+    assert "AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${ProductImageDistribution}'" in template
+
+
+def test_vton_runtime_endpoint_access_is_role_and_bucket_scoped():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "Sid: AllowVtonRuntimeAssets" in template
+    assert "s3:::${ProjectName}-${Environment}-assets-vton/*" in template
+    assert "aws:PrincipalArn: !GetAtt VtonRuntimeRole.Arn" in template
+    assert "Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]" in template
+
+
+def test_production_vton_uses_aws_backends():
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text(encoding="utf-8")
+    assert "VTON_STORAGE_BACKEND: s3" in config
+    assert "VTON_QUEUE_BACKEND: sqs" in config
+    assert "AWS_SQS_QUEUE_URL: CHANGE_ME_VTON_JOB_QUEUE_URL" in config
+    assert "AWS_SQS_DLQ_URL: CHANGE_ME_VTON_JOB_DLQ_URL" in config
+    assert 'SQS_MAX_RECEIVE_COUNT: "3"' in config
+
+
+def test_vton_queue_has_bounded_retry_dlq_and_transport_protection():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    assert "VtonJobQueue:" in template
+    assert "VtonJobDeadLetterQueue:" in template
+    assert "ReceiveMessageWaitTimeSeconds: 20" in template
+    assert "VisibilityTimeout: 300" in template
+    assert "maxReceiveCount: 3" in template
+    assert "redrivePermission: byQueue" in template
+    assert template.count("SqsManagedSseEnabled: true") >= 2
+    assert "Sid: DenyInsecureTransport" in template
+    assert "Action: sqs:*" in template
+
+
+def test_vton_uses_dedicated_pod_identity_and_least_privilege_queue_role():
+    template = (ROOT / "infra/aws/cloudformation/foundation.yaml").read_text()
+    apps = (ROOT / "infra/k8s/base/apps.yaml").read_text()
+    service_accounts = (ROOT / "infra/k8s/base/service-account.yaml").read_text()
+    assert "VtonRuntimePodIdentityAssociation:" in template
+    assert "ServiceAccount: fitzza-vton" in template
+    assert "Resource: !GetAtt VtonJobQueue.Arn" in template
+    assert "sqs:SendMessage" in template
+    assert "sqs:ReceiveMessage" in template
+    assert "name: fitzza-vton" in service_accounts
+    assert apps.count("serviceAccountName: fitzza-vton") == 2
+
+
+def test_production_tracing_stays_disabled_without_an_approved_collector():
+    config = (ROOT / "infra/k8s/base/configmap.yaml").read_text(encoding="utf-8")
+    assert "MANAGEMENT_OTLP_TRACING_ENDPOINT" not in config
+    assert "MANAGEMENT_TRACING_SAMPLING_PROBABILITY" not in config
 
 
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl unavailable")
@@ -33,7 +100,14 @@ def test_delivery_overlay_excludes_operator_owned_resources():
     )
     documents = list(yaml.safe_load_all(result.stdout))
     deployments = [d for d in documents if d["kind"] == "Deployment"]
-    assert len(deployments) == 11
+    assert len(deployments) == 12
+    vton_worker = next(d for d in deployments if d["metadata"]["name"] == "vton-worker")
+    worker_container = vton_worker["spec"]["template"]["spec"]["containers"][0]
+    assert worker_container["command"] == ["python", "-m", "app.worker"]
+    openai_env = next(env for env in worker_container["env"] if env["name"] == "OPENAI_API_KEY")
+    assert openai_env["valueFrom"]["secretKeyRef"] == {
+        "name": "fitzza-app-secrets", "key": "OPENAI_API_KEY"
+    }
     assert all(d["spec"]["progressDeadlineSeconds"] == 900 for d in deployments)
     assert all(d["kind"] in {"Deployment", "Service", "ConfigMap", "Ingress"}
                for d in documents)

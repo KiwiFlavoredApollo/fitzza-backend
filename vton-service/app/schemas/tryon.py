@@ -3,22 +3,79 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class FittingItemInput(BaseModel):
+    productId: int = Field(
+        description="피팅할 상품 ID",
+        json_schema_extra={"example": 101},
+    )
+    imageUrl: str | None = Field(
+        default=None,
+        description="추천된 특정 색상의 상품 이미지 URL (제공 시 기본 썸네일 대신 피팅 합성 입력으로 사용)",
+        json_schema_extra={"example": "https://image.msscdn.net/images/goods_img/green.jpg"},
+    )
 
 
 class FittingCreateRequest(BaseModel):
+    requestId: int | None = Field(
+        default=None,
+        description="추천 요청 ID (추천 대화 연동용)",
+        json_schema_extra={"example": 6},
+    )
     photoId: int | None = Field(
         default=None,
         description="사용자 전신 사진 ID (현재 미구현 시 기본 아바타로 피팅 진행)",
         json_schema_extra={"example": 1},
     )
-    productIds: list[int] = Field(
-        ...,
+    productIds: list[int] | None = Field(
+        default=None,
         min_length=1,
         max_length=5,
         description="피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
         json_schema_extra={"example": [101, 201]},
     )
+    items: list[FittingItemInput] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=5,
+        description="피팅할 상품 및 추천 색상별 이미지 목록 (productIds 대신 사용 권장)",
+        json_schema_extra={
+            "example": [
+                {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},
+                {"productId": 201, "imageUrl": "https://image.msscdn.net/images/goods_img/black.jpg"},
+            ]
+        },
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_items_and_product_ids(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        raw_items = data.get("items")
+        raw_pids = data.get("productIds")
+
+        if not raw_items and not raw_pids:
+            raise ValueError("productIds 또는 items 중 하나는 반드시 입력해야 합니다.")
+
+        # items가 제공된 경우 productIds를 자동으로 도출하여 하위 호환성 유지
+        if raw_items and isinstance(raw_items, list):
+            extracted_pids = []
+            for item in raw_items:
+                if isinstance(item, dict) and "productId" in item:
+                    try:
+                        extracted_pids.append(int(item["productId"]))
+                    except (ValueError, TypeError):
+                        pass
+                elif hasattr(item, "productId"):
+                    extracted_pids.append(int(getattr(item, "productId")))
+            if not raw_pids and extracted_pids:
+                data["productIds"] = extracted_pids
+
+        return data
 
 
 class FittingCreateResponse(BaseModel):
@@ -65,6 +122,11 @@ class FittingDetailResponse(BaseModel):
         description="피팅 요청 사용자 ID",
         json_schema_extra={"example": 7},
     )
+    requestId: int | None = Field(
+        default=None,
+        description="가상 피팅을 요청했던 추천 대화의 requestId",
+        json_schema_extra={"example": 6},
+    )
     userImageUrl: str | None = Field(
         default=None,
         description="사용자 원본 얼굴/전신 사진 URL (요청 시 업로드한 경우)",
@@ -106,6 +168,11 @@ class FittingSummaryResponse(BaseModel):
         description="피팅 요청 사용자 ID",
         json_schema_extra={"example": 7},
     )
+    requestId: int | None = Field(
+        default=None,
+        description="가상 피팅을 요청했던 추천 대화의 requestId",
+        json_schema_extra={"example": 6},
+    )
     status: Literal["PENDING", "COMPLETED", "FAILED"] = Field(
         description="피팅 진행 상태",
         json_schema_extra={"example": "COMPLETED"},
@@ -144,6 +211,22 @@ class FittingListResponse(BaseModel):
         default=0,
         description="전체 피팅 건수",
         json_schema_extra={"example": 5},
+    )
+    page: int | None = Field(
+        default=None,
+        description="현재 페이지 번호 (0부터 시작)",
+    )
+    size: int | None = Field(
+        default=None,
+        description="페이지 크기",
+    )
+    totalPages: int | None = Field(
+        default=None,
+        description="전체 페이지 수",
+    )
+    hasNext: bool = Field(
+        default=False,
+        description="다음 페이지 존재 여부 (무한 스크롤 트리거)",
     )
 
 

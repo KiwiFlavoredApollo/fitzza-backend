@@ -14,16 +14,42 @@ This directory provisions the first deployable AWS baseline for the approved Fit
 - One ARM64 `t4g.large` managed node group with `min=0`, `desired=0`, `max=1` for pilot workload capacity; the size increase was approved on 2026-10-21 while the usage plan is being revised.
 - The sole worker uses the AZ-c private subnet so the retained Qdrant EBS volume remains attachable when scaled to one node.
 - EventBridge Scheduler and Lambda automation for weekday 09:00 scale-up and 18:00 scale-down (`Asia/Seoul`), with scale-up blocked on weekends and configured exclusion dates
+- Approved exception: 2026-10-24 through 2026-10-26, each day 12:00 start / 23:00 scale-down request KST. Six one-time schedules call only the existing node scaler; no crawler Job or service-maintenance automation is installed.
 - EKS managed add-ons for VPC CNI, CoreDNS, kube-proxy, Pod Identity, and EBS CSI
 - An EKS Pod Identity role for AWS Load Balancer Controller v3.6.0
 - A private, encrypted, versioned S3 bucket for crawler and AI pipeline data
+- A CloudFront OAC distribution that can read only `public/product-images/*` from that private bucket
+- An encrypted VTON SQS job queue with 20-second long polling, a 300-second visibility timeout, three receive attempts, and a 14-day DLQ
+- A dedicated EKS Pod Identity role for `fitzza-vton`, scoped to the VTON asset bucket and source job queue
 - Immutable ECR repositories for the 11 services, Crawler, and FashionCLIP
 
 The single NAT Gateway is a temporary cost decision for this project. It is a single-AZ outbound dependency and must be reconsidered before production use.
 
+### Approved crawler operating-window exception
+
+`scripts/configure_approved_crawler_window.py` defaults to no AWS calls. An explicitly approved
+`--apply-approved-window --backup <new-directory>` operation checks the live Lambda source against the
+reviewed baseline, backs up its package and both weekday schedules, then applies only its code and six
+one-time Scheduler entries. It preserves all weekday schedule options and the existing execution role.
+Shutdowns are installed before starts. A partial API failure must be inspected; do not blindly rerun.
+
+The 10/26 09:00 request is rejected by the date/time guard. The existing weekday 18:00 payload carries
+`scheduledWeekdayShutdown=true` so it is skipped during this exception only. Manual `desiredSize=0`
+remains usable at any time. Weekend/blocked-date exclusions resume after 10/26 with no follow-up automation.
+The six exception schedules self-delete after execution. Node count/size, IAM roles, app replicas, CD and
+all crawler/AI Job suspend flags remain unchanged. Startup and termination take additional time;
+23:00 is a scale-down request, not proof that EC2 billing has stopped. Finish data work/checkpoints earlier.
+
+This narrow service-API patch intentionally creates Lambda code drift until the foundation template is
+next deployed through normal review; do not deploy the whole foundation just to change these hours.
+Future foundation deployment must retain the exception guard while these dates are in effect. If the
+template exceeds 51,200 bytes, use S3 template upload/`--template-url` rather than inline `--template-body`.
+
 The ALB itself is created from `infra/k8s/base/ingress.yaml` by AWS Load Balancer Controller. Replace `CHANGE_ME_ALB_SECURITY_GROUP_ID` with the stack output `AlbSecurityGroupId`. The controller manages the matching backend rule for pod targets; do not attach the public ALB security group to EKS nodes or data stores.
 
 RDS is deployed in the private subnets with `PubliclyAccessible=false`. Use the stack outputs `RdsEndpointAddress` and `RdsMasterSecretArn` when preparing the production Kubernetes Secret. The current Redis deployment is exposed only as a Kubernetes `ClusterIP`; `ManagedRedisSecurityGroupId` is reserved for a future managed Redis migration.
+
+VTON queue failures use native SQS redrive. The worker deletes a message only after successful processing; failed or malformed messages become visible again after 300 seconds and SQS moves them to `VtonJobDeadLetterQueueUrl` after the third receive. Do not grant the runtime role direct `SendMessage` access to the DLQ or reintroduce first-failure manual DLQ writes, because that bypasses the retry contract. The queues use SSE-SQS rather than a customer-managed KMS key to stay inside the approved pilot budget.
 
 ## Install the AWS Load Balancer Controller
 
@@ -47,7 +73,7 @@ kubectl get ingressclass alb
 
 ## Delivery pipeline
 
-`delivery.yaml` creates a GitHub connection, a CodePipeline V2 pipeline, and one CodeBuild project. A push to `develop` runs:
+`delivery.yaml` creates a GitHub connection, a CodePipeline V2 pipeline, and one CodeBuild project. A push to `main` runs:
 
 1. **Source**: the exact pushed commit through the GitHub App connection. The commit SHA is passed to CodeBuild as `SOURCE_COMMIT_ID`.
 2. **Build** (`buildspec.yml`): Gradle tests, both FastAPI test suites, and the root script tests run first. Only after they all pass does CodeBuild log in to ECR and run `scripts/publish_images.sh`, which publishes native `linux/arm64` images tagged with the 12-character commit SHA and checks each image's architecture.
@@ -111,13 +137,13 @@ Application updates use `maxSurge=0`, `maxUnavailable=1` because the single work
 
 Follow [the pilot deployment runbook](PILOT_DEPLOYMENT.md) for the Secret budget correction and the 10/20 validation sequence before the 10/21 pilot.
 
-Before enabling CD, an operator must provision the namespace, application Secret, service account, Redis/PVC, Qdrant/PVC, StorageClass and Qdrant NetworkPolicy, then apply `infra/k8s/bootstrap/delivery-rbac.yaml`. These operator-owned resources are excluded from `infra/k8s/overlays/delivery`; in particular CD never reapplies Qdrant's immutable volume claim template.
+Before enabling CD, an operator must provision the namespace, application Secret, the `fitzza-application` and `fitzza-vton` service accounts, Redis/PVC, Qdrant/PVC, StorageClass and Qdrant NetworkPolicy, then apply `infra/k8s/bootstrap/delivery-rbac.yaml`. These operator-owned resources are excluded from `infra/k8s/overlays/delivery`; in particular CD never reapplies Qdrant's immutable volume claim template.
 
 Set foundation parameter `DeliveryArtifactBucketName` to the delivery stack's `ArtifactBucketName` output. The S3 Gateway Endpoint otherwise allows only project data and ECR layers, so the VPC deploy worker cannot download or upload pipeline artifacts. This optional rule permits only that exact bucket for principals in this account; IAM must separately authorize each action.
 
 The deploy access entry maps only to Kubernetes group `fitzza-delivery`, bound to a Role in namespace `fitzza`. It cannot read Secrets, mutate PVCs/StatefulSets, create RBAC or manage cluster resources. The role can modify application workloads, which inherently use the pre-provisioned application credentials; do not attach privileged workload service accounts in this namespace.
 
-Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
+Resolve the foundation outputs and the EKS cluster security group, fill `delivery-parameters.example.json` into a local `delivery-parameters.json`, and redeploy with `EnableDeployStage=true`. Map `VtonJobQueueUrl` and `VtonJobDeadLetterQueueUrl` from the identically named foundation outputs; the renderer rejects missing, malformed, or identical queue URLs. The template rejects the update if any deploy input is missing. TLS is optional only for initial ALB reachability testing; for a production endpoint pass both `ApiDomain` and `AcmCertificateArn`. The renderer sets `REFRESH_COOKIE_SECURE` to `true` only when both TLS values are supplied and to `false` for HTTP-only reachability tests, because browsers drop Secure cookies over plain HTTP. Deploy preflight checks existing PVCs and Qdrant without reading Secret contents; a missing application Secret fails Pod startup and therefore rollout.
 
 ### Rollback
 
@@ -184,6 +210,51 @@ Do not rerun an old source revision whose deployspec predates the namespace-only
 - The EKS control plane and NAT Gateway charge continuously while the stack exists.
 - The S3 Gateway Endpoint avoids NAT processing charges for S3 traffic.
 - Delete the stack after the project, then manually review retained S3 data.
+- Mirrored product images add S3 storage and request charges plus CloudFront request and data-transfer
+  charges. `PriceClass_100` limits edge locations, while content-addressed object keys and immutable
+  caching reduce repeat origin reads. Review the current S3 and CloudFront pricing before deployment.
+
+## Product image audit and migration
+
+The product API currently returns externally hosted image URLs. Some source-CDN objects return `404`
+when the browser sends the `https://app.fitzza.site/` referrer even though a direct request succeeds.
+Run the migration in three reviewed phases. The commands below write reports locally; only the mirror
+command with its explicit flag writes to S3, and no command connects to PostgreSQL.
+
+1. Audit all representative, detail, option, size-guide, and color-mapping image references:
+
+   ```powershell
+   python scripts/migrate_product_images.py audit `
+     --output artifacts/product-image-audit.json
+   ```
+
+2. Deploy the reviewed foundation change. Record the `DataBucketName` and `ProductImageBaseUrl`
+   outputs. Keep Block Public Access enabled; CloudFront OAC is allowed to read only the image prefix.
+
+3. Mirror verified image bytes. The script checks the AWS account, validates image media type and
+   signature, uses content-addressed immutable keys, refuses conflicting objects, and reads metadata
+   back after upload:
+
+   ```powershell
+   python scripts/migrate_product_images.py mirror `
+     --manifest artifacts/product-image-audit.json `
+     --output artifacts/product-image-mapping.json `
+     --sql-output artifacts/product-image-migration.sql `
+     --account-id <AWS_ACCOUNT_ID> `
+     --bucket <DataBucketName> `
+     --public-base-url <ProductImageBaseUrl> `
+     --apply-s3-writes
+   ```
+
+The generated SQL starts a transaction but ends with `ROLLBACK`. Execute it against a maintenance or
+staging copy first, inspect affected row counts and sample CloudFront URLs, and replace the final line
+with `COMMIT` only for the reviewed production run. Each update includes the product/option/sequence
+identity and the expected old URL, so a concurrently changed row is not overwritten.
+
+Keep frontend `referrerPolicy="no-referrer"` and an image fallback until the migration is complete.
+Before production operation, enable encrypted CloudTrail S3 data events for the image prefix, review
+CloudFront standard metrics and alarms, and choose an access-logging destination with its own retention
+and encryption policy. These observability features can add request, ingestion, and storage charges.
 - ECR repositories use `EmptyOnDelete` so stack deletion can remove build images.
 - The data bucket is retained on stack deletion to prevent accidental data loss.
 

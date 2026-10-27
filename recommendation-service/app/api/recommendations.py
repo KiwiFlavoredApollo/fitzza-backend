@@ -1,7 +1,19 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Header, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    Header,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +28,8 @@ from app.services.cache_service import CacheService
 from app.schemas.recommendation import (
     InternalComboProductItem,
     InternalComboResponse,
+    PersonalizedPageResponse,
+    PersonalizedProductItem,
     RecommendationAcceptedResponse,
     RecommendationCreateRequest,
     RecommendationDetailResponse,
@@ -24,6 +38,8 @@ from app.schemas.recommendation import (
     RecommendedComboItem,
     RecommendedProductItem,
     SizeFeedbackRequest,
+    VisualSearchResultItem,
+    VisualSearchResponse,
 )
 
 FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
@@ -135,6 +151,41 @@ def _get_coordinator(app: Any) -> Any:
     return coordinator
 
 
+def _get_search_engine(app: Any) -> Any:
+    search_engine = getattr(app.state, "search_engine", None)
+    if search_engine is None:
+        coordinator = _get_coordinator(app)
+        search_engine = coordinator.engine
+        app.state.search_engine = search_engine
+    return search_engine
+
+
+def _get_personalized_feed_service(app: Any) -> Any:
+    feed_service = getattr(app.state, "personalized_feed_service", None)
+    if feed_service is None:
+        from app.services.personalized_feed_service import PersonalizedFeedService
+        from app.services.personalized_vector_engine import PersonalizedVectorEngine
+
+        settings = _get_settings_from_app(app)
+        search_engine = getattr(app.state, "search_engine", None)
+        qdrant_client = getattr(search_engine, "client", None) if search_engine else None
+
+        vector_engine = PersonalizedVectorEngine(
+            qdrant_client=qdrant_client,
+            collection_name=settings.qdrant_collection_name,
+            search_engine=search_engine,
+            qdrant_url=settings.qdrant_url,
+        )
+        feed_service = PersonalizedFeedService(
+            qdrant_client=qdrant_client,
+            collection_name=settings.qdrant_collection_name,
+            vector_engine=vector_engine,
+            qdrant_url=settings.qdrant_url,
+        )
+        app.state.personalized_feed_service = feed_service
+    return feed_service
+
+
 
 def _sync_user_body(
     size_resolver: Any,
@@ -205,11 +256,32 @@ def _extract_color_text(item: dict[str, Any]) -> str | None:
     return None
 
 
+def _extract_sizes_list(item: dict[str, Any]) -> list[str] | None:
+    raw_sizes = item.get("sizes")
+    if not isinstance(raw_sizes, list) or not raw_sizes:
+        return None
+
+    extracted: list[str] = []
+    for entry in raw_sizes:
+        if isinstance(entry, dict):
+            size_val = entry.get("size")
+            if size_val is not None and str(size_val).strip():
+                extracted.append(str(size_val).strip())
+        elif isinstance(entry, str) and entry.strip():
+            extracted.append(entry.strip())
+
+    return extracted if extracted else None
+
+
 def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
     size_rec = item.get("size_recommendation") or {}
     source_type = str(item.get("fit_source_type") or "none")
 
-    recommended_size = size_rec.get("size_label") or item.get("size")
+    recommended_size = (
+        size_rec.get("size_label")
+        or item.get("recommendedSize")
+        or item.get("size")
+    )
     raw_fit_score = size_rec.get("predicted_fit_score")
     fit_percent: float | None = None
     if isinstance(raw_fit_score, (int, float)):
@@ -239,7 +311,8 @@ def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
         price=price,
         imageUrl=item.get("image_url") or item.get("imageUrl"),
         color=item.get("color") or _extract_color_text(item),
-        size=recommended_size,
+        recommendedSize=recommended_size,
+        availableSizes=_extract_sizes_list(item),
         fitPercent=fit_percent,
         evidence=evidence,
     ).model_dump()
@@ -395,6 +468,54 @@ public_router = APIRouter(tags=["추천"])
 internal_router = APIRouter(tags=["내부 통신"])
 
 
+@public_router.get(
+    "/personalized",
+    response_model=PersonalizedPageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="홈 화면 개인화 추천 상품 피드 조회 (무한 스크롤)",
+    description=(
+        "사용자의 행동 이력(이상형 월드컵 1등, 찜/장바구니, 최근 구매 5건)을 바탕으로 "
+        "취향 벡터를 합성하여 5대 카테고리(상의, 하의, 아우터, 신발, 모자) 상품을 라운드 로빈 교차 인터리빙한 "
+        "개인화 피드를 제공합니다.\n\n"
+        "- 최근 구매 완료한 상품은 피드에서 제외됩니다.\n"
+        "- 비로그인(게스트) 또는 이력이 없는 유저는 호불호 없는 베이직 룩 추천으로 자동 폴백(Cold-Start)됩니다.\n"
+        "- 5분(300초)간 Redis에 캐싱되며, refresh=true 쿼리로 즉시 강제 갱신할 수 있습니다.\n"
+        "- 한 번에 size(기본 20개)씩 최대 4페이지(총 80개)까지 페이징 제공됩니다."
+    ),
+)
+async def get_personalized_recommendation_feed(
+    request: Request,
+    page: int = Query(default=0, ge=0, description="페이지 번호 (0부터 시작)"),
+    size: int = Query(default=20, gt=0, le=50, description="페이지당 상품 개수 (기본 20, 최대 50)"),
+    refresh: bool = Query(default=False, description="캐시 무효화 및 강제 새로고침 여부"),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+) -> PersonalizedPageResponse:
+    parsed_user_id = 0
+    if x_user_id is not None and str(x_user_id).strip():
+        try:
+            uid = int(str(x_user_id).strip())
+            if uid > 0:
+                parsed_user_id = uid
+        except (ValueError, TypeError):
+            parsed_user_id = 0
+
+    feed_service = await run_in_threadpool(
+        _get_personalized_feed_service,
+        request.app,
+    )
+    cache_service = _get_cache_service(request.app)
+
+    return await feed_service.get_personalized_feed_page(
+        user_id=parsed_user_id,
+        page=page,
+        size=size,
+        refresh=refresh,
+        cache_service=cache_service,
+    )
+
+
+
+
 @public_router.post(
     "",
     response_model=RecommendationAcceptedResponse,
@@ -468,7 +589,10 @@ def list_recommendations(
     return RecommendationHistoryPageResponse(
         content=items,
         page=page_data["page"],
+        size=page_data.get("size", size),
+        totalElements=page_data.get("totalElements", 0),
         totalPages=page_data["totalPages"],
+        hasNext=page_data.get("hasNext", False),
     )
 
 
@@ -502,12 +626,129 @@ def get_recommendation_detail(
 
     return RecommendationDetailResponse(
         requestId=record["requestId"],
+        queryText=str(record.get("queryText") or ""),
         status=record["status"],
         searchType=record["searchType"],
         tpoSummary=record["tpoSummary"],
         items=[RecommendedProductItem(**item) for item in record["items"]],
         combos=[RecommendedComboItem(**combo) for combo in record["combos"]],
         message=record["message"],
+    )
+
+
+MAX_SEARCH_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
+ALLOWED_SEARCH_IMAGE_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+}
+
+
+@public_router.post(
+    "/search/image",
+    response_model=VisualSearchResponse,
+    status_code=status.HTTP_200_OK,
+    summary="의류 이미지 기반 유사 상품 검색 (Visual Search)",
+    description=(
+        "업로드된 의류 사진을 Fashion-CLIP 비전 인코더로 분석하여, "
+        "유사도 0.75 이상으로 시각적으로 일치하는 상품 목록을 유사도 순으로 추천 및 반환합니다.\n\n"
+        "- 지원 이미지 형식: PNG, JPEG, JPG, WebP (최대 15MB)\n"
+        "- 별도 옵션 입력 없이 오로지 의류 사진 파일 하나만 첨부하면 됩니다."
+    ),
+)
+async def search_products_by_image(
+    request: Request,
+    file: UploadFile = File(..., description="유사 상품을 검색할 의류/스타일 사진 파일"),
+) -> VisualSearchResponse:
+    content_type = (file.content_type or "").lower().strip()
+    if content_type and content_type not in ALLOWED_SEARCH_IMAGE_TYPES:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_IMAGE_TYPE",
+            message="지원하지 않는 이미지 형식입니다. PNG, JPEG, WebP 파일만 업로드할 수 있습니다.",
+        )
+
+    image_bytes = await file.read(MAX_SEARCH_IMAGE_SIZE_BYTES + 1)
+    if not image_bytes:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="EMPTY_IMAGE",
+            message="이미지 파일 내용이 비어 있습니다.",
+        )
+    if len(image_bytes) > MAX_SEARCH_IMAGE_SIZE_BYTES:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="IMAGE_TOO_LARGE",
+            message="이미지 파일 크기는 최대 15MB까지 가능합니다.",
+        )
+
+    # 유효한 이미지인지 및 실제 포맷/애니메이션 검증
+    try:
+        import io
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            image_format = (img.format or "").upper()
+            is_animated = bool(getattr(img, "is_animated", False))
+            img.verify()
+    except Exception as exc:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="CORRUPTED_IMAGE",
+            message="손상되었거나 유효하지 않은 이미지 파일입니다.",
+        ) from exc
+
+    if image_format not in {"PNG", "JPEG", "WEBP"} or is_animated:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_IMAGE_TYPE",
+            message="지원하지 않는 이미지 형식입니다. PNG, JPEG, WebP 정지 이미지만 업로드할 수 있습니다.",
+        )
+
+    def _execute_search():
+        engine = _get_search_engine(request.app)
+        return engine.search_by_image(image_input=image_bytes)
+
+    try:
+        detected_category, detected_color, raw_results = await run_in_threadpool(_execute_search)
+    except ValueError as val_err:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_SEARCH_PARAMS",
+            message=str(val_err),
+        ) from val_err
+    except Exception as exc:
+        logger.error("이미지 유사 상품 검색 중 오류 발생: %s", exc, exc_info=True)
+        raise RecommendationApiError(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="SEARCH_ERROR",
+            message="이미지 유사 상품 검색 처리 중 서버 오류가 발생했습니다.",
+        ) from exc
+
+    items = [
+        VisualSearchResultItem(
+            productId=item.get("product_id") or 0,
+            productName=item.get("product_name") or "",
+            brandName=item.get("brand_name"),
+            category=item.get("category"),
+            subcategory=item.get("subcategory"),
+            price=item.get("price") or 0,
+            imageUrl=item.get("image_url"),
+            color=(
+                item.get("color_raw")
+                or (item.get("color_normalized")[0] if item.get("color_normalized") else None)
+            ),
+            similarityScore=item.get("similarity_score", 0.0),
+            productUrl=item.get("product_url"),
+        )
+        for item in raw_results
+    ]
+    return VisualSearchResponse(
+        detectedCategory=detected_category,
+        detectedColor=detected_color,
+        items=items,
+        totalCount=len(items),
     )
 
 

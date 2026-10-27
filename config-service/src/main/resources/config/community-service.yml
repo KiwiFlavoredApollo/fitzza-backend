@@ -2,6 +2,7 @@ server:
   port: 8084
 spring:
   datasource:
+    # 운영에서는 서비스 전용 계정을 필수로 사용한다.
     username: ${COMMUNITY_SERVICE_DB_USER}
     password: ${COMMUNITY_SERVICE_DB_PASSWORD}
     hikari:

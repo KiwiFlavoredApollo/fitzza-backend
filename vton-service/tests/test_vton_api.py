@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -124,7 +125,7 @@ def test_background_vton_success_flow(tmp_path: Path) -> None:
     result_url = f"http://api.fitzza.com/api/vton/{fitting_id}/image"
 
     with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()):
-        _run_background_vton(
+        completed = _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
             photo_id=None,
@@ -132,6 +133,7 @@ def test_background_vton_success_flow(tmp_path: Path) -> None:
             result_image_url=result_url,
         )
 
+    assert completed is True
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "COMPLETED"
@@ -157,7 +159,7 @@ def test_background_vton_failure_flow() -> None:
 
     fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
 
-    _run_background_vton(
+    completed = _run_background_vton(
         fitting_id=fitting_id,
         user_id=7,
         photo_id=1,
@@ -165,12 +167,43 @@ def test_background_vton_failure_flow() -> None:
         result_image_url="http://dummy/image",
     )
 
+    assert completed is False
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "FAILED"
     assert "가상 피팅 생성 중 오류가 발생했습니다." in detail["errorMessage"]
 
     mock_notif_client.send_fitting_failed.assert_called_once()
+
+
+def test_background_vton_retry_keeps_pending_without_failure_notification() -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+    mock_prod_client.resolve_product_item.side_effect = RuntimeError("temporary error")
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+    fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
+
+    completed = _run_background_vton(
+        fitting_id=fitting_id,
+        user_id=7,
+        photo_id=1,
+        product_ids=[101],
+        result_image_url="http://dummy/image",
+        finalize_failure=False,
+    )
+
+    assert completed is False
+    detail = repo.get_fitting_detail(fitting_id)
+    assert detail is not None
+    assert detail["status"] == "PENDING"
+    assert detail["errorMessage"] is None
+    mock_notif_client.send_fitting_failed.assert_not_called()
 
 
 def test_background_vton_duplicate_category_flow() -> None:
@@ -205,7 +238,7 @@ def test_background_vton_duplicate_category_flow() -> None:
 
     fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 102])
 
-    _run_background_vton(
+    completed = _run_background_vton(
         fitting_id=fitting_id,
         user_id=7,
         photo_id=None,
@@ -213,6 +246,7 @@ def test_background_vton_duplicate_category_flow() -> None:
         result_image_url="/api/vton/1/image",
     )
 
+    assert completed is False
     detail = repo.get_fitting_detail(fitting_id)
     assert detail is not None
     assert detail["status"] == "FAILED"
@@ -271,16 +305,21 @@ def test_get_fitting_image_serving(tmp_path: Path) -> None:
     fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
     repo.mark_completed(fitting_id, f"/api/vton/{fitting_id}/image")
 
-    # 아직 파일이 디스크에 없음 -> 404
+    # 인증 누락 -> 401
     client = TestClient(app)
-    resp_missing = client.get(f"/api/vton/{fitting_id}/image")
+    assert client.get(f"/api/vton/{fitting_id}/image").status_code == 401
+    # 타 사용자 -> 403
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "999"}).status_code == 403
+
+    # 아직 파일이 디스크에 없음 -> 404
+    resp_missing = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_missing.status_code == 404
 
-    # 이미지 파일 저장 후 요청 -> 200 image/png
+    # 이미지 파일 저장 후 본인 요청 -> 200 image/png
     img_bytes = _create_sample_png()
     (test_storage / f"{fitting_id}.png").write_bytes(img_bytes)
 
-    resp_ok = client.get(f"/api/vton/{fitting_id}/image")
+    resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_ok.status_code == 200
     assert resp_ok.headers["content-type"] == "image/png"
     assert resp_ok.content == img_bytes
@@ -364,7 +403,7 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     # 1. 삭제 전 정상 조회 가능
     resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
     assert resp.status_code == 200
-    resp_img = client.get(f"/api/vton/{fitting_id}/image")
+    resp_img = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_img.status_code == 200
 
     # 2. 타인이 삭제 요청 시 403 Forbidden
@@ -384,7 +423,7 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     assert resp_get_after.status_code == 404
 
     # 5. 삭제 후 이미지 서빙 차단 (404 Not Found)
-    resp_img_after = client.get(f"/api/vton/{fitting_id}/image")
+    resp_img_after = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_img_after.status_code == 404
 
     # 6. 이미 삭제된 피팅 재삭제 시도 시 404 Not Found
@@ -416,17 +455,79 @@ def test_list_user_fittings_flow() -> None:
     data = resp.json()
     assert data["totalCount"] == 2
     assert len(data["items"]) == 2
+    assert data["hasNext"] is False
+    assert data["page"] == 0
+    assert data["totalPages"] == 1
     # 최신순 정렬 확인 (f3, f1)
     ids = [item["fittingId"] for item in data["items"]]
     assert ids == [f3, f1]
 
-    # 4. 페이징 확인 (limit=1, offset=1)
-    resp_paged = client.get("/api/vton?limit=1&offset=1", headers={"X-User-Id": "7"})
-    assert resp_paged.status_code == 200
-    paged_data = resp_paged.json()
-    assert paged_data["totalCount"] == 2
-    assert len(paged_data["items"]) == 1
-    assert paged_data["items"][0]["fittingId"] == f1
+    # 4. 페이징 확인 (limit=1, offset=0 -> hasNext=True)
+    resp_p0 = client.get("/api/vton?limit=1&offset=0", headers={"X-User-Id": "7"})
+    assert resp_p0.status_code == 200
+    p0_data = resp_p0.json()
+    assert p0_data["totalCount"] == 2
+    assert len(p0_data["items"]) == 1
+    assert p0_data["hasNext"] is True
+    assert p0_data["totalPages"] == 2
+
+    # 5. page / size 쿼리 파라미터 표준 호환 확인 (page=1, size=1)
+    resp_page1 = client.get("/api/vton?page=1&size=1", headers={"X-User-Id": "7"})
+    assert resp_page1.status_code == 200
+    p1_data = resp_page1.json()
+    assert p1_data["totalCount"] == 2
+    assert len(p1_data["items"]) == 1
+    assert p1_data["items"][0]["fittingId"] == f1
+    assert p1_data["hasNext"] is False
+    assert p1_data["page"] == 1
+
+    # 6. 정렬되지 않은 offset 요청 시 page=None 반환 검증
+    resp_unaligned = client.get("/api/vton?limit=2&offset=1", headers={"X-User-Id": "7"})
+    assert resp_unaligned.status_code == 200
+    assert resp_unaligned.json()["page"] is None
+
+
+def test_list_user_fittings_filter_by_request_id() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    f1 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101], request_id=10)
+    f2 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[102], request_id=20)
+    f3 = repo.create_fitting(user_id=7, photo_id=None, product_ids=[103], request_id=10)
+    repo.create_fitting(user_id=8, photo_id=None, product_ids=[201], request_id=10)
+
+    # requestId=10 필터링
+    resp10 = client.get("/api/vton?requestId=10", headers={"X-User-Id": "7"})
+    assert resp10.status_code == 200
+    data10 = resp10.json()
+    assert data10["totalCount"] == 2
+    assert len(data10["items"]) == 2
+    ids = [item["fittingId"] for item in data10["items"]]
+    assert ids == [f3, f1]
+    for item in data10["items"]:
+        assert item["requestId"] == 10
+
+    # requestId=20 필터링
+    resp20 = client.get("/api/vton?requestId=20", headers={"X-User-Id": "7"})
+    assert resp20.status_code == 200
+    data20 = resp20.json()
+    assert data20["totalCount"] == 1
+    assert data20["items"][0]["fittingId"] == f2
+    assert data20["items"][0]["requestId"] == 20
+
+    # 존재하지 않는 requestId=999 필터링
+    resp999 = client.get("/api/vton?requestId=999", headers={"X-User-Id": "7"})
+    assert resp999.status_code == 200
+    data999 = resp999.json()
+    assert data999["totalCount"] == 0
+    assert data999["items"] == []
+
+    # 유효하지 않은 requestId (0 또는 음수) 요청 시 400 Bad Request
+    resp_invalid = client.get("/api/vton?requestId=0", headers={"X-User-Id": "7"})
+    assert resp_invalid.status_code == 400
+    resp_neg = client.get("/api/vton?requestId=-1", headers={"X-User-Id": "7"})
+    assert resp_neg.status_code == 400
 
 
 def test_post_vton_multipart_user_image_flow() -> None:
@@ -794,6 +895,247 @@ def test_clothing_transfer_exceeds_max_images() -> None:
     assert body["status"] == 400
     assert body["code"] == "BAD_REQUEST"
     assert "최대 5개" in body["message"]
+
+
+def test_post_vton_with_custom_items_and_image_urls() -> None:
+    client = TestClient(app)
+    custom_url = "https://image.msscdn.net/images/goods_img/green_sample.jpg"
+
+    with patch("app.api.vton._run_background_vton") as mock_bg:
+        resp = client.post(
+            "/api/vton",
+            json={
+                "items": [
+                    {"productId": 101, "imageUrl": custom_url},
+                    {"productId": 201, "imageUrl": "https://image.msscdn.net/black.jpg"},
+                ]
+            },
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        data = resp.json()
+        assert "fittingId" in data
+        assert data["status"] == "PENDING"
+
+        mock_bg.assert_called_once()
+        kwargs = mock_bg.call_args.kwargs
+        assert kwargs["product_ids"] == [101, 201]
+        assert kwargs["item_image_urls"] == {
+            101: custom_url,
+            201: "https://image.msscdn.net/black.jpg",
+        }
+
+
+def test_resolve_product_item_prefers_override_image_url() -> None:
+    client = ProductServiceClient()
+    override_url = "https://image.msscdn.net/images/goods_img/green.jpg"
+    fake_png = _create_sample_png()
+
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png) as mock_fetch, \
+         patch.object(client, "get_product", return_value={
+             "productName": "무신사 스탠다드 후드티",
+             "price": 45000,
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "상의",
+         }):
+        item = client.resolve_product_item(
+            product_id=101,
+            override_image_url=override_url,
+        )
+
+        assert item["productId"] == 101
+        assert item["productName"] == "무신사 스탠다드 후드티"
+        assert item["price"] == 45000
+        assert item["imageUrl"] == override_url
+        assert item["imageBytes"] == fake_png
+        mock_fetch.assert_called_once_with(override_url)
+
+
+def test_resolve_product_item_prefers_normal_price() -> None:
+    client = ProductServiceClient()
+    fake_png = _create_sample_png()
+
+    # normalPrice가 있을 때 우선 반영되는지 검증
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png), \
+         patch.object(client, "get_product", return_value={
+             "productName": "와이드 슬랙스",
+             "price": 26100,        # 세일가
+             "normalPrice": 29000,  # 정가 (우선순위)
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "하의",
+         }):
+        item = client.resolve_product_item(product_id=202)
+        assert item["productId"] == 202
+        assert item["price"] == 29000  # normalPrice 반영 확인
+        assert item["categoryName"] == "하의"
+
+    # normalPrice가 없거나 0일 때 세일가(price)로 폴백되는지 검증
+    with patch.object(client, "fetch_product_image_bytes", return_value=fake_png), \
+         patch.object(client, "get_product", return_value={
+             "productName": "와이드 슬랙스",
+             "price": 26100,
+             "normalPrice": None,
+             "thumbnailUrl": "https://default-thumbnail.jpg",
+             "categoryL1Name": "하의",
+         }):
+        item = client.resolve_product_item(product_id=202)
+        assert item["price"] == 26100  # price 폴백 확인
+
+
+
+def test_post_vton_with_request_id_json_and_get_detail() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    with patch("app.api.vton._run_background_vton"):
+        resp = client.post(
+            "/api/vton",
+            json={
+                "items": [{"productId": 101}],
+                "requestId": 6,
+            },
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        fitting_id = resp.json()["fittingId"]
+
+        # 상세 조회 검증
+        detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+        assert detail_resp.status_code == 200
+        detail_data = detail_resp.json()
+        assert detail_data["fittingId"] == fitting_id
+        assert detail_data["requestId"] == 6
+
+        # 목록 조회 검증
+        list_resp = client.get("/api/vton", headers={"X-User-Id": "7"})
+        assert list_resp.status_code == 200
+        list_data = list_resp.json()
+        assert len(list_data["items"]) >= 1
+        assert list_data["items"][0]["requestId"] == 6
+
+
+def test_post_vton_with_request_id_multipart_and_get_detail() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    fake_png = _create_sample_png()
+    files = {"userImage": ("face.png", fake_png, "image/png")}
+    data = {
+        "items": json.dumps([{"productId": 101}]),
+        "requestId": "15",
+    }
+
+    with patch("app.api.vton._run_background_vton"):
+        resp = client.post(
+            "/api/vton",
+            data=data,
+            files=files,
+            headers={"X-User-Id": "7"},
+        )
+        assert resp.status_code == 202
+        fitting_id = resp.json()["fittingId"]
+
+        detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+        assert detail_resp.status_code == 200
+        detail_data = detail_resp.json()
+        assert detail_data["fittingId"] == fitting_id
+        assert detail_data["requestId"] == 15
+
+
+def test_post_vton_with_invalid_multipart_request_id_returns_400() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    set_dependencies_for_tests(repo=repo)
+
+    fake_png = _create_sample_png()
+    files = {"userImage": ("face.png", fake_png, "image/png")}
+    data = {
+        "items": json.dumps([{"productId": 101}]),
+        "requestId": "invalid_number",
+    }
+
+    resp = client.post(
+        "/api/vton",
+        data=data,
+        files=files,
+        headers={"X-User-Id": "7"},
+    )
+    assert resp.status_code == 400
+    assert "requestId" in resp.json()["message"]
+
+
+def test_list_and_detail_vton_converts_result_image_url_to_presigned_url() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    mock_storage = MagicMock()
+    mock_storage.get_presigned_url.side_effect = lambda url, **kwargs: f"{url}?AWSAccessKeyId=KEY&Signature=SIGNED&Expires=3600" if url else ""
+
+    set_dependencies_for_tests(repo=repo, storage_client=mock_storage)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101], request_id=10)
+    raw_s3_url = f"https://fitzza-prod-assets-vton.s3.ap-northeast-2.amazonaws.com/fittings/{fitting_id}.png"
+    repo.mark_completed(fitting_id, result_image_url=raw_s3_url)
+
+    # 1. 목록 조회 시 resultImageUrl 서명 URL 변환 확인
+    list_resp = client.get("/api/vton", headers={"X-User-Id": "7"})
+    assert list_resp.status_code == 200
+    item = list_resp.json()["items"][0]
+    assert item["resultImageUrl"].startswith(raw_s3_url)
+    assert "Signature=SIGNED" in item["resultImageUrl"]
+
+    # 2. 상세 조회 시 resultImageUrl 서명 URL 변환 확인
+    detail_resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["resultImageUrl"].startswith(raw_s3_url)
+    assert "Signature=SIGNED" in detail["resultImageUrl"]
+
+    set_dependencies_for_tests(None, None, None, None)
+
+
+def test_fitting_image_endpoint_idor_security_and_s3_redirect(tmp_path: Path) -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_storage = MagicMock()
+    mock_storage.is_s3 = True
+    presigned_target = "https://fitzza-prod-assets-vton.s3.ap-northeast-2.amazonaws.com/fittings/1.png?AWSAccessKeyId=KEY&Signature=OK"
+    mock_storage.get_presigned_url.return_value = presigned_target
+
+    set_dependencies_for_tests(repo=repo, storage_client=mock_storage)
+    client = TestClient(app)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101])
+    repo.mark_completed(fitting_id, result_image_url="fittings/1.png")
+
+    # 1. 로그인 인증 헤더 누락 시 401 Unauthorized
+    resp_unauth = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_unauth.status_code == 401
+    assert resp_unauth.json()["code"] == "UNAUTHORIZED"
+
+    # 2. 유효하지 않은 x_user_id (0 또는 음수) 요청 시 401
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "0"}).status_code == 401
+    assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "-1"}).status_code == 401
+
+    # 3. 타인의 피팅 번호 조회 시 IDOR 차단 (403 Forbidden)
+    resp_forbidden = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "999"})
+    assert resp_forbidden.status_code == 403
+    assert resp_forbidden.json()["code"] == "FORBIDDEN"
+
+    # 4. 존재하지 않는 피팅 조회 시 404 Not Found
+    resp_notfound = client.get("/api/vton/99999/image", headers={"X-User-Id": "7"})
+    assert resp_notfound.status_code == 404
+
+    # 5. 본인 피팅 정상 조회 시 S3 307 Temporary Redirect 및 Location, Cache-Control 헤더 확인
+    resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"}, follow_redirects=False)
+    assert resp_ok.status_code == 307
+    assert resp_ok.headers["location"] == presigned_target
+    assert resp_ok.headers["cache-control"] == "no-cache, no-store, must-revalidate"
+
+    set_dependencies_for_tests(None, None, None, None)
+
+
+
 
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
+from src.musinsa_essential import ESSENTIAL_API_URL, apply_essential_material
 from src.musinsa_parser import normalize_musinsa_product
 from src.musinsa_size import normalize_actual_size
 
@@ -110,6 +111,39 @@ async def _fetch_actual_size(page, product_id: int) -> tuple[dict[str, Any] | No
     return payload.get("data"), record
 
 
+async def _fetch_essential(page, product_id: int) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """
+    상품정보제공고시(제품 소재 등) API를 직접 호출한다.
+    소재는 상세 페이지의 goodsMaterial이 아니라 이 응답에 있다.
+    """
+    api_url = ESSENTIAL_API_URL.format(product_id=product_id)
+
+    response = await page.context.request.get(
+        api_url,
+        headers={
+            "Referer": f"https://www.musinsa.com/products/{product_id}",
+        },
+        timeout=30_000,
+    )
+
+    record: dict[str, Any] = {
+        "url": api_url,
+        "status": response.status,
+        "data": None,
+    }
+
+    if not response.ok:
+        return None, record
+
+    try:
+        payload = await response.json()
+    except Exception:
+        return None, record
+
+    record["data"] = payload
+    return (payload if isinstance(payload, dict) else None), record
+
+
 async def crawl_product(
     url: str,
     headless: bool = True,
@@ -145,6 +179,14 @@ async def crawl_product(
 
             # product.json에 실측 데이터 병합
             normalized["size"] = normalize_actual_size(actual_size_raw)
+
+            # 상품정보제공고시의 제품 소재 병합 (없거나 "상세페이지 참조"면 null 유지)
+            essential_raw, essential_network = await _fetch_essential(
+                page,
+                int(product_id),
+            )
+            network_json.append(essential_network)
+            apply_essential_material(normalized, essential_raw)
 
             # 화면 검증용으로 사이즈 탭도 한 번 열어둠
             await _open_size_section(page)

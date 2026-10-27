@@ -99,7 +99,7 @@ class Settings:
         default_factory=lambda: os.getenv("VTON_STORAGE_BACKEND", "local")
     )
     aws_s3_bucket_name: str = field(
-        default_factory=lambda: os.getenv("AWS_S3_BUCKET_NAME", "fitzza-assets")
+        default_factory=lambda: os.getenv("AWS_S3_BUCKET_NAME", "fitzza-prod-assets-vton")
     )
     aws_endpoint_url: str = field(
         default_factory=lambda: os.getenv("AWS_ENDPOINT_URL", "")
@@ -108,14 +108,36 @@ class Settings:
         default_factory=lambda: os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
     )
     aws_access_key_id: str = field(
-        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "test")
+        default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "")
     )
     aws_secret_access_key: str = field(
-        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+        default_factory=lambda: os.getenv("AWS_SECRET_ACCESS_KEY", "")
     )
     cloudfront_domain: str = field(
         default_factory=lambda: os.getenv("CLOUDFRONT_DOMAIN", "")
     )
+    queue_backend: str = field(
+        default_factory=lambda: os.getenv("VTON_QUEUE_BACKEND", os.getenv("QUEUE_BACKEND", "memory")).strip().lower()
+    )
+    aws_sqs_queue_url: str = field(
+        default_factory=lambda: os.getenv("AWS_SQS_QUEUE_URL", "")
+    )
+    aws_sqs_dlq_url: str = field(
+        default_factory=lambda: os.getenv("AWS_SQS_DLQ_URL", "")
+    )
+    sqs_visibility_timeout: int = field(
+        default_factory=lambda: int(os.getenv("SQS_VISIBILITY_TIMEOUT", "300"))
+    )
+    sqs_wait_time_seconds: int = field(
+        default_factory=lambda: int(os.getenv("SQS_WAIT_TIME_SECONDS", "20"))
+    )
+    sqs_max_number_of_messages: int = field(
+        default_factory=lambda: int(os.getenv("SQS_MAX_NUMBER_OF_MESSAGES", "1"))
+    )
+    sqs_max_receive_count: int = field(
+        default_factory=lambda: int(os.getenv("SQS_MAX_RECEIVE_COUNT", "3"))
+    )
+
 
 
     def get_photos_dir(self) -> Path:

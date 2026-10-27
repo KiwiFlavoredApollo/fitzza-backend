@@ -2,11 +2,20 @@ server:
   port: 8082
 spring:
   datasource:
+    # 운영에서는 서비스 전용 계정을 필수로 사용한다.
     username: ${PRODUCT_SERVICE_DB_USER}
     password: ${PRODUCT_SERVICE_DB_PASSWORD}
     hikari:
       schema: product_service
+  flyway:
+    enabled: true
+    schemas: product_service
+    default-schema: product_service
+    create-schemas: true
+    baseline-on-migrate: true
   jpa:
+    hibernate:
+      ddl-auto: validate
     properties:
       hibernate:
         default_schema: product_service

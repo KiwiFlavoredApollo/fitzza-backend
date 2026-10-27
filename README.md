@@ -14,7 +14,8 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 | Commerce | User / Product / Order / Community / Review | 8081-8085 |
 | Messaging | Notification | 8086 |
 | AI | Virtual Try-On / Recommendation (FastAPI) | 8091-8092 |
-| Infra | PostgreSQL / Redis / LocalStack(S3, SQS) | 5432 / 6379 / 4566 |
+| Infra | PostgreSQL / Redis / LocalStack(S3, SQS) / Qdrant | 5432 / 6379 / 4566 / 6333 |
+| Observability | Jaeger (UI / OTLP HTTP) | 16686 / 4318 |
 
 ## 빠른 시작
 
@@ -27,6 +28,12 @@ docker compose up --build -d
 ```
 
 Windows PowerShell에서는 `Copy-Item .env.example .env`를 사용합니다.
+
+VTON API와 SQS 워커는 `docker compose up --build -d vton-service vton-worker`로 실행합니다. 두 서비스는 각각 빌드·의존성을 정의하고 서비스 URL·PostgreSQL·Redis·AWS 환경변수 확장 필드를 직접 참조하며, 워커는 `python -m app.worker`로 실행하고 HTTP 포트를 공개하지 않습니다. 기존 `.env`를 사용할 때는 `VTON_QUEUE_BACKEND`를 `sqs`, `VTON_STORAGE_BACKEND`를 `s3`로 설정하고 큐·DLQ 주소를 `.env.example`의 LocalStack 주소에 맞추세요. API와 워커가 서로 다른 컨테이너이므로 이미지는 공통 S3 저장소를 사용해야 합니다. `memory` 큐 모드는 API 내부에서 처리하며 별도 워커에 작업을 전달하지 않습니다.
+
+Config Server 주소 환경변수는 `CONFIG_SERVICE_URL`입니다. Compose와 Kubernetes에서는 `http://config-service:8888`을 주입하며, IDE에서 직접 실행할 때는 기본값 `http://localhost:8888`을 사용합니다. 직접 실행 시 주소를 변경하려면 실행 설정의 환경변수에 지정합니다.
+
+서비스 디스커버리 주소 환경변수는 `DISCOVERY_SERVICE_URL`입니다. Compose와 Kubernetes에서는 `http://discovery-service:8761/eureka/`를 주입하며, IDE에서 직접 실행할 때는 기본값 `http://localhost:8761/eureka/`를 사용합니다. 직접 실행 시 `.env`는 자동으로 로드되지 않으므로 주소 변경이 필요하면 실행 설정의 환경변수에 지정합니다.
 
 `JWT_SECRET`은 user-service가 Access Token을 서명하고 gateway-service가 검증하는 데 함께 쓰는 32바이트 이상 문자열입니다. 로컬과 배포 환경 모두 `.env` 또는 환경 변수로 직접 설정해야 합니다. 값이 없거나 비어 있으면 Docker Compose가 시작되지 않습니다. `.env.example`에는 비밀값을 제공하지 않습니다.
 
@@ -49,7 +56,7 @@ user-service의 8081 포트와 notification-service의 8086 포트는 호스트�
 
 브라우저에서 Gateway를 호출할 FE 주소는 `CORS_ALLOWED_ORIGINS`(쉼표로 구분, 기본 `http://localhost:3000,http://localhost:5173`)로 정합니다. 목록에 없는 주소에서 온 브라우저 요청은 403으로 거부됩니다. 허용한 주소에서는 쿠키를 포함한 요청을 보낼 수 있습니다. Access Token은 `Authorization` 헤더로, Refresh Token은 HttpOnly 쿠키로 전달합니다.
 
-토큰 유효기간은 `JWT_EXPIRATION_SECONDS`(Access Token, 1~900초, 기본 15분)와 `JWT_REFRESH_EXPIRATION_SECONDS`(Refresh Token, 기본 30일)로 바꿀 수 있습니다. Refresh Token은 Redis에 저장합니다.
+토큰 유효기간은 `JWT_ACCESS_EXPIRATION_SECONDS`(Access Token, 1~900초, 기본 15분)와 `JWT_REFRESH_EXPIRATION_SECONDS`(Refresh Token, 기본 30일)로 바꿀 수 있습니다. Refresh Token은 Redis에 저장합니다.
 
 로그아웃(`POST /api/auth/signout`)은 쿠키의 Refresh Token을 Redis에서 지우고 쿠키를 만료시킵니다. `Authorization: Bearer <access-token>` 헤더를 함께 보내면 그 Access Token도 남은 만료 시간 동안 Redis 블랙리스트에 올라가고, Gateway는 블랙리스트에 있는 토큰을 401 `INVALID_TOKEN`으로 거부합니다. Gateway가 Redis를 조회하지 못하면 토큰이 실린 요청은 503 `AUTH_UNAVAILABLE`로 응답합니다.
 
@@ -86,6 +93,7 @@ API 문서(Swagger UI)는 Gateway 한 곳에서 봅니다: <http://localhost:808
 - 로컬에서 직접 확인 가능한 상태 주소: Config <http://localhost:8888/health>, Discovery <http://localhost:8761/health>, Gateway <http://localhost:8080/health>, Virtual Try-On <http://localhost:8091/health>, Recommendation <http://localhost:8092/health>
 - Eureka 대시보드: <http://localhost:8761>
 - LocalStack 상태: <http://localhost:4566/_localstack/health>
+- Jaeger UI(분산 추적): <http://localhost:16686> — Compose는 샘플링 `1.0`과 OTLP `http://jaeger:4318/v1/traces`를 넣습니다. yml 기본 샘플링은 `0.0`(꺼짐)이라 운영에 그대로 올려도 전송하지 않습니다. 운영에서 켤 때는 `MANAGEMENT_TRACING_SAMPLING_PROBABILITY`와 `MANAGEMENT_OTLP_TRACING_ENDPOINT`를 함께 설정합니다. config-service·discovery-service는 추적 대상에서 제외합니다.
 
 Gateway를 통한 예시 호출:
 
@@ -99,9 +107,31 @@ curl -X POST http://localhost:8080/api/v1/recommendations \
   -d '{"user_id":"00000000-0000-0000-0000-000000000001","limit":10}'
 ```
 
+## 서비스별 DB 계정
+
+user·community·review·notification-service는 서비스 전용 DB 계정(`<스키마>_app`, 예: `user_service_app`)으로 접속할 수 있습니다.
+각 계정은 자기 스키마의 소유자라서 그 안에서만 Flyway로 테이블을 만들고 바꿀 수 있고, 다른 서비스 스키마에는 접근할 수 없습니다.
+
+- 앱 설정: `USER_SERVICE_DB_USER`/`USER_SERVICE_DB_PASSWORD`처럼 서비스별 값이 있으면 그 계정을 쓰고, 없으면 공용 `POSTGRES_USER`/`POSTGRES_PASSWORD`를 씁니다.
+- 계정 준비: 관리자 계정(로컬 `POSTGRES_USER`, RDS 마스터 계정)으로 `infra/postgres/service-accounts.sql`을 실행합니다. 비밀번호는 `USER_SERVICE_DB_PASSWORD` 같은 환경 변수로만 받고, 값이 없는 서비스는 건너뜁니다. 계정 생성, 스키마 소유자 지정, 관리자 계정이 만든 기존 테이블의 소유자 이전을 한 번에 하며 다시 실행해도 됩니다. psql 15 이상이 필요합니다.
+
+```bash
+psql -v ON_ERROR_STOP=1 -U <관리자> -d fitzza -f infra/postgres/service-accounts.sql
+```
+
+## DB 스키마 (Flyway)
+
+현재 **product-service**, **order-service**는 `src/main/resources/db/migration`의 Flyway 스크립트로 테이블을 관리하고, Hibernate `ddl-auto`는 `validate`입니다. 나머지 JPA 서비스는 아직 `ddl-auto: update`이며, 같은 규칙으로 서비스 담당자가 Flyway를 붙입니다. `infra/postgres/init.sql`은 서비스별 PostgreSQL 스키마만 만듭니다.
+
+공통 규칙:
+
+1. **버전 네이밍:** `V1__`, `V2__` … 단순 순번. 동시에 작업할 때는 슬랙에 번호를 미리 공유한다.
+2. **baseline-on-migrate:** 이미 테이블이 있는 로컬/RDS는 현재 상태를 baseline(V1)으로 기록하고 V1 SQL은 다시 실행하지 않는다. 빈 스키마(신규 볼륨·RDS)에서는 V1이 테이블을 생성한다.
+3. **스크립트 불변:** 한 번 머지·실행된 SQL은 직접 수정하지 않고, 변경은 새 버전 파일(`V…sql`)을 추가한다.
+
 ## 기존 사용자 DB 업그레이드
 
-기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 JPA가 명시한 이름으로 제약을 생성합니다.
+기존 DB를 재사용하면 `user_service.users`의 email과 nickname 유니크 제약 이름을 각각 `uk_users_email`, `uk_users_nickname`으로 변경한 뒤 시작합니다. 이전 자동 생성 이름의 제약이 남으면 동시 가입 시 중복 계정 오류로 분류되지 않을 수 있습니다. 신규 DB에는 엔티티 매핑에 명시한 이름으로 제약을 생성합니다(user-service가 Flyway로 전환되면 마이그레이션 기준으로 바뀝니다).
 
 성별 코드가 `W`/`M`에서 `F`/`M`으로 바뀌었습니다. 예전 DB에는 `gender`에 `W`/`M`만 허용하는 검사 제약이 남아 있어 `F`를 저장하지 못하므로, 기존 DB를 재사용하면 아래를 한 번 실행합니다. 체형(`body_type`) 컬럼은 더 이상 쓰지 않으며 남아 있어도 동작에는 영향이 없습니다.
 
@@ -146,7 +176,7 @@ AWS 배포 기반은 [infra/aws/cloudformation/README.md](infra/aws/cloudformati
 
 ## 구현 원칙
 
-- 서비스별 데이터 소유권을 전제로 PostgreSQL 스키마를 분리했습니다.
+- 서비스별 데이터 소유권을 전제로 PostgreSQL 스키마를 분리했습니다. product·order는 Flyway로 DDL을 관리하고, 다른 JPA 서비스도 동일 정책으로 전환합니다.
 - 비동기 연동의 개발 환경은 LocalStack의 SQS/S3로 대체합니다.
 - 운영 비밀값은 저장소에 커밋하지 않고 환경 변수로 주입합니다.
 - 인증은 Gateway의 Access Token 검증, Redis에 저장하는 Refresh Token, 로그아웃 시 Access Token 블랙리스트로 구현되어 있습니다. 서비스 간 호출은 서비스별 토큰(`X-Service-Token`)으로 인증하며, 관측성 대시보드는 아직 구성하지 않았습니다.

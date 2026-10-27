@@ -2,11 +2,20 @@ server:
   port: 8083
 spring:
   datasource:
+    # 운영에서는 서비스 전용 계정을 필수로 사용한다.
     username: ${ORDER_SERVICE_DB_USER}
     password: ${ORDER_SERVICE_DB_PASSWORD}
     hikari:
       schema: order_service
+  flyway:
+    enabled: true
+    schemas: order_service
+    default-schema: order_service
+    create-schemas: true
+    baseline-on-migrate: true
   jpa:
+    hibernate:
+      ddl-auto: validate
     properties:
       hibernate:
         default_schema: order_service

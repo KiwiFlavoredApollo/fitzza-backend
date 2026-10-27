@@ -4,8 +4,8 @@ metadata:
   name: fitzza-app-config
 data:
   AWS_DEFAULT_REGION: ap-northeast-2
-  CONFIG_SERVER_URL: http://config-service:8888
-  EUREKA_URL: http://discovery-service:8761/eureka/
+  CONFIG_SERVICE_URL: http://config-service:8888
+  DISCOVERY_SERVICE_URL: http://discovery-service:8761/eureka/
   POSTGRES_HOST: CHANGE_ME_RDS_ENDPOINT
   POSTGRES_PORT: "5432"
   POSTGRES_DB: fitzza
@@ -13,13 +13,21 @@ data:
   REDIS_PORT: "6379"
   QDRANT_URL: http://qdrant:6333
   VTON_SERVICE_URL: http://vton-service:8000
-  RECOMMENDATION_URL: http://recommendation-service:8000
   RECOMMENDATION_SERVICE_URL: http://recommendation-service:8000
   USER_SERVICE_URL: http://user-service:8081
   PRODUCT_SERVICE_URL: http://product-service:8082
   NOTIFICATION_SERVICE_URL: http://notification-service:8086
   SPRING_PROFILES_ACTIVE: prod
+  # Java 서비스 10개가 동시에 기동할 때 JIT(C2) 컴파일 CPU를 줄인다. 처리량보다 기동 부하를 우선한다(Python 서비스는 무시).
+  JAVA_TOOL_OPTIONS: -XX:TieredStopAtLevel=1 -XX:+UseSerialGC
   SPRINGDOC_API_DOCS_ENABLED: "false"
   SPRINGDOC_SWAGGER_UI_ENABLED: "false"
   CORS_ALLOWED_ORIGINS: CHANGE_ME_FRONTEND_ORIGIN
+  REFRESH_COOKIE_SECURE: CHANGE_ME_REFRESH_COOKIE_SECURE
+  VTON_STORAGE_BACKEND: s3
+  AWS_S3_BUCKET_NAME: fitzza-prod-assets-vton
+  VTON_QUEUE_BACKEND: sqs
+  AWS_SQS_QUEUE_URL: CHANGE_ME_VTON_JOB_QUEUE_URL
+  AWS_SQS_DLQ_URL: CHANGE_ME_VTON_JOB_DLQ_URL
+  SQS_MAX_RECEIVE_COUNT: "3"
 
