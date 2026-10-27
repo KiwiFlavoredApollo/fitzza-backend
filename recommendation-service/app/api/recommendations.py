@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -43,7 +43,7 @@ from app.schemas.recommendation import (
     VisualSearchResultItem,
     VisualSearchResponse,
 )
-from app.schemas.analytics import AnalyticsResponse
+from app.schemas.analytics import AnalyticsResponse, PeriodAnalytics
 
 FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
     "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
@@ -634,21 +634,24 @@ def list_recommendations(
 
 @public_router.get(
     "/analytics",
-    response_model=AnalyticsResponse,
+    response_model=PeriodAnalytics | AnalyticsResponse,
     status_code=status.HTTP_200_OK,
     summary="관리자 대시보드 통계 집계 조회",
-    description="현재 날짜(KST)를 기준으로 일간/주간/월간/연간 토큰 사용량 추이, 인기 스타일 키워드, 추천 상품 통계를 집계하여 반환합니다.",
+    description="현재 날짜(KST)를 기준으로 period에 지정한 기간의 통계를 반환합니다. period를 생략하면 모든 기간의 통계를 반환합니다.",
 )
 def get_recommendation_analytics(
     request: Request,
+    period: Literal["daily", "weekly", "monthly", "yearly"] | None = Query(default=None),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-) -> AnalyticsResponse:
+) -> PeriodAnalytics | AnalyticsResponse:
     settings = _get_settings(request)
     _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
     repository = _get_repository(request)
     vton_client = _get_vton_client(request)
     data = repository.get_analytics_data(vton_client=vton_client)
+    if period is not None:
+        return PeriodAnalytics(**data[period])
     return AnalyticsResponse(**data)
 
 

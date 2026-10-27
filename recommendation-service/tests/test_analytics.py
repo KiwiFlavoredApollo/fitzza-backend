@@ -192,7 +192,11 @@ def test_analytics_data_aggregation_and_vton_tokens(repo):
     assert shirt["brand"] == "무신사 스탠다드"
 
 
-def test_analytics_api_endpoint():
+def test_analytics_api_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        "app.clients.vton_client.VtonServiceClient.get_token_usage_in_range",
+        lambda *args, **kwargs: [],
+    )
     client = TestClient(app)
     fake_repo = RecommendationRepository(db_path=":memory:")
     app.state.repository = fake_repo
@@ -246,6 +250,24 @@ def test_analytics_api_endpoint():
         headers={"X-User-Id": "4"},
     )
     assert compat_res.status_code == 200
+
+    for path in ("/api/recommendations/analytics", "/api/v1/recommendations/analytics"):
+        for period in ("daily", "weekly", "monthly", "yearly"):
+            period_res = client.get(
+                path,
+                params={"period": period},
+                headers={"X-User-Id": "4"},
+            )
+            assert period_res.status_code == 200
+            assert period_res.json() == body[period]
+
+    for period in ("invalid", "DAILY", ""):
+        invalid_res = client.get(
+            "/api/recommendations/analytics",
+            params={"period": period},
+            headers={"X-User-Id": "4"},
+        )
+        assert invalid_res.status_code == 400
 
 
 def test_analytics_with_mocked_vton_client(repo):
