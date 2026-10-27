@@ -50,10 +50,13 @@ def test_analytics_empty_db(repo):
     assert monthly["endDate"] == "2026-10-27"
     assert [u["label"] for u in monthly["usage"]] == ["1주", "2주", "3주", "4주", "5주"]
 
-    # Check yearly
+    # Check yearly: Jan 1 ~ Oct 27, 1월 ~ 10월
     yearly = data["yearly"]
     assert yearly["label"] == "연간"
-    assert len(yearly["usage"]) == 12  # 1월 ~ 12월
+    assert yearly["startDate"] == "2026-01-01"
+    assert yearly["endDate"] == "2026-10-27"
+    assert len(yearly["usage"]) == 10  # 1월 ~ 10월 (현재 월까지)
+    assert yearly["usage"][-1]["label"] == "10월"
 
 
 def test_analytics_calendar_weeks_and_partial_month(repo):

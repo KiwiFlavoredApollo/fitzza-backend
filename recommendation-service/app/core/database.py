@@ -1045,9 +1045,9 @@ class RecommendationRepository:
         monthly_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         monthly_end = daily_end
 
-        # 4. 연간 (올해 1월 1일 00:00:00 ~ 12월 31일 23:59:59.999999 KST)
+        # 4. 연간 (올해 1월 1일 00:00:00 ~ 현재 날짜 23:59:59.999999 KST)
         yearly_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        yearly_end = yearly_start.replace(year=yearly_start.year + 1) - timedelta(microseconds=1)
+        yearly_end = daily_end
 
         daily_data = self._aggregate_period_analytics("daily", "일간", daily_start, daily_end)
         weekly_data = self._aggregate_period_analytics("weekly", "주간", weekly_start, weekly_end)
@@ -1297,7 +1297,8 @@ class RecommendationRepository:
                 label = f"{w}주"
                 buckets[label] = {"label": label, "input": 0, "output": 0}
         elif period == "yearly":
-            for m in range(1, 13):
+            max_month = end_dt.month
+            for m in range(1, max_month + 1):
                 label = f"{m}월"
                 buckets[label] = {"label": label, "input": 0, "output": 0}
         return buckets
