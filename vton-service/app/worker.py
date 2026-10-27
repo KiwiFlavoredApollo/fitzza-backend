@@ -6,9 +6,15 @@ import sys
 import time
 from typing import Any, Optional
 
-from app.api.vton import _run_background_vton
 from app.clients.sqs_client import SqsClient, SqsClientError
 from app.core.config import Settings, get_settings
+from app.services.vton_generator import VtonValidationError
+from app.services.vton_processor import (
+    _run_background_vton,
+    get_last_vton_error,
+    get_notification_client,
+    get_repo,
+)
 
 logger = logging.getLogger("vton_worker")
 logging.basicConfig(
@@ -85,6 +91,9 @@ class VtonWorker:
                 vton_kwargs["item_image_urls"] = item_image_urls
             completed = _run_background_vton(**vton_kwargs)
             if not completed:
+                last_err = get_last_vton_error()
+                if isinstance(last_err, VtonValidationError):
+                    raise last_err
                 raise RuntimeError("VTON background pipeline reported failure")
 
             # 2. 작업 성공 시 SQS 대기열에서 메시지 삭제
@@ -93,6 +102,35 @@ class VtonWorker:
 
             logger.info("SQS 피팅 작업 성공 및 메시지 삭제 완료 (fittingId=%s)", fitting_id)
             return True
+
+        except VtonValidationError as val_exc:
+            logger.warning(
+                "SQS 피팅 작업 검증 오류 발생(재시도 불가) -> 즉시 FAILED 처리 및 메시지 삭제 "
+                "(fittingId=%s, attempt=%s): %s",
+                fitting_id,
+                receive_count,
+                val_exc,
+            )
+            if get_last_vton_error() is None:
+                try:
+                    get_repo().update_fitting_failed(
+                        fitting_id=fitting_id,
+                        error_message=str(val_exc),
+                    )
+                    get_notification_client().send_fitting_failed(
+                        user_id=user_id,
+                        fitting_id=fitting_id,
+                        request_id_header=request_id_header,
+                    )
+                except Exception as db_exc:
+                    logger.warning(
+                        "검증 오류 상태 기록 중 예외 발생 (fittingId=%s): %s",
+                        fitting_id,
+                        db_exc,
+                    )
+            if receipt_handle:
+                self.sqs_client.delete_message(receipt_handle)
+            return False
 
         except Exception as exc:
             logger.error(
