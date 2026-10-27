@@ -79,10 +79,15 @@ def download_curated_products(s3, bucket: str, prefix: str, data_root: Path) -> 
     with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as pool:
         futures = [pool.submit(download_product, s3, bucket, record, data_root / record["path"])
                    for record in records]
-        for future in as_completed(futures):
-            total_bytes += future.result()
-            if total_bytes > MAX_TOTAL_BYTES:
-                raise ValueError("Curated products exceed total size limit")
+        try:
+            for future in as_completed(futures):
+                total_bytes += future.result()
+                if total_bytes > MAX_TOTAL_BYTES:
+                    raise ValueError("Curated products exceed total size limit")
+        except BaseException:
+            for pending in futures:
+                pending.cancel()
+            raise
     return {"input_layout": "manifest", "product_count": len(records),
             "source_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest()}
 

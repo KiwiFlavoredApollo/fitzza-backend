@@ -3,6 +3,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -106,6 +107,30 @@ class DownloadCuratedProductsTests(unittest.TestCase):
         data = product_bytes("101")
         with self.assertRaisesRegex(ValueError, "duplicate product ID"):
             self.download([manifest_record("101", data), manifest_record("101", data, "하의")], {})
+
+    def test_failure_cancels_downloads_not_yet_started(self):
+        bodies, records = {}, []
+        for product_id in range(101, 121):
+            data = product_bytes(str(product_id))
+            records.append(manifest_record(str(product_id), data))
+            bodies[records[-1]["s3_key"]] = data
+        bodies[records[0]["s3_key"]] = b"tampered"
+        s3 = fake_run(records, bodies)
+        requested = []
+        original_get = s3.get_object
+
+        def tracking_get(Bucket, Key):
+            requested.append(Key)
+            if Key != records[0]["s3_key"] and not Key.endswith("manifest.json"):
+                time.sleep(0.05)
+            return original_get(Bucket, Key)
+
+        s3.get_object = tracking_get
+        with patch("src.jev_job.DOWNLOAD_WORKERS", 1), \
+                self.assertRaisesRegex(ValueError, "digest mismatch"):
+            download_curated_products(s3, "bucket", PREFIX, Path(tempfile.mkdtemp()) / "data")
+        product_requests = [key for key in requested if not key.endswith("manifest.json")]
+        self.assertLessEqual(len(product_requests), 2)
 
     def test_rejects_empty_manifest(self):
         with self.assertRaisesRegex(ValueError, "manifest product list"):
