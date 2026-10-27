@@ -527,11 +527,11 @@ Resources:
           QueueName: must-never-change
     Properties:
       MessageRetentionPeriod: 1209600
-      QueueName: !Sub '${ProjectName}-${Environment}-vton-jobs-dlq'
+      QueueName: vton-jobs-dlq
       RedriveAllowPolicy:
         redrivePermission: byQueue
         sourceQueueArns:
-          - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${ProjectName}-${Environment}-vton-jobs'
+          - !Sub 'arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:vton-jobs'
       SqsManagedSseEnabled: true
       Tags:
         - { Key: Project, Value: !Ref ProjectName }
@@ -554,7 +554,7 @@ Resources:
           QueueName: must-never-change
     Properties:
       MessageRetentionPeriod: 345600
-      QueueName: !Sub '${ProjectName}-${Environment}-vton-jobs'
+      QueueName: vton-jobs
       ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt VtonJobDeadLetterQueue.Arn
@@ -1131,6 +1131,7 @@ Resources:
           - scope SQS mutation to VtonJobQueue; DLQ movement remains SQS-managed
         mutable: change-with-constraints
     Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-vton-runtime-dedicated'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -1139,6 +1140,11 @@ Resources:
             Action:
               - sts:AssumeRole
               - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:RequestTag/eks-cluster-name: !Ref EksCluster
+                aws:RequestTag/kubernetes-service-account: fitzza-vton
+                aws:RequestTag/kubernetes-namespace: fitzza
       Policies:
         - PolicyName: vton-runtime-storage-and-queue
           PolicyDocument:
