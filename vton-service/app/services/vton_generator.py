@@ -227,6 +227,7 @@ def generate_tryon_image(
     timeout_seconds: float | None = None,
     max_retries: int | None = None,
     openai_client: Any = None,
+    token_usage_out: dict[str, int] | None = None,
 ) -> bytes:
     """
     기본 아바타와 의류 이미지들(및 선택적으로 사용자 얼굴 사진)을 OpenAI Image Edit API에 전달하여 가상 피팅 결과 이미지를 생성합니다.
@@ -316,5 +317,13 @@ def generate_tryon_image(
 
     if not getattr(result, "data", None) or not getattr(result.data[0], "b64_json", None):
         raise VtonUpstreamError("OpenAI 이미지 API에서 생성된 이미지 데이터를 받지 못했습니다.")
+
+    if token_usage_out is not None:
+        usage = getattr(result, "usage", None)
+        if usage is not None:
+            in_tok = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", 0) or 0
+            out_tok = getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", 0) or 0
+            token_usage_out["prompt_tokens"] = int(in_tok)
+            token_usage_out["completion_tokens"] = int(out_tok)
 
     return base64.b64decode(result.data[0].b64_json)

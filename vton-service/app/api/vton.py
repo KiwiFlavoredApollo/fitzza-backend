@@ -231,16 +231,30 @@ def _run_background_vton(
             )
 
         # 2. OpenAI 이미지 편집 피팅 실행 (아바타 몸 + 사용자 얼굴 + 의류)
-        output_png = generate_tryon_image(
-            categories=categories,
-            clothing_images=clothing_images,
-            avatar_bytes=None,  # 기본 아바타 몸(avatar.png) 사용
-            user_face_bytes=user_face_bytes,
-            model=settings.openai_image_model,
-            api_key=settings.openai_api_key or None,
-            timeout_seconds=settings.openai_timeout_seconds,
-            max_retries=settings.openai_max_retries,
-        )
+        token_usage: dict[str, int] = {}
+        try:
+            output_png = generate_tryon_image(
+                categories=categories,
+                clothing_images=clothing_images,
+                avatar_bytes=None,  # 기본 아바타 몸(avatar.png) 사용
+                user_face_bytes=user_face_bytes,
+                model=settings.openai_image_model,
+                api_key=settings.openai_api_key or None,
+                timeout_seconds=settings.openai_timeout_seconds,
+                max_retries=settings.openai_max_retries,
+                token_usage_out=token_usage,
+            )
+        except TypeError:
+            output_png = generate_tryon_image(
+                categories=categories,
+                clothing_images=clothing_images,
+                avatar_bytes=None,
+                user_face_bytes=user_face_bytes,
+                model=settings.openai_image_model,
+                api_key=settings.openai_api_key or None,
+                timeout_seconds=settings.openai_timeout_seconds,
+                max_retries=settings.openai_max_retries,
+            )
 
         # 3. 결과 이미지 스토리지 저장 (S3 또는 Local Fallback)
         storage = get_storage_client()
@@ -258,7 +272,12 @@ def _run_background_vton(
 
         # 4. DB 상태 완료(COMPLETED) 갱신
         final_image_url = uploaded_result_url if storage.is_s3 else result_image_url
-        repo.mark_completed(fitting_id, result_image_url=final_image_url)
+        repo.mark_completed(
+            fitting_id,
+            result_image_url=final_image_url,
+            prompt_tokens=token_usage.get("prompt_tokens", 0),
+            completion_tokens=token_usage.get("completion_tokens", 0),
+        )
 
         # 5. notification-service 피팅 완료 FCM 알림 전송
         notif_client.send_fitting_done(

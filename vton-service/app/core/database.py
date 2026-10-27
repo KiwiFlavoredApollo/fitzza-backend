@@ -85,6 +85,8 @@ class VtonRepository:
                                 status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
                                 result_image_url TEXT,
                                 error_message TEXT,
+                                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                                completion_tokens INTEGER NOT NULL DEFAULT 0,
                                 is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
                                 created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -117,6 +119,8 @@ class VtonRepository:
                             END $$;
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
                             ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS request_id BIGINT;
+                            ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS prompt_tokens INTEGER NOT NULL DEFAULT 0;
+                            ALTER TABLE {schema}.fittings ADD COLUMN IF NOT EXISTS completion_tokens INTEGER NOT NULL DEFAULT 0;
 
                             CREATE INDEX IF NOT EXISTS idx_fittings_user_created
                                 ON {schema}.fittings (user_id, fitting_id DESC);
@@ -176,6 +180,8 @@ class VtonRepository:
                             status TEXT NOT NULL DEFAULT 'PENDING',
                             result_image_url TEXT,
                             error_message TEXT,
+                            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                            completion_tokens INTEGER NOT NULL DEFAULT 0,
                             is_deleted INTEGER NOT NULL DEFAULT 0,
                             created_at TEXT NOT NULL,
                             updated_at TEXT NOT NULL
@@ -189,6 +195,10 @@ class VtonRepository:
                         cur.execute("ALTER TABLE fittings ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;")
                     if "request_id" not in columns:
                         cur.execute("ALTER TABLE fittings ADD COLUMN request_id INTEGER;")
+                    if "prompt_tokens" not in columns:
+                        cur.execute("ALTER TABLE fittings ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0;")
+                    if "completion_tokens" not in columns:
+                        cur.execute("ALTER TABLE fittings ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0;")
 
                     cur.execute(
                         """
@@ -364,6 +374,8 @@ class VtonRepository:
         self,
         fitting_id: int,
         result_image_url: str,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
     ) -> None:
         now = self._now_iso()
         if self._use_postgres:
@@ -376,10 +388,12 @@ class VtonRepository:
                             UPDATE {schema}.fittings
                             SET status = 'COMPLETED',
                                 result_image_url = %s,
+                                prompt_tokens = %s,
+                                completion_tokens = %s,
                                 updated_at = %s
                             WHERE fitting_id = %s;
                             """,
-                            (result_image_url, now, fitting_id),
+                            (result_image_url, prompt_tokens, completion_tokens, now, fitting_id),
                         )
                         conn.commit()
         else:
@@ -392,10 +406,12 @@ class VtonRepository:
                         UPDATE fittings
                         SET status = 'COMPLETED',
                             result_image_url = ?,
+                            prompt_tokens = ?,
+                            completion_tokens = ?,
                             updated_at = ?
                         WHERE fitting_id = ?;
                         """,
-                        (result_image_url, now, fitting_id),
+                        (result_image_url, prompt_tokens, completion_tokens, now, fitting_id),
                     )
                     conn.commit()
                 finally:
@@ -501,7 +517,8 @@ class VtonRepository:
                     with conn.cursor() as cur:
                         query = f"""
                             SELECT fitting_id, user_id, photo_id, request_id, status,
-                                   result_image_url, error_message, is_deleted, created_at, updated_at
+                                   result_image_url, error_message, prompt_tokens, completion_tokens,
+                                   is_deleted, created_at, updated_at
                             FROM {schema}.fittings
                             WHERE fitting_id = %s
                         """
@@ -529,7 +546,8 @@ class VtonRepository:
                     cur = conn.cursor()
                     query = """
                         SELECT fitting_id, user_id, photo_id, request_id, status,
-                               result_image_url, error_message, is_deleted, created_at, updated_at
+                               result_image_url, error_message, prompt_tokens, completion_tokens,
+                               is_deleted, created_at, updated_at
                         FROM fittings
                         WHERE fitting_id = ?
                     """
@@ -573,6 +591,8 @@ class VtonRepository:
             "status": fitting_row["status"],
             "resultImageUrl": fitting_row["result_image_url"],
             "errorMessage": fitting_row["error_message"],
+            "promptTokens": int(fitting_row.get("prompt_tokens") or 0),
+            "completionTokens": int(fitting_row.get("completion_tokens") or 0),
             "isDeleted": bool(fitting_row.get("is_deleted", False)),
             "products": products,
             "createdAt": self._format_utc_timestamp(fitting_row["created_at"]),
