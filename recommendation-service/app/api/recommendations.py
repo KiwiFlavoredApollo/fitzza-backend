@@ -45,26 +45,15 @@ from app.schemas.recommendation import (
     VisualSearchResponse,
 )
 from app.schemas.analytics import AnalyticsResponse
-
-FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
-    "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
-    "recent_purchase": "최근 구매하신 상품 실측을 기준으로 추천된 사이즈입니다.",
-    "similar_body_profile": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다.",
-    "body_profile": "등록하신 사용자 신체 프로필 정보를 기준으로 추천된 사이즈입니다.",
-}
-
-CATEGORY_KO_TO_EN: dict[str, str] = {
-    "상의": "top",
-    "아우터": "outer",
-    "하의": "bottom",
-    "신발": "shoes",
-    "모자": "hat",
-    "top": "top",
-    "outer": "outer",
-    "bottom": "bottom",
-    "shoes": "shoes",
-    "hat": "hat",
-}
+from app.services.size_resolver import (
+    FIT_SOURCE_EVIDENCE_MAP,
+    evaluate_single_product_size,
+    extract_payload_metadata,
+    fetch_qdrant_product_payload,
+    resolve_product_for_size,
+    sync_user_body,
+    sync_user_size_preference,
+)
 
 
 class RecommendationApiError(Exception):
@@ -230,60 +219,8 @@ def _get_personalized_feed_service(app: Any) -> Any:
 
 
 
-def _sync_user_body(
-    size_resolver: Any,
-    user_id: str,
-    user_body: dict[str, Any],
-) -> None:
-    if size_resolver is None or not user_body:
-        return
-    raw_height = user_body.get("height")
-    raw_weight = user_body.get("weight")
-    raw_shoe = user_body.get("shoeSize")
-
-    try:
-        height = float(raw_height) if raw_height is not None else None
-    except (TypeError, ValueError):
-        height = None
-
-    try:
-        weight = float(raw_weight) if raw_weight is not None else None
-    except (TypeError, ValueError):
-        weight = None
-
-    try:
-        shoe_size = float(raw_shoe) if raw_shoe is not None else None
-    except (TypeError, ValueError):
-        shoe_size = None
-
-    if height is None and weight is None and shoe_size is None:
-        return
-
-    mock_db = getattr(size_resolver, "mock_db", None)
-    if not isinstance(mock_db, dict):
-        return
-
-    users = mock_db.setdefault("users", [])
-    existing = next(
-        (u for u in users if str(u.get("user_id")) == str(user_id)),
-        None,
-    )
-    if existing is None:
-        entry: dict[str, Any] = {"user_id": str(user_id)}
-        if height is not None:
-            entry["height"] = height
-        if weight is not None:
-            entry["weight"] = weight
-        if shoe_size is not None:
-            entry["shoe_size"] = shoe_size
-        users.append(entry)
-    else:
-        if height is not None:
-            existing["height"] = height
-        if weight is not None:
-            existing["weight"] = weight
-        if shoe_size is not None:
-            existing["shoe_size"] = shoe_size
+_sync_user_body = sync_user_body
+_sync_user_size_preference = sync_user_size_preference
 
 
 def _get_size_resolver(app: Any) -> Any:
@@ -304,64 +241,7 @@ def _get_size_resolver(app: Any) -> Any:
     return size_resolver
 
 
-def _sync_user_size_preference(
-    size_resolver: Any,
-    user_id: str,
-    subcategory: str,
-    fit_type: str,
-    pref_spec: dict[str, float] | None,
-) -> None:
-    if size_resolver is None or not subcategory or not pref_spec:
-        return
-    mock_db = getattr(size_resolver, "mock_db", None)
-    if not isinstance(mock_db, dict):
-        return
-
-    prefs = mock_db.setdefault("user_preferences", [])
-    existing = next(
-        (
-            p
-            for p in prefs
-            if str(p.get("user_id")) == str(user_id)
-            and p.get("subcategory") == subcategory
-        ),
-        None,
-    )
-    if existing is None:
-        prefs.append(
-            {
-                "preference_id": len(prefs) + 1,
-                "user_id": str(user_id),
-                "subcategory": subcategory,
-                "fit_type": fit_type or "레귤러",
-                "preference_spec": dict(pref_spec),
-                "sample_count": 1,
-            }
-        )
-    else:
-        existing["preference_spec"] = dict(pref_spec)
-        if fit_type:
-            existing["fit_type"] = fit_type
-
-
-def _infer_category_from_measurements(sizes: list[dict[str, Any]]) -> str:
-    for entry in sizes:
-        if not isinstance(entry, dict):
-            continue
-        measurements = entry.get("measurements") or {}
-        if not isinstance(measurements, dict):
-            continue
-        keys = set(measurements.keys())
-        if keys.intersection({"허리단면", "엉덩이단면", "허벅지단면", "밑위"}):
-            return "bottom"
-        if keys.intersection({"발길이", "발볼", "발목높이", "굽높이"}):
-            return "shoes"
-        if keys.intersection({"머리둘레", "챙길이", "깊이"}):
-            return "hat"
-    return "top"
-
-
-def _get_qdrant_product_payload(app: Any, product_id: int) -> dict[str, Any] | None:
+def _get_qdrant_client(app: Any) -> Any:
     qdrant_client = getattr(app.state, "qdrant_client", None)
     if qdrant_client is None:
         search_engine = getattr(app.state, "search_engine", None)
@@ -379,110 +259,31 @@ def _get_qdrant_product_payload(app: Any, product_id: int) -> dict[str, Any] | N
             qdrant_client = getattr(feed_service, "client", None)
 
     if qdrant_client is None:
-        return None
+        import os
 
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            settings = _get_settings_from_app(app)
+            try:
+                from qdrant_client import QdrantClient
+
+                qdrant_client = QdrantClient(url=settings.qdrant_url)
+                app.state.qdrant_client = qdrant_client
+            except Exception as exc:
+                logger.warning("QdrantClient 지연 초기화 실패: %s", exc)
+
+    return qdrant_client
+
+
+def _get_qdrant_product_payload(app: Any, product_id: int) -> dict[str, Any] | None:
+    qdrant_client = _get_qdrant_client(app)
+    if qdrant_client is None:
+        return None
     settings = _get_settings_from_app(app)
-    try:
-        from qdrant_client.http import models
-
-        scroll_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="product_id",
-                    match=models.MatchValue(value=int(product_id)),
-                )
-            ]
-        )
-        points, _ = qdrant_client.scroll(
-            collection_name=settings.qdrant_collection_name,
-            scroll_filter=scroll_filter,
-            with_payload=True,
-            with_vectors=False,
-            limit=1,
-        )
-        if points and points[0].payload:
-            return dict(points[0].payload)
-    except Exception as exc:
-        logger.warning("Qdrant 상품 페이로드 조회 실패 (productId=%s): %s", product_id, exc)
-    return None
-
-
-def _resolve_product_for_size(
-    app: Any,
-    product_id: int,
-    request_id_header: str | None = None,
-) -> dict[str, Any] | None:
-    payload = _get_qdrant_product_payload(app, product_id)
-    raw_sizes: list[dict[str, Any]] = []
-    raw_category = ""
-    subcategory = ""
-    fit_type = "레귤러"
-    product_name = ""
-
-    if payload is not None:
-        product_name = str(payload.get("product_name") or "")
-        raw_category = str(payload.get("category") or "").strip()
-        subcategory = str(payload.get("subcategory") or "").strip()
-        features = payload.get("features")
-        if isinstance(features, dict):
-            fit_val = features.get("핏")
-            if isinstance(fit_val, list) and fit_val:
-                fit_type = str(fit_val[0]).strip() or "레귤러"
-            elif isinstance(fit_val, str) and fit_val.strip():
-                fit_type = fit_val.strip()
-        elif payload.get("fit_type"):
-            fit_type = str(payload.get("fit_type")).strip()
-
-        qdrant_sizes = payload.get("sizes")
-        if isinstance(qdrant_sizes, list):
-            for s in qdrant_sizes:
-                if isinstance(s, dict):
-                    raw_sizes.append(s)
-
-    if not raw_sizes:
-        settings = _get_settings_from_app(app)
-        product_client: ProductServiceClient = getattr(
-            app.state, "product_client", None
-        ) or ProductServiceClient(settings)
-        if hasattr(product_client, "get_product_measurements"):
-            measurements_map = product_client.get_product_measurements(
-                [product_id],
-                request_id_header=request_id_header,
-            )
-            if product_id in measurements_map:
-                seen_size_labels: set[str] = set()
-                for opt in measurements_map.get(product_id) or []:
-                    if not isinstance(opt, dict):
-                        continue
-                    size_label = str(opt.get("size") or "FREE").strip()
-                    if size_label in seen_size_labels:
-                        continue
-                    seen_size_labels.add(size_label)
-                    raw_sizes.append(
-                        {
-                            "size": size_label,
-                            "measurements": opt.get("measurements") or {},
-                        }
-                    )
-
-    if payload is None and not raw_sizes:
-        return None
-
-    category_type = (
-        CATEGORY_KO_TO_EN.get(raw_category)
-        or CATEGORY_KO_TO_EN.get(raw_category.lower())
-        or _infer_category_from_measurements(raw_sizes)
+    return fetch_qdrant_product_payload(
+        qdrant_client=qdrant_client,
+        collection_name=settings.qdrant_collection_name,
+        product_id=product_id,
     )
-    resolved_subcategory = subcategory or category_type
-
-    return {
-        "product_id": product_id,
-        "product_name": product_name,
-        "category_type": category_type,
-        "subcategory": resolved_subcategory,
-        "fit_type": fit_type,
-        "sizes": raw_sizes,
-    }
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:
@@ -891,9 +692,21 @@ def get_product_size_recommendation(
             message="유효하지 않은 상품 ID입니다.",
         )
 
-    product_data = _resolve_product_for_size(
-        app=request.app,
+    settings = _get_settings(request)
+    repository = _get_repository(request)
+    product_client: ProductServiceClient = getattr(
+        request.app.state, "product_client", None
+    ) or ProductServiceClient(settings)
+    user_client: UserServiceClient = getattr(
+        request.app.state, "user_client", None
+    ) or UserServiceClient(settings)
+    size_resolver = _get_size_resolver(request.app)
+
+    product_data = resolve_product_for_size(
         product_id=productId,
+        qdrant_client=_get_qdrant_client(request.app),
+        collection_name=settings.qdrant_collection_name,
+        product_client=product_client,
         request_id_header=x_request_id,
     )
     if product_data is None:
@@ -903,97 +716,15 @@ def get_product_size_recommendation(
             message="상품을 찾을 수 없습니다.",
         )
 
-    available_sizes = _extract_sizes_list(product_data)
-    raw_sizes = product_data.get("sizes") or []
-
-    if not raw_sizes:
-        return ProductSizeRecommendationResponse(
-            recommendedSize=None,
-            fitPercent=None,
-            evidence="해당 상품의 상세 실측 정보가 없어 사이즈 추천을 제공할 수 없습니다.",
-        )
-
-    if (
-        available_sizes
-        and len(available_sizes) == 1
-        and available_sizes[0].strip().upper() in {"FREE", "ONE SIZE", "ONESIZE"}
-    ):
-        return ProductSizeRecommendationResponse(
-            recommendedSize=None,
-            fitPercent=None,
-            evidence="단일 사이즈(FREE)로 제공되는 상품입니다.",
-        )
-
-    settings = _get_settings(request)
-    repository = _get_repository(request)
-    user_client: UserServiceClient = getattr(
-        request.app.state, "user_client", None
-    ) or UserServiceClient(settings)
-    size_resolver = _get_size_resolver(request.app)
-
-    user_body = user_client.get_user_body(
+    result = evaluate_single_product_size(
+        size_resolver=size_resolver,
+        repository=repository,
+        user_client=user_client,
         user_id=user_id,
+        product_data=product_data,
         request_id_header=x_request_id,
     )
-    _sync_user_body(
-        size_resolver=size_resolver,
-        user_id=str(user_id),
-        user_body=user_body,
-    )
-
-    subcategory = str(product_data.get("subcategory") or "")
-    fit_type = str(product_data.get("fit_type") or "레귤러")
-    category_type = str(product_data.get("category_type") or "top")
-
-    db_pref = repository.get_user_size_preference(
-        user_id=user_id,
-        subcategory=subcategory,
-    )
-    _sync_user_size_preference(
-        size_resolver=size_resolver,
-        user_id=str(user_id),
-        subcategory=subcategory,
-        fit_type=fit_type,
-        pref_spec=db_pref,
-    )
-
-    size_result = size_resolver.resolve_and_calculate_size(
-        user_id=str(user_id),
-        subcategory=subcategory,
-        fit_type=fit_type,
-        candidate_products=[product_data],
-        category_type=category_type,
-    )
-
-    source_type = str(size_result.get("source_type") or "none")
-    baseline_spec = size_result.get("baseline_spec")
-    recommendation = size_result.get("recommendation")
-
-    if source_type == "none" or baseline_spec is None:
-        return ProductSizeRecommendationResponse(
-            recommendedSize=None,
-            fitPercent=None,
-            evidence="체형 정보를 등록하시면 맞춤 사이즈를 추천해 드립니다.",
-        )
-
-    if not recommendation or not recommendation.get("size_label"):
-        return ProductSizeRecommendationResponse(
-            recommendedSize=None,
-            fitPercent=None,
-            evidence="해당 상품의 상세 실측 정보가 없어 사이즈 추천을 제공할 수 없습니다.",
-        )
-
-    raw_fit_score = float(recommendation.get("predicted_fit_score") or 0.0)
-    fit_percent = round(
-        raw_fit_score * 100.0 if raw_fit_score <= 1.0 else raw_fit_score,
-        1,
-    )
-
-    return ProductSizeRecommendationResponse(
-        recommendedSize=str(recommendation["size_label"]),
-        fitPercent=fit_percent,
-        evidence=FIT_SOURCE_EVIDENCE_MAP.get(source_type),
-    )
+    return ProductSizeRecommendationResponse(**result)
 
 
 @public_router.get(
@@ -1235,20 +966,9 @@ def receive_size_feedback(
     subcategory: str | None = None
     fit_type: str | None = None
     if qdrant_payload is not None:
-        raw_sub = str(qdrant_payload.get("subcategory") or "").strip()
-        raw_cat = str(qdrant_payload.get("category") or "").strip()
-        subcategory = raw_sub or CATEGORY_KO_TO_EN.get(raw_cat) or None
-        features = qdrant_payload.get("features")
-        if isinstance(features, dict):
-            fit_val = features.get("핏")
-            if isinstance(fit_val, list) and fit_val:
-                fit_type = str(fit_val[0]).strip()
-            elif isinstance(fit_val, str) and fit_val.strip():
-                fit_type = fit_val.strip()
-    elif purchased_spec:
-        subcategory = _infer_category_from_measurements(
-            [{"size": "FREE", "measurements": purchased_spec}]
-        )
+        meta = extract_payload_metadata(qdrant_payload)
+        subcategory = meta["subcategory"] or None
+        fit_type = meta["fit_type"] or None
 
     repository.save_size_feedback(
         user_id=payload.userId,
