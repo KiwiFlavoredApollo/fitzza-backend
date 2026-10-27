@@ -32,6 +32,7 @@ from app.schemas.recommendation import (
     InternalComboResponse,
     PersonalizedPageResponse,
     PersonalizedProductItem,
+    ProductSizeRecommendationResponse,
     RecommendationAcceptedResponse,
     RecommendationCreateRequest,
     RecommendationDetailResponse,
@@ -50,6 +51,19 @@ FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
     "recent_purchase": "최근 구매하신 상품 실측을 기준으로 추천된 사이즈입니다.",
     "similar_body_profile": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다.",
     "body_profile": "등록하신 사용자 신체 프로필 정보를 기준으로 추천된 사이즈입니다.",
+}
+
+CATEGORY_KO_TO_EN: dict[str, str] = {
+    "상의": "top",
+    "아우터": "outer",
+    "하의": "bottom",
+    "신발": "shoes",
+    "모자": "hat",
+    "top": "top",
+    "outer": "outer",
+    "bottom": "bottom",
+    "shoes": "shoes",
+    "hat": "hat",
 }
 
 
@@ -270,6 +284,205 @@ def _sync_user_body(
             existing["weight"] = weight
         if shoe_size is not None:
             existing["shoe_size"] = shoe_size
+
+
+def _get_size_resolver(app: Any) -> Any:
+    size_resolver = getattr(app.state, "size_resolver", None)
+    if size_resolver is not None and hasattr(size_resolver, "resolve_and_calculate_size"):
+        return size_resolver
+
+    coordinator = getattr(app.state, "coordinator", None)
+    if coordinator is not None:
+        coord_resolver = getattr(coordinator, "size_resolver", None)
+        if coord_resolver is not None and hasattr(coord_resolver, "resolve_and_calculate_size"):
+            return coord_resolver
+
+    from app.services.size_resolver import SizeProfileResolver
+
+    size_resolver = SizeProfileResolver()
+    app.state.size_resolver = size_resolver
+    return size_resolver
+
+
+def _sync_user_size_preference(
+    size_resolver: Any,
+    user_id: str,
+    subcategory: str,
+    fit_type: str,
+    pref_spec: dict[str, float] | None,
+) -> None:
+    if size_resolver is None or not subcategory or not pref_spec:
+        return
+    mock_db = getattr(size_resolver, "mock_db", None)
+    if not isinstance(mock_db, dict):
+        return
+
+    prefs = mock_db.setdefault("user_preferences", [])
+    existing = next(
+        (
+            p
+            for p in prefs
+            if str(p.get("user_id")) == str(user_id)
+            and p.get("subcategory") == subcategory
+        ),
+        None,
+    )
+    if existing is None:
+        prefs.append(
+            {
+                "preference_id": len(prefs) + 1,
+                "user_id": str(user_id),
+                "subcategory": subcategory,
+                "fit_type": fit_type or "레귤러",
+                "preference_spec": dict(pref_spec),
+                "sample_count": 1,
+            }
+        )
+    else:
+        existing["preference_spec"] = dict(pref_spec)
+        if fit_type:
+            existing["fit_type"] = fit_type
+
+
+def _infer_category_from_measurements(sizes: list[dict[str, Any]]) -> str:
+    for entry in sizes:
+        if not isinstance(entry, dict):
+            continue
+        measurements = entry.get("measurements") or {}
+        if not isinstance(measurements, dict):
+            continue
+        keys = set(measurements.keys())
+        if keys.intersection({"허리단면", "엉덩이단면", "허벅지단면", "밑위"}):
+            return "bottom"
+        if keys.intersection({"발길이", "발볼", "발목높이", "굽높이"}):
+            return "shoes"
+        if keys.intersection({"머리둘레", "챙길이", "깊이"}):
+            return "hat"
+    return "top"
+
+
+def _get_qdrant_product_payload(app: Any, product_id: int) -> dict[str, Any] | None:
+    qdrant_client = getattr(app.state, "qdrant_client", None)
+    if qdrant_client is None:
+        search_engine = getattr(app.state, "search_engine", None)
+        if search_engine is not None:
+            qdrant_client = getattr(search_engine, "client", None)
+    if qdrant_client is None:
+        coordinator = getattr(app.state, "coordinator", None)
+        if coordinator is not None:
+            engine = getattr(coordinator, "engine", None)
+            if engine is not None:
+                qdrant_client = getattr(engine, "client", None)
+    if qdrant_client is None:
+        feed_service = getattr(app.state, "personalized_feed_service", None)
+        if feed_service is not None:
+            qdrant_client = getattr(feed_service, "client", None)
+
+    if qdrant_client is None:
+        return None
+
+    settings = _get_settings_from_app(app)
+    try:
+        from qdrant_client.http import models
+
+        scroll_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="product_id",
+                    match=models.MatchValue(value=int(product_id)),
+                )
+            ]
+        )
+        points, _ = qdrant_client.scroll(
+            collection_name=settings.qdrant_collection_name,
+            scroll_filter=scroll_filter,
+            with_payload=True,
+            with_vectors=False,
+            limit=1,
+        )
+        if points and points[0].payload:
+            return dict(points[0].payload)
+    except Exception as exc:
+        logger.warning("Qdrant 상품 페이로드 조회 실패 (productId=%s): %s", product_id, exc)
+    return None
+
+
+def _resolve_product_for_size(
+    app: Any,
+    product_id: int,
+    request_id_header: str | None = None,
+) -> dict[str, Any] | None:
+    payload = _get_qdrant_product_payload(app, product_id)
+    raw_sizes: list[dict[str, Any]] = []
+    raw_category = ""
+    subcategory = ""
+    fit_type = "레귤러"
+    product_name = ""
+
+    if payload is not None:
+        product_name = str(payload.get("product_name") or "")
+        raw_category = str(payload.get("category") or "").strip()
+        subcategory = str(payload.get("subcategory") or "").strip()
+        features = payload.get("features")
+        if isinstance(features, dict):
+            fit_val = features.get("핏")
+            if isinstance(fit_val, list) and fit_val:
+                fit_type = str(fit_val[0]).strip() or "레귤러"
+            elif isinstance(fit_val, str) and fit_val.strip():
+                fit_type = fit_val.strip()
+        elif payload.get("fit_type"):
+            fit_type = str(payload.get("fit_type")).strip()
+
+        qdrant_sizes = payload.get("sizes")
+        if isinstance(qdrant_sizes, list):
+            for s in qdrant_sizes:
+                if isinstance(s, dict):
+                    raw_sizes.append(s)
+
+    if not raw_sizes:
+        settings = _get_settings_from_app(app)
+        product_client: ProductServiceClient = getattr(
+            app.state, "product_client", None
+        ) or ProductServiceClient(settings)
+        if hasattr(product_client, "get_product_measurements"):
+            measurements_map = product_client.get_product_measurements(
+                [product_id],
+                request_id_header=request_id_header,
+            )
+            if product_id in measurements_map:
+                seen_size_labels: set[str] = set()
+                for opt in measurements_map.get(product_id) or []:
+                    if not isinstance(opt, dict):
+                        continue
+                    size_label = str(opt.get("size") or "FREE").strip()
+                    if size_label in seen_size_labels:
+                        continue
+                    seen_size_labels.add(size_label)
+                    raw_sizes.append(
+                        {
+                            "size": size_label,
+                            "measurements": opt.get("measurements") or {},
+                        }
+                    )
+
+    if payload is None and not raw_sizes:
+        return None
+
+    category_type = (
+        CATEGORY_KO_TO_EN.get(raw_category)
+        or CATEGORY_KO_TO_EN.get(raw_category.lower())
+        or _infer_category_from_measurements(raw_sizes)
+    )
+    resolved_subcategory = subcategory or category_type
+
+    return {
+        "product_id": product_id,
+        "product_name": product_name,
+        "category_type": category_type,
+        "subcategory": resolved_subcategory,
+        "fit_type": fit_type,
+        "sizes": raw_sizes,
+    }
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:
@@ -653,6 +866,137 @@ def get_recommendation_analytics(
 
 
 @public_router.get(
+    "/{productId}/size",
+    response_model=ProductSizeRecommendationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="상품 상세페이지 단일 상품 맞춤 사이즈 추천 조회",
+    description=(
+        "상품 상세페이지의 사이즈 표 상단에 표시할 사용자 맞춤 추천 사이즈와 추천 근거를 반환합니다.\n\n"
+        "- 우선순위 체인: 1순위 설문 응답 학습(`learned_preference`) → 2순위 최근 구매 이력(`recent_purchase`) "
+        "→ 3순위 신체 프로필/유사 체형(`body_profile` / `similar_body_profile`)\n"
+        "- 신체 정보가 없거나 단일 사이즈(FREE) 상품인 경우에도 200 OK와 함께 `recommendedSize: null` 및 안내 문구(`evidence`)를 반환합니다."
+    ),
+)
+def get_product_size_recommendation(
+    productId: int,
+    request: Request,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
+) -> ProductSizeRecommendationResponse:
+    user_id = _require_user_id(x_user_id)
+    if productId <= 0:
+        raise RecommendationApiError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="INVALID_REQUEST",
+            message="유효하지 않은 상품 ID입니다.",
+        )
+
+    product_data = _resolve_product_for_size(
+        app=request.app,
+        product_id=productId,
+        request_id_header=x_request_id,
+    )
+    if product_data is None:
+        raise RecommendationApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="PRODUCT_NOT_FOUND",
+            message="상품을 찾을 수 없습니다.",
+        )
+
+    available_sizes = _extract_sizes_list(product_data)
+    raw_sizes = product_data.get("sizes") or []
+
+    if not raw_sizes:
+        return ProductSizeRecommendationResponse(
+            recommendedSize=None,
+            fitPercent=None,
+            evidence="해당 상품의 상세 실측 정보가 없어 사이즈 추천을 제공할 수 없습니다.",
+        )
+
+    if (
+        available_sizes
+        and len(available_sizes) == 1
+        and available_sizes[0].strip().upper() in {"FREE", "ONE SIZE", "ONESIZE"}
+    ):
+        return ProductSizeRecommendationResponse(
+            recommendedSize=None,
+            fitPercent=None,
+            evidence="단일 사이즈(FREE)로 제공되는 상품입니다.",
+        )
+
+    settings = _get_settings(request)
+    repository = _get_repository(request)
+    user_client: UserServiceClient = getattr(
+        request.app.state, "user_client", None
+    ) or UserServiceClient(settings)
+    size_resolver = _get_size_resolver(request.app)
+
+    user_body = user_client.get_user_body(
+        user_id=user_id,
+        request_id_header=x_request_id,
+    )
+    _sync_user_body(
+        size_resolver=size_resolver,
+        user_id=str(user_id),
+        user_body=user_body,
+    )
+
+    subcategory = str(product_data.get("subcategory") or "")
+    fit_type = str(product_data.get("fit_type") or "레귤러")
+    category_type = str(product_data.get("category_type") or "top")
+
+    db_pref = repository.get_user_size_preference(
+        user_id=user_id,
+        subcategory=subcategory,
+    )
+    _sync_user_size_preference(
+        size_resolver=size_resolver,
+        user_id=str(user_id),
+        subcategory=subcategory,
+        fit_type=fit_type,
+        pref_spec=db_pref,
+    )
+
+    size_result = size_resolver.resolve_and_calculate_size(
+        user_id=str(user_id),
+        subcategory=subcategory,
+        fit_type=fit_type,
+        candidate_products=[product_data],
+        category_type=category_type,
+    )
+
+    source_type = str(size_result.get("source_type") or "none")
+    baseline_spec = size_result.get("baseline_spec")
+    recommendation = size_result.get("recommendation")
+
+    if source_type == "none" or baseline_spec is None:
+        return ProductSizeRecommendationResponse(
+            recommendedSize=None,
+            fitPercent=None,
+            evidence="체형 정보를 등록하시면 맞춤 사이즈를 추천해 드립니다.",
+        )
+
+    if not recommendation or not recommendation.get("size_label"):
+        return ProductSizeRecommendationResponse(
+            recommendedSize=None,
+            fitPercent=None,
+            evidence="해당 상품의 상세 실측 정보가 없어 사이즈 추천을 제공할 수 없습니다.",
+        )
+
+    raw_fit_score = float(recommendation.get("predicted_fit_score") or 0.0)
+    fit_percent = round(
+        raw_fit_score * 100.0 if raw_fit_score <= 1.0 else raw_fit_score,
+        1,
+    )
+
+    return ProductSizeRecommendationResponse(
+        recommendedSize=str(recommendation["size_label"]),
+        fitPercent=fit_percent,
+        evidence=FIT_SOURCE_EVIDENCE_MAP.get(source_type),
+    )
+
+
+@public_router.get(
     "/{requestId}",
     response_model=RecommendationDetailResponse,
     status_code=status.HTTP_200_OK,
@@ -887,16 +1231,54 @@ def receive_size_feedback(
         request_id_header=x_request_id,
     )
 
+    qdrant_payload = _get_qdrant_product_payload(request.app, payload.productId)
+    subcategory: str | None = None
+    fit_type: str | None = None
+    if qdrant_payload is not None:
+        raw_sub = str(qdrant_payload.get("subcategory") or "").strip()
+        raw_cat = str(qdrant_payload.get("category") or "").strip()
+        subcategory = raw_sub or CATEGORY_KO_TO_EN.get(raw_cat) or None
+        features = qdrant_payload.get("features")
+        if isinstance(features, dict):
+            fit_val = features.get("핏")
+            if isinstance(fit_val, list) and fit_val:
+                fit_type = str(fit_val[0]).strip()
+            elif isinstance(fit_val, str) and fit_val.strip():
+                fit_type = fit_val.strip()
+    elif purchased_spec:
+        subcategory = _infer_category_from_measurements(
+            [{"size": "FREE", "measurements": purchased_spec}]
+        )
+
     repository.save_size_feedback(
         user_id=payload.userId,
         product_id=payload.productId,
         option_id=payload.optionId,
         size_feedback=payload.sizeFeedback,
+        subcategory=subcategory,
+        fit_type=fit_type,
         purchased_spec=purchased_spec,
     )
+
+    if subcategory:
+        updated_pref = repository.get_user_size_preference(
+            user_id=payload.userId,
+            subcategory=subcategory,
+        )
+        size_resolver = getattr(request.app.state, "size_resolver", None) or getattr(
+            getattr(request.app.state, "coordinator", None), "size_resolver", None
+        )
+        _sync_user_size_preference(
+            size_resolver=size_resolver,
+            user_id=str(payload.userId),
+            subcategory=subcategory,
+            fit_type=fit_type or "레귤러",
+            pref_spec=updated_pref,
+        )
 
     cache_service = _get_cache_service(request.app)
     cache_service.invalidate_user_pipeline(user_id=str(payload.userId))
 
     return Response(status_code=status.HTTP_202_ACCEPTED)
+
 
