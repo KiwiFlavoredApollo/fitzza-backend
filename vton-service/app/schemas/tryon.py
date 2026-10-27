@@ -260,12 +260,25 @@ class InternalFittingResponse(BaseModel):
     )
     resultImageUrl: str | None = Field(
         default=None,
-        description="완성된 이미지 URL (status가 COMPLETED일 때만 유효)",
-        json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/image"},
+        description="피팅 완료 이미지 URL (COMPLETED 상태일 때만 반환)",
+        json_schema_extra={"example": "https://cdn.example.com/fitting-1.png"},
     )
     products: list[InternalResultProduct] = Field(
         default_factory=list,
-        description="피팅에 사용된 상품 정보 목록 (community-service 호환용)",
+        description="피팅에 사용된 상품 목록 (ID, 상품명, 가격, 이미지 URL)",
+    )
+
+
+class TokenUsageRecord(BaseModel):
+    promptTokens: int = Field(default=0, description="입력(프롬프트) 토큰 수")
+    completionTokens: int = Field(default=0, description="출력(생성) 토큰 수")
+    createdAt: str = Field(..., description="피팅 생성 일시 (ISO-8601 UTC)")
+
+
+class InternalTokenUsageResponse(BaseModel):
+    records: list[TokenUsageRecord] = Field(
+        default_factory=list,
+        description="기간 내 완료된 가상 피팅 토큰 사용량 목록",
     )
 
 

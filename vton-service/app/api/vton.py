@@ -39,6 +39,7 @@ from app.schemas.tryon import (
     FittingListResponse,
     FittingSummaryResponse,
     InternalFittingResponse,
+    InternalTokenUsageResponse,
 )
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
@@ -1024,3 +1025,26 @@ def get_internal_fitting(
         resultImageUrl=detail["resultImageUrl"] if detail["status"] == "COMPLETED" else None,
         products=products_for_community,
     )
+
+
+@router.get(
+    "/vton/token-usage",
+    response_model=InternalTokenUsageResponse,
+    summary="[내부 서비스용] 기간별 가상 피팅 OpenAI 토큰 사용량 집계",
+    description="recommendation-service 전용 내부 API. X-Service-Token 헤더를 검증하고 지정된 기간 동안 완료된 피팅의 토큰 사용량 목록을 반환합니다.",
+)
+def get_internal_token_usage(
+    startDate: Annotated[str, Query(description="조회 시작일시 (ISO-8601 UTC)")],
+    endDate: Annotated[str, Query(description="조회 종료일시 (ISO-8601 UTC)")],
+    x_service_token: Annotated[str | None, Header(alias="X-Service-Token")] = None,
+) -> InternalTokenUsageResponse:
+    settings = get_settings()
+    if not settings.verify_service_token(x_service_token, allowed_callers=["recommendation"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 서비스 토큰입니다.",
+        )
+
+    repo = get_repo()
+    records = repo.get_token_usage_in_range(start_iso=startDate, end_iso=endDate)
+    return InternalTokenUsageResponse(records=records)

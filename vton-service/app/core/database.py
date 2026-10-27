@@ -875,3 +875,60 @@ class VtonRepository:
                     self._close_sqlite_if_transient(conn)
 
         return items, total_count
+
+    def get_token_usage_in_range(
+        self,
+        start_iso: str,
+        end_iso: str,
+    ) -> list[dict[str, Any]]:
+        """지정된 기간 동안 완료(COMPLETED)된 피팅의 OpenAI 토큰 사용량과 생성일시를 조회합니다."""
+        if self._use_postgres:
+            schema = self.postgres_schema
+            with self._lock:
+                with self._get_pg_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            SELECT prompt_tokens, completion_tokens, created_at
+                            FROM {schema}.fittings
+                            WHERE created_at >= %s AND created_at <= %s
+                              AND status = 'COMPLETED'
+                            ORDER BY created_at ASC;
+                            """,
+                            (start_iso, end_iso),
+                        )
+                        rows = cur.fetchall() or []
+                        return [
+                            {
+                                "promptTokens": int(r.get("prompt_tokens") or 0),
+                                "completionTokens": int(r.get("completion_tokens") or 0),
+                                "createdAt": self._format_utc_timestamp(r["created_at"]),
+                            }
+                            for r in rows
+                        ]
+        else:
+            with self._lock:
+                conn = self._get_sqlite_connection()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT prompt_tokens, completion_tokens, created_at
+                        FROM fittings
+                        WHERE created_at >= ? AND created_at <= ?
+                          AND status = 'COMPLETED'
+                        ORDER BY created_at ASC;
+                        """,
+                        (start_iso, end_iso),
+                    )
+                    rows = [dict(r) for r in cur.fetchall()]
+                    return [
+                        {
+                            "promptTokens": int(r.get("prompt_tokens") or 0),
+                            "completionTokens": int(r.get("completion_tokens") or 0),
+                            "createdAt": self._format_utc_timestamp(r["created_at"]),
+                        }
+                        for r in rows
+                    ]
+                finally:
+                    self._close_sqlite_if_transient(conn)
