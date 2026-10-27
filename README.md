@@ -19,24 +19,6 @@ Fitzza 패션 커머스의 최소 실행형 MSA 골격입니다. 각 서비스�
 
 ## 빠른 시작
 
-### 취향 선택 목록 API
-
-user-service는 `GET /users/preferences/fits`, `GET /users/preferences/styles`에 HTTP 200과 JSON 배열을 반환합니다. 요청 본문과 쿼리 파라미터는 없습니다. 기존 핏·스타일 코드와 저장 방식에는 영향이 없습니다.
-
-핏 응답:
-
-```json
-[{"label":"레귤러","value":"REGULAR"},{"label":"릴렉스드","value":"RELAXED"},{"label":"슬림","value":"SLIM"},{"label":"오버사이즈","value":"OVERSIZED"},{"label":"크롭","value":"CROPPED"}]
-```
-
-스타일 응답:
-
-```json
-[{"label":"캐주얼","value":"CASUAL"},{"label":"미니멀","value":"MINIMAL"},{"label":"스트릿","value":"STREET"},{"label":"포멀","value":"FORMAL"},{"label":"스포티","value":"SPORTY"},{"label":"빈티지","value":"VINTAGE"}]
-```
-
-Gateway에서는 `GET /api/users/preferences/fits`, `GET /api/users/preferences/styles`(FE는 `/api/v1/users/preferences/...`도 가능)로 호출하며 기존 사용자 API와 동일하게 Bearer 토큰이 필요합니다. user-service 직접 호출에는 인증 헤더가 필요 없습니다.
-
 요구 사항: Docker Desktop 및 Docker Compose
 
 ```bash
