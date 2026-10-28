@@ -89,3 +89,6 @@ vton-service/data/photos/
 
 
 .run/
+/summary.json
+/k6-report.html
+/performance/results/
