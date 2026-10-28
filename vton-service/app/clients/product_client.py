@@ -33,7 +33,7 @@ class ProductServiceClient:
     def _get_storage(self) -> Any:
         if self.storage_client is None:
             try:
-                from app.services.vton_processor import get_storage_client
+                from app.clients.storage_client import get_storage_client
 
                 self.storage_client = get_storage_client()
             except Exception:

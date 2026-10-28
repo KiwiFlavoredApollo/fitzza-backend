@@ -15,6 +15,7 @@ from app.clients.sqs_client import SqsClient
 from app.clients.storage_client import StorageClient
 from app.core.config import get_settings
 from app.core.database import VtonRepository
+from app.schemas.tryon import FittingDetailResponse
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
     TryonResult,
@@ -115,6 +116,43 @@ def resolve_user_image_url(fitting_id: int, request: Request | None = None) -> s
         base = settings.public_base_url.rstrip("/")
         return f"{base}/api/vton/{fitting_id}/user-image"
     return f"/api/vton/{fitting_id}/user-image"
+
+
+def build_fitting_detail_response(detail: dict[str, Any]) -> FittingDetailResponse:
+    """피팅 상세 딕셔너리를 받아 S3/CDN Pre-signed URL 및 상품 목록을 조합한 응답 DTO를 생성합니다."""
+    storage = get_storage_client()
+    fitting_id = detail["fittingId"]
+    raw_res_url = detail.get("resultImageUrl")
+
+    if detail.get("status") == "COMPLETED" and raw_res_url:
+        target_key = (
+            f"fittings/{fitting_id}.png"
+            if storage.is_s3 and raw_res_url.startswith("/api/vton/")
+            else raw_res_url
+        )
+        result_img_url = storage.get_presigned_url(target_key)
+    else:
+        result_img_url = None
+
+    resolved_products = [
+        {
+            **p,
+            "imageUrl": storage.get_presigned_url(p.get("imageUrl")) if p.get("imageUrl") else p.get("imageUrl", ""),
+        }
+        for p in detail.get("products", [])
+    ]
+
+    return FittingDetailResponse(
+        fittingId=detail["fittingId"],
+        userId=detail["userId"],
+        requestId=detail.get("requestId"),
+        status=detail["status"],
+        resultImageUrl=result_img_url,
+        errorMessage=detail["errorMessage"],
+        products=resolved_products,
+        createdAt=detail["createdAt"],
+        updatedAt=detail["updatedAt"],
+    )
 
 
 def run_background_vton(

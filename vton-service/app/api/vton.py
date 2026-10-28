@@ -55,6 +55,7 @@ from app.services.vton_generator import (
     to_png_bytes,
 )
 from app.services.vton_processor import (
+    build_fitting_detail_response,
     get_notification_client,
     get_product_client,
     get_repo,
@@ -564,37 +565,7 @@ def get_fitting(
             detail="본인의 피팅 결과만 조회할 수 있습니다.",
         )
 
-    storage = get_storage_client()
-    raw_res_url = detail.get("resultImageUrl")
-    if detail.get("status") == "COMPLETED" and raw_res_url:
-        target_key = (
-            f"fittings/{fitting_id}.png"
-            if storage.is_s3 and raw_res_url.startswith("/api/vton/")
-            else raw_res_url
-        )
-        result_img_url = storage.get_presigned_url(target_key)
-    else:
-        result_img_url = None
-
-    resolved_products = [
-        {
-            **p,
-            "imageUrl": storage.get_presigned_url(p.get("imageUrl")) if p.get("imageUrl") else p.get("imageUrl", ""),
-        }
-        for p in detail.get("products", [])
-    ]
-
-    return FittingDetailResponse(
-        fittingId=detail["fittingId"],
-        userId=detail["userId"],
-        requestId=detail.get("requestId"),
-        status=detail["status"],
-        resultImageUrl=result_img_url,
-        errorMessage=detail["errorMessage"],
-        products=resolved_products,
-        createdAt=detail["createdAt"],
-        updatedAt=detail["updatedAt"],
-    )
+    return build_fitting_detail_response(detail)
 
 
 @router.delete(
