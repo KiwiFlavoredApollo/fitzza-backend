@@ -149,7 +149,7 @@ def run_background_vton(
                 (c for c in SUPPORTED_CATEGORIES if c not in used_categories),
                 "상의",
             )
-            override_url = (item_image_urls or {}).get(pid)
+            override_url = (item_image_urls or {}).get(pid) or (item_image_urls or {}).get(str(pid))
             item = prod_client.resolve_product_item(
                 pid,
                 fallback_category=fallback_category,

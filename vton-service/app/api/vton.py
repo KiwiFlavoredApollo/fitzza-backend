@@ -146,7 +146,6 @@ def list_user_fittings(
     storage = get_storage_client()
     items: list[FittingSummaryResponse] = []
     for item in raw_items:
-        user_img_url = _resolve_user_image_url(item["fittingId"], request) if item.get("photoId") else None
         raw_res_url = item.get("resultImageUrl")
         if item.get("status") == "COMPLETED" and raw_res_url:
             target_key = (
@@ -164,7 +163,6 @@ def list_user_fittings(
                 requestId=item.get("requestId"),
                 status=item["status"],
                 resultImageUrl=res_img_url,
-                userImageUrl=user_img_url,
                 productCount=item.get("productCount", len(item.get("products", []))),
                 products=item.get("products", []),
                 createdAt=item["createdAt"],
@@ -571,12 +569,10 @@ def get_fitting(
     else:
         result_img_url = None
 
-    user_img_url = _resolve_user_image_url(detail["fittingId"], None) if detail.get("photoId") else None
     return FittingDetailResponse(
         fittingId=detail["fittingId"],
         userId=detail["userId"],
         requestId=detail.get("requestId"),
-        userImageUrl=user_img_url,
         status=detail["status"],
         resultImageUrl=result_img_url,
         errorMessage=detail["errorMessage"],

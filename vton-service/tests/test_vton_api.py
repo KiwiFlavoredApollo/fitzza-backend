@@ -740,11 +740,11 @@ def test_get_fitting_user_image_flow(tmp_path: Path) -> None:
     photo_id = photo_record["photoId"]
     fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101])
 
-    # 2. GET /api/vton/{fittingId} 상세 조회 시 userImageUrl이 올바른 경로인지 확인
+    # 2. GET /api/vton/{fittingId} 상세 조회 시 userImageUrl 필드가 제거되었는지 확인
     resp_detail = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
     assert resp_detail.status_code == 200
     detail_data = resp_detail.json()
-    assert detail_data["userImageUrl"].endswith(f"/api/vton/{fitting_id}/user-image")
+    assert "userImageUrl" not in detail_data
 
     # 3. 인증 헤더 누락 시 401 Unauthorized
     resp_no_auth = client.get(f"/api/vton/{fitting_id}/user-image")

@@ -55,7 +55,15 @@ class VtonWorker:
         product_ids = payload.get("product_ids") or []
         result_image_url = payload.get("result_image_url") or f"/api/vton/{fitting_id}/image"
         request_id_header = payload.get("request_id_header")
-        item_image_urls = payload.get("item_image_urls")
+        raw_item_image_urls = payload.get("item_image_urls")
+        item_image_urls: dict[int, str] | None = None
+        if isinstance(raw_item_image_urls, dict):
+            item_image_urls = {}
+            for k, v in raw_item_image_urls.items():
+                try:
+                    item_image_urls[int(k)] = str(v)
+                except (ValueError, TypeError):
+                    pass
         finalize_failure = receive_count >= self.settings.sqs_max_receive_count
 
         if fitting_id is None or user_id is None:
