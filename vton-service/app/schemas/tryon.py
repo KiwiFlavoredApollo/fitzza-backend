@@ -140,6 +140,11 @@ class FittingDetailResponse(BaseModel):
         default=None,
         description="피팅 실패 시 상세 에러 메시지",
     )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="피팅 처리 중 발생한 안내/경고 메시지 (예: 특정 카테고리 기본 이미지 대체 또는 제외 안내)",
+        json_schema_extra={"example": ["요청하신 [신발] 카테고리 상품 정보를 불러올 수 없어 기본 에셋으로 대체 피팅되었습니다."]},
+    )
     products: list[FittingProductResponse] = Field(
         default_factory=list,
         description="피팅에 사용된 상품 목록",

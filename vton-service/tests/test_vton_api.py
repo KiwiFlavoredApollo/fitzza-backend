@@ -1228,6 +1228,72 @@ def test_fitting_image_endpoint_local_storage_serves_without_auth(tmp_path: Path
     set_dependencies_for_tests(None, None, None, None)
 
 
+def test_vton_warnings_and_required_optional_policy() -> None:
+    client = TestClient(app)
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+
+    # 1. 상의만 요청 (하의, 신발 누락) + 아우터는 이미지 다운로드 실패(imageBytes=None)
+    mock_prod_client.resolve_product_item.side_effect = [
+        {
+            "productId": 101,
+            "productName": "기본 티셔츠",
+            "price": 20000,
+            "imageUrl": "https://cdn.example.com/top.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+        {
+            "productId": 201,
+            "productName": "겨울 패딩",
+            "price": 99000,
+            "imageUrl": "https://cdn.example.com/broken_outer.png",
+            "categoryName": "아우터",
+            "imageBytes": None,  # 다운로드 실패
+        },
+    ]
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 201])
+
+    with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()) as mock_gen:
+        completed = _run_background_vton(
+            fitting_id=fitting_id,
+            user_id=7,
+            photo_id=None,
+            product_ids=[101, 201],
+            result_image_url=f"/api/vton/{fitting_id}/image",
+        )
+        assert completed is True
+
+        # AI 생성 호출 인자 검증:
+        # 1. 아우터는 제외되어야 함
+        # 2. 필수 누락 카테고리인 [하의, 신발]은 기본 샘플 에셋으로 추가되어야 함
+        gen_categories = mock_gen.call_args.kwargs["categories"]
+        assert "상의" in gen_categories
+        assert "하의" in gen_categories
+        assert "신발" in gen_categories
+        assert "아우터" not in gen_categories  # 제외됨!
+
+    # 3. GET /api/vton/{fittingId} 응답에서 warnings 확인
+    resp = client.get(f"/api/vton/{fitting_id}", headers={"X-User-Id": "7"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "COMPLETED"
+    warnings = data.get("warnings") or []
+    assert any("아우터" in w and "제외" in w for w in warnings)
+    assert any("하의" in w and "기본 에셋으로 보완" in w for w in warnings)
+    assert any("신발" in w and "기본 에셋으로 보완" in w for w in warnings)
+
+    set_dependencies_for_tests(None, None, None, None)
+
+
 def test_save_fitting_products_idempotent_on_retry() -> None:
     repo = VtonRepository(db_path=":memory:")
     fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 201])

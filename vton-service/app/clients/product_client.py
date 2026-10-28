@@ -258,12 +258,6 @@ class ProductServiceClient:
         if image_bytes is None and image_url:
             image_bytes = self.fetch_product_image_bytes(image_url)
 
-        # 3. 이미지 다운로드 실패 또는 미제공 시 카테고리별 샘플 의류 PNG로 폴백
-        if image_bytes is None:
-            safe_category = category_name if category_name in SUPPORTED_CATEGORIES else "상의"
-            category_name = safe_category
-            image_bytes = load_sample_clothing_png(safe_category)
-
         return {
             "productId": int(product_id),
             "productName": product_name,
