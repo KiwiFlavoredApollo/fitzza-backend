@@ -27,9 +27,11 @@ class ProductServiceClient:
         self,
         settings: Settings | None = None,
         storage_client: Any | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.storage_client = storage_client
+        self._http_client = http_client
 
     def _get_storage(self) -> Any:
         if self.storage_client is None:
@@ -40,6 +42,17 @@ class ProductServiceClient:
             except Exception:
                 self.storage_client = None
         return self.storage_client
+
+    def _get_http_client(self) -> httpx.Client:
+        """재사용 가능한 HTTP 커넥션 풀 클라이언트를 반환합니다."""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.Client(timeout=self.settings.http_timeout_seconds)
+        return self._http_client
+
+    def close(self) -> None:
+        """소유한 HTTP 클라이언트 리소스를 안전하게 해제합니다."""
+        if self._http_client is not None and not self._http_client.is_closed:
+            self._http_client.close()
 
     @property
     def is_configured(self) -> bool:
@@ -68,31 +81,31 @@ class ProductServiceClient:
         }
 
         try:
-            with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
-                resp = client.post(url, json=body)
-                if resp.status_code != 200:
-                    logger.debug("Qdrant 응답 상태 코드 (productId=%s): %d", product_id, resp.status_code)
-                    return None
-                data = resp.json()
-                points = (data.get("result") or {}).get("points") or []
-                if not points:
-                    return None
-                payload = points[0].get("payload") or {}
-                logger.info(
-                    "Qdrant 메타데이터 조회 성공 (productId=%s, name=%s, category=%s)",
-                    product_id,
-                    payload.get("product_name"),
-                    payload.get("category"),
-                )
-                return {
-                    "productId": int(product_id),
-                    "productName": payload.get("product_name") or f"상품 #{product_id}",
-                    "normalPrice": int(payload.get("price") or 0),
-                    "price": int(payload.get("price") or 0),
-                    "thumbnailUrl": payload.get("image_key") or payload.get("image_url") or "",
-                    "categoryL1Name": payload.get("category") or "",
-                    "_source": "qdrant",
-                }
+            client = self._get_http_client()
+            resp = client.post(url, json=body)
+            if resp.status_code != 200:
+                logger.debug("Qdrant 응답 상태 코드 (productId=%s): %d", product_id, resp.status_code)
+                return None
+            data = resp.json()
+            points = (data.get("result") or {}).get("points") or []
+            if not points:
+                return None
+            payload = points[0].get("payload") or {}
+            logger.info(
+                "Qdrant 메타데이터 조회 성공 (productId=%s, name=%s, category=%s)",
+                product_id,
+                payload.get("product_name"),
+                payload.get("category"),
+            )
+            return {
+                "productId": int(product_id),
+                "productName": payload.get("product_name") or f"상품 #{product_id}",
+                "normalPrice": int(payload.get("price") or 0),
+                "price": int(payload.get("price") or 0),
+                "thumbnailUrl": payload.get("image_key") or payload.get("image_url") or "",
+                "categoryL1Name": payload.get("category") or "",
+                "_source": "qdrant",
+            }
         except Exception as exc:
             logger.warning("Qdrant 상품 조회 실패 (productId=%s): %s", product_id, exc)
             return None
@@ -139,10 +152,10 @@ class ProductServiceClient:
         # 2. HTTP(S) URL 다운로드 (외부 무신사 CDN 또는 fallback)
         if clean_url.startswith(("http://", "https://")):
             try:
-                with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
-                    resp = client.get(clean_url)
-                    resp.raise_for_status()
-                    return to_png_bytes(resp.content)
+                client = self._get_http_client()
+                resp = client.get(clean_url)
+                resp.raise_for_status()
+                return to_png_bytes(resp.content)
             except Exception as exc:
                 logger.warning(
                     "상품 이미지 HTTP 다운로드/변환 실패 (url=%s): %s: %s",

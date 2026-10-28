@@ -597,6 +597,26 @@ def test_post_vton_multipart_validations() -> None:
     assert resp_fewer_pids.status_code == 400
     assert "2개 이상" in resp_fewer_pids.json()["message"]
 
+    # 2-2. items가 깨진 JSON일 때 400 Bad Request
+    resp_bad_json_items = client.post(
+        "/api/vton",
+        data={"items": "invalid_json{"},
+        files={"userImage": ("photo.png", img_bytes, "image/png")},
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_bad_json_items.status_code == 400
+    assert "유효한 JSON 배열" in resp_bad_json_items.json()["message"]
+
+    # 2-3. items에 1개 상품만 전달 시 Pydantic RequestValidationError(400 INVALID_REQUEST)
+    resp_single_json_items = client.post(
+        "/api/vton",
+        data={"items": '[{"productId": 101}]'},
+        files={"userImage": ("photo.png", img_bytes, "image/png")},
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_single_json_items.status_code == 400
+    assert resp_single_json_items.json()["code"] == "INVALID_REQUEST"
+
     # 3. 손상된/유효하지 않은 이미지 데이터 시 400 Bad Request
     resp_corrupt = client.post(
         "/api/vton",

@@ -317,16 +317,20 @@ async def request_fitting(
                 loaded_items = json.loads(raw_items_str.strip())
                 if not isinstance(loaded_items, list):
                     raise ValueError("items는 JSON 배열이어야 합니다.")
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="items는 유효한 JSON 배열 형식이어야 합니다.",
+                ) from exc
+
+            try:
                 validated_req = FittingCreateRequest(items=loaded_items)
                 product_ids = validated_req.productIds or []
                 for it in (validated_req.items or []):
                     if it.imageUrl and it.imageUrl.strip():
                         item_image_urls[it.productId] = it.imageUrl.strip()
-            except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="items는 유효한 JSON 배열 형식이어야 합니다.",
-                ) from exc
+            except ValidationError as exc:
+                raise RequestValidationError(exc.errors()) from exc
         elif raw_values:
             parsed_pids: list[Any] = []
             try:
