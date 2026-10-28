@@ -75,6 +75,17 @@ def test_post_vton_enforces_product_limit() -> None:
     assert resp.json()["code"] == "INVALID_REQUEST"
 
 
+def test_post_vton_enforces_min_product_limit() -> None:
+    client = TestClient(app)
+    resp = client.post(
+        "/api/vton",
+        json={"productIds": [101]},
+        headers={"X-User-Id": "1"},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "INVALID_REQUEST"
+
+
 def test_post_vton_returns_202_accepted() -> None:
     client = TestClient(app)
     with patch("app.api.vton._run_background_vton") as mock_bg:
@@ -576,10 +587,20 @@ def test_post_vton_multipart_validations() -> None:
     )
     assert resp_no_pids.status_code == 400
 
+    # 2-1. productIds 1개(최소 2개 미만) 전달 시 400 Bad Request
+    resp_fewer_pids = client.post(
+        "/api/vton",
+        data={"productIds": "[101]"},
+        files={"userImage": ("photo.png", img_bytes, "image/png")},
+        headers={"X-User-Id": "7"},
+    )
+    assert resp_fewer_pids.status_code == 400
+    assert "2개 이상" in resp_fewer_pids.json()["message"]
+
     # 3. 손상된/유효하지 않은 이미지 데이터 시 400 Bad Request
     resp_corrupt = client.post(
         "/api/vton",
-        data={"productIds": "[101]"},
+        data={"productIds": "[101, 201]"},
         files={"userImage": ("corrupt.png", b"not-a-real-png", "image/png")},
         headers={"X-User-Id": "7"},
     )
@@ -590,7 +611,7 @@ def test_post_vton_multipart_validations() -> None:
     with patch("app.api.vton.MAX_PHOTO_SIZE_BYTES", 100):
         resp_too_large = client.post(
             "/api/vton",
-            data={"productIds": "[101]"},
+            data={"productIds": "[101, 201]"},
             files={"userImage": ("large.png", img_bytes, "image/png")},
             headers={"X-User-Id": "7"},
         )
@@ -709,7 +730,7 @@ def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
     # 1. 타인(사용자 99)이 해당 photoId로 피팅 요청 시 404 차단
     resp_other = client.post(
         "/api/vton",
-        json={"photoId": photo_id, "productIds": [101]},
+        json={"photoId": photo_id, "productIds": [101, 201]},
         headers={"X-User-Id": "99"},
     )
     assert resp_other.status_code == 404
@@ -717,7 +738,7 @@ def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
     # 2. 존재하지 않는 photoId 요청 시 404 차단
     resp_none = client.post(
         "/api/vton",
-        json={"photoId": 88888, "productIds": [101]},
+        json={"photoId": 88888, "productIds": [101, 201]},
         headers={"X-User-Id": "7"},
     )
     assert resp_none.status_code == 404
@@ -726,7 +747,7 @@ def test_post_vton_with_photo_id_ownership_validation(tmp_path: Path) -> None:
     with patch("app.api.vton._run_background_vton"):
         resp_ok = client.post(
             "/api/vton",
-            json={"photoId": photo_id, "productIds": [101]},
+            json={"photoId": photo_id, "productIds": [101, 201]},
             headers={"X-User-Id": "7"},
         )
         assert resp_ok.status_code == 202
@@ -804,14 +825,24 @@ def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
     photo_record = repo.save_user_photo(user_id=7, file_path=str(user_photo_file))
     photo_id = photo_record["photoId"]
 
-    mock_prod_client.resolve_product_item.return_value = {
-        "productId": 101,
-        "productName": "상의",
-        "price": 20000,
-        "imageUrl": "https://cdn.example.com/top.png",
-        "categoryName": "상의",
-        "imageBytes": _create_sample_png(),
-    }
+    mock_prod_client.resolve_product_item.side_effect = [
+        {
+            "productId": 101,
+            "productName": "상의",
+            "price": 20000,
+            "imageUrl": "https://cdn.example.com/top.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+        {
+            "productId": 201,
+            "productName": "하의",
+            "price": 30000,
+            "imageUrl": "https://cdn.example.com/bottom.png",
+            "categoryName": "하의",
+            "imageBytes": _create_sample_png(),
+        },
+    ]
 
     set_dependencies_for_tests(
         repo=repo,
@@ -819,14 +850,14 @@ def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
         notification_client=mock_notif_client,
     )
 
-    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101])
+    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101, 201])
 
     with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()) as mock_generate:
         _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
             photo_id=photo_id,
-            product_ids=[101],
+            product_ids=[101, 201],
             result_image_url="/api/vton/1/image",
         )
 
@@ -839,7 +870,7 @@ def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
         mock_notif_client.send_fitting_done.assert_called_once()
 
 
-def test_background_vton_fallback_bottom_when_missing(tmp_path: Path) -> None:
+def test_background_vton_fallback_shoes_when_missing(tmp_path: Path) -> None:
     test_storage = tmp_path / "fittings"
     test_storage.mkdir(parents=True, exist_ok=True)
     settings = Settings(
@@ -851,11 +882,66 @@ def test_background_vton_fallback_bottom_when_missing(tmp_path: Path) -> None:
     mock_prod_client = MagicMock(spec=ProductServiceClient)
     mock_notif_client = MagicMock(spec=NotificationServiceClient)
 
-    # 오직 상의(101)만 요청한 경우
+    # 상의(101)와 하의(201)를 요청한 경우 (신발 누락)
+    mock_prod_client.resolve_product_item.side_effect = [
+        {
+            "productId": 101,
+            "productName": "기본 상의",
+            "price": 25000,
+            "imageUrl": "https://cdn.example.com/top.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+        {
+            "productId": 201,
+            "productName": "기본 하의",
+            "price": 35000,
+            "imageUrl": "https://cdn.example.com/bottom.png",
+            "categoryName": "하의",
+            "imageBytes": _create_sample_png(),
+        },
+    ]
+
+    set_dependencies_for_tests(
+        repo=repo,
+        product_client=mock_prod_client,
+        notification_client=mock_notif_client,
+    )
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101, 201])
+
+    with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()) as mock_generate:
+        _run_background_vton(
+            fitting_id=fitting_id,
+            user_id=7,
+            photo_id=None,
+            product_ids=[101, 201],
+            result_image_url="/api/vton/1/image",
+        )
+
+        assert mock_generate.called
+        kwargs = mock_generate.call_args.kwargs
+        categories = kwargs["categories"]
+        # AI 생성에는 상의 + 하의 + 필수 3종 중 누락된 신발 폴백 = 총 3개 전달
+        assert "상의" in categories
+        assert "하의" in categories
+        assert "신발" in categories
+
+        # DB에는 사용자가 실제 요청한 2개 상품만 저장됨
+        detail = repo.get_fitting_detail(fitting_id)
+        assert detail is not None
+        assert len(detail["products"]) == 2
+
+
+def test_background_vton_fails_when_fewer_than_2_categories() -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_prod_client = MagicMock(spec=ProductServiceClient)
+    mock_notif_client = MagicMock(spec=NotificationServiceClient)
+
     mock_prod_client.resolve_product_item.return_value = {
         "productId": 101,
-        "productName": "기본 상의",
-        "price": 25000,
+        "productName": "상의",
+        "price": 20000,
         "imageUrl": "https://cdn.example.com/top.png",
         "categoryName": "상의",
         "imageBytes": _create_sample_png(),
@@ -869,27 +955,20 @@ def test_background_vton_fallback_bottom_when_missing(tmp_path: Path) -> None:
 
     fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101])
 
-    with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()) as mock_generate:
-        _run_background_vton(
+    with patch("app.api.vton.generate_tryon_image") as mock_generate:
+        success = _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
             photo_id=None,
             product_ids=[101],
             result_image_url="/api/vton/1/image",
         )
-
-        assert mock_generate.called
-        kwargs = mock_generate.call_args.kwargs
-        categories = kwargs["categories"]
-        # AI 생성에는 상의 1개 + 기본 하의 폴백 1개 = 총 2개 전달
-        assert "상의" in categories
-        assert "하의" in categories
-
-        # DB에는 사용자가 실제 요청한 상의(101)만 저장되고, 폴백 하의(0번 가짜 상품)는 저장되지 않아야 함
+        assert success is False
+        mock_generate.assert_not_called()
         detail = repo.get_fitting_detail(fitting_id)
         assert detail is not None
-        assert len(detail["products"]) == 1
-        assert detail["products"][0]["productId"] == 101
+        assert detail["status"] == "FAILED"
+        assert "최소 2개" in detail["errorMessage"]
 
 
 def test_background_vton_fails_when_user_photo_file_missing() -> None:
@@ -901,14 +980,24 @@ def test_background_vton_fails_when_user_photo_file_missing() -> None:
     photo_record = repo.save_user_photo(user_id=7, file_path="/non/existent/path/photo.png")
     photo_id = photo_record["photoId"]
 
-    mock_prod_client.resolve_product_item.return_value = {
-        "productId": 101,
-        "productName": "상의",
-        "price": 20000,
-        "imageUrl": "https://cdn.example.com/top.png",
-        "categoryName": "상의",
-        "imageBytes": _create_sample_png(),
-    }
+    mock_prod_client.resolve_product_item.side_effect = [
+        {
+            "productId": 101,
+            "productName": "상의",
+            "price": 20000,
+            "imageUrl": "https://cdn.example.com/top.png",
+            "categoryName": "상의",
+            "imageBytes": _create_sample_png(),
+        },
+        {
+            "productId": 201,
+            "productName": "하의",
+            "price": 30000,
+            "imageUrl": "https://cdn.example.com/bottom.png",
+            "categoryName": "하의",
+            "imageBytes": _create_sample_png(),
+        },
+    ]
 
     set_dependencies_for_tests(
         repo=repo,
@@ -916,14 +1005,14 @@ def test_background_vton_fails_when_user_photo_file_missing() -> None:
         notification_client=mock_notif_client,
     )
 
-    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101])
+    fitting_id = repo.create_fitting(user_id=7, photo_id=photo_id, product_ids=[101, 201])
 
     with patch("app.api.vton.generate_tryon_image") as mock_generate:
         _run_background_vton(
             fitting_id=fitting_id,
             user_id=7,
             photo_id=photo_id,
-            product_ids=[101],
+            product_ids=[101, 201],
             result_image_url="/api/vton/1/image",
         )
 
@@ -1067,7 +1156,7 @@ def test_post_vton_with_request_id_json_and_get_detail() -> None:
         resp = client.post(
             "/api/vton",
             json={
-                "items": [{"productId": 101}],
+                "items": [{"productId": 101}, {"productId": 201}],
                 "requestId": 6,
             },
             headers={"X-User-Id": "7"},
@@ -1098,7 +1187,7 @@ def test_post_vton_with_request_id_multipart_and_get_detail() -> None:
     fake_png = _create_sample_png()
     files = {"userImage": ("face.png", fake_png, "image/png")}
     data = {
-        "items": json.dumps([{"productId": 101}]),
+        "items": json.dumps([{"productId": 101}, {"productId": 201}]),
         "requestId": "15",
     }
 
@@ -1127,7 +1216,7 @@ def test_post_vton_with_invalid_multipart_request_id_returns_400() -> None:
     fake_png = _create_sample_png()
     files = {"userImage": ("face.png", fake_png, "image/png")}
     data = {
-        "items": json.dumps([{"productId": 101}]),
+        "items": json.dumps([{"productId": 101}, {"productId": 201}]),
         "requestId": "invalid_number",
     }
 

@@ -347,17 +347,17 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
     with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()), patch.object(
         prod_client,
         "get_product",
-        return_value={
-            "productName": "테스트 상의",
+        side_effect=lambda pid, **kw: {
+            "productName": "테스트 상의" if pid == 101 else "테스트 하의",
             "price": 30000,
-            "thumbnailUrl": "pipeline/test/001.jpg",
-            "categoryL1Name": "상의",
+            "thumbnailUrl": f"pipeline/test/{pid}.jpg",
+            "categoryL1Name": "상의" if pid == 101 else "하의",
         },
     ):
         response = client.post(
             "/api/vton",
             headers={"X-User-Id": "100"},
-            data={"productIds": "[101]"},
+            data={"productIds": "[101, 201]"},
             files={"userImage": ("face.png", png_data, "image/png")},
         )
         assert response.status_code == 202

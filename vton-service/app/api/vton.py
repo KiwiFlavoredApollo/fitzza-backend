@@ -240,9 +240,9 @@ def list_user_fittings(
                                         },
                                     },
                                 },
-                                "minItems": 1,
+                                "minItems": 2,
                                 "maxItems": 5,
-                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (최소 1개, 최대 5개)",
+                                "description": "피팅할 상품 및 추천 색상별 이미지 목록 (최소 2개, 최대 5개)",
                                 "example": [
                                     {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},
                                     {"productId": 201, "imageUrl": "https://image.msscdn.net/images/goods_img/black.jpg"},
@@ -351,7 +351,7 @@ async def request_fitting(
             except (ValueError, TypeError, json.JSONDecodeError, ValidationError) as exc:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="productIds는 1개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
+                    detail="productIds는 2개 이상 5개 이하의 유효한 정수 배열이어야 합니다.",
                 ) from exc
         else:
             raise HTTPException(
@@ -359,8 +359,13 @@ async def request_fitting(
                 detail="productIds 또는 items가 누락되었습니다.",
             )
 
-        # 상품 검증 선행: 중복 제거 및 최대 개수 확인 (실패 시 이미지 I/O 자체를 방지)
+        # 상품 검증 선행: 중복 제거 및 최소/최대 개수 확인 (실패 시 이미지 I/O 자체를 방지)
         unique_product_ids = list(dict.fromkeys(product_ids))
+        if len(unique_product_ids) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="가상 피팅을 위해 최소 2개 이상의 서로 다른 상품을 선택해야 합니다.",
+            )
         if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -446,10 +451,15 @@ async def request_fitting(
         if not product_ids:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="최소 하나 이상의 상품 ID를 전달해야 합니다.",
+                detail="최소 2개 이상의 상품 ID를 전달해야 합니다.",
             )
 
         unique_product_ids = list(dict.fromkeys(product_ids))
+        if len(unique_product_ids) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="가상 피팅을 위해 최소 2개 이상의 서로 다른 상품을 선택해야 합니다.",
+            )
         if len(unique_product_ids) > len(SUPPORTED_CATEGORIES):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

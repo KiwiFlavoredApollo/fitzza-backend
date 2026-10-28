@@ -31,16 +31,16 @@ class FittingCreateRequest(BaseModel):
     )
     productIds: list[int] | None = Field(
         default=None,
-        min_length=1,
+        min_length=2,
         max_length=5,
-        description="피팅할 상품 ID 목록 (최소 1개, 최대 5개)",
+        description="피팅할 상품 ID 목록 (최소 2개, 최대 5개)",
         json_schema_extra={"example": [101, 201]},
     )
     items: list[FittingItemInput] | None = Field(
         default=None,
-        min_length=1,
+        min_length=2,
         max_length=5,
-        description="피팅할 상품 및 추천 색상별 이미지 목록 (productIds 대신 사용 권장)",
+        description="피팅할 상품 및 추천 색상별 이미지 목록 (productIds 대신 사용 권장, 최소 2개, 최대 5개)",
         json_schema_extra={
             "example": [
                 {"productId": 101, "imageUrl": "https://image.msscdn.net/images/goods_img/green.jpg"},

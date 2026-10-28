@@ -205,6 +205,9 @@ def run_background_vton(
             category_to_product[cat] = item
             resolved_products.append(item)
 
+        if len(category_to_product) < 2:
+            raise VtonValidationError("가상 피팅을 위해 최소 2개 이상의 서로 다른 카테고리 상품이 필요합니다.")
+
         # 상품 DB 영속화 (사용자가 요청한 실제 상품들만 DB에 저장)
         repo.save_fitting_products(fitting_id, resolved_products)
 
