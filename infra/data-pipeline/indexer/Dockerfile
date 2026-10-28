@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements-indexer.txt
 COPY index_to_qdrant.py ./index_to_qdrant.py
 COPY crawler/src/review_gate.py ./review_gate.py
 COPY indexer/entrypoint.py ./entrypoint.py
+COPY indexer/vector_points.py indexer/embed_job.py indexer/import_job.py indexer/switch_alias.py ./
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HF_HOME=/work/huggingface
 USER 10001:10001
 WORKDIR /work
