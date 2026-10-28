@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: import
-          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/fashion-clip:vector-20261028-01
+          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/fashion-clip:vector-20261028-02
           command: ["python", "/pipeline/import_job.py"]
           args: ["--bucket", "fitzza-prod-foundation-databucket-wwng6wfc0hqy", "--vector-run-id", "collection-20261025-01-fclip-01",
                  "--collection", "fitzza_products_20261025_01"]
