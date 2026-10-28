@@ -139,6 +139,9 @@ class Settings:
     aws_endpoint_url: str = field(
         default_factory=lambda: os.getenv("AWS_ENDPOINT_URL", "")
     )
+    aws_profile: str = field(
+        default_factory=lambda: os.getenv("AWS_PROFILE", "")
+    )
     aws_access_key_id: str = field(
         default_factory=lambda: os.getenv("AWS_ACCESS_KEY_ID", "")
     )

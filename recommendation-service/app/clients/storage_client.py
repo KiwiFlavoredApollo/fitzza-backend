@@ -52,14 +52,22 @@ class StorageClient:
                 retries={"max_attempts": 3, "mode": "standard"},
                 signature_version="s3v4",
             )
-            self._s3_client = boto3.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                region_name=self.settings.aws_region,
-                aws_access_key_id=self.settings.aws_access_key_id or None,
-                aws_secret_access_key=self.settings.aws_secret_access_key or None,
-                config=config,
-            )
+            session_kwargs: dict[str, Any] = {}
+            if self.settings.aws_profile.strip():
+                session_kwargs["profile_name"] = self.settings.aws_profile.strip()
+            session = boto3.Session(**session_kwargs)
+
+            client_kwargs: dict[str, Any] = {
+                "endpoint_url": self.endpoint_url,
+                "region_name": self.settings.aws_region,
+                "config": config,
+            }
+            if self.settings.aws_access_key_id.strip():
+                client_kwargs["aws_access_key_id"] = self.settings.aws_access_key_id.strip()
+            if self.settings.aws_secret_access_key.strip():
+                client_kwargs["aws_secret_access_key"] = self.settings.aws_secret_access_key.strip()
+
+            self._s3_client = session.client("s3", **client_kwargs)
         return self._s3_client
 
     def get_public_url(self, key: str) -> str:

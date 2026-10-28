@@ -146,7 +146,7 @@ class PersonalizedFeedService:
                 brandName=payload.get("brand_name"),
                 price=int(payload.get("price") or 0),
                 thumbnailUrl=self.storage_client.get_presigned_url(
-                    payload.get("image_url")
+                    payload.get("image_key") or payload.get("image_url")
                 ),
                 status="ON_SALE",
                 category=payload.get("category"),

@@ -499,7 +499,7 @@ class FashionSearchEngine:
                     "color_raw": payload.get("color_raw"),
                     "color_normalized": product_colors,
                     "image_url": self.storage_client.get_presigned_url(
-                        payload.get("image_url")
+                        payload.get("image_key") or payload.get("image_url")
                     ),
                     "product_url": payload.get("product_url"),
                 }
@@ -683,7 +683,7 @@ class FashionSearchEngine:
                     "features": payload.get("features") or {},
                     "sizes": payload.get("sizes") or [],
                     "image_url": self.storage_client.get_presigned_url(
-                        payload.get("image_url")
+                        payload.get("image_key") or payload.get("image_url")
                     ),
                     "product_url": payload.get("product_url"),
                     "vector": hit.vector,

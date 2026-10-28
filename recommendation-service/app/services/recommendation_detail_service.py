@@ -37,7 +37,12 @@ class RecommendationDetailService:
 
     def _resolve_item_dict(self, item_data: dict[str, Any]) -> dict[str, Any]:
         """단일 아이템 딕셔너리의 이미지 URL을 해결한 복사본을 반환합니다."""
-        raw = item_data.get("imageUrl") or item_data.get("image_url")
+        raw = (
+            item_data.get("imageKey")
+            or item_data.get("image_key")
+            or item_data.get("imageUrl")
+            or item_data.get("image_url")
+        )
         if raw:
             item_copy = dict(item_data)
             item_copy["imageUrl"] = self.resolve_image_url(raw)
@@ -77,7 +82,10 @@ class RecommendationDetailService:
                 productName=item.get("productName") or "",
                 price=item.get("price") or 0,
                 imageUrl=self.resolve_image_url(
-                    item.get("imageUrl") or item.get("image_url")
+                    item.get("imageKey")
+                    or item.get("image_key")
+                    or item.get("imageUrl")
+                    or item.get("image_url")
                 ),
             )
             for item in combo.get("items") or []
