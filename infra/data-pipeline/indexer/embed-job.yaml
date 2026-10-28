@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: fashion-clip-embed-20261025-01
+  name: fashion-clip-embed-20261025-02
   namespace: fitzza
   annotations:
     fitzza.io/execution-policy: manual-approval-required
@@ -33,7 +33,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: embed
-          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/fashion-clip:vector-20261028-01
+          image: 414901227428.dkr.ecr.ap-northeast-2.amazonaws.com/fitzza/fashion-clip:vector-20261028-02
           command: ["python", "/pipeline/embed_job.py"]
           args: ["--bucket", "fitzza-prod-foundation-databucket-wwng6wfc0hqy", "--run-id", "collection-20261025-01",
                  "--vector-run-id", "collection-20261025-01-fclip-01", "--model-revision", "SET-SERVING-MODEL-REVISION"]
@@ -55,11 +55,11 @@ spec:
             requests:
               cpu: 500m
               memory: 2Gi
-              ephemeral-storage: 4Gi
+              ephemeral-storage: 1Gi
             limits:
               cpu: "1"
               memory: 3Gi
-              ephemeral-storage: 8Gi
+              ephemeral-storage: 3Gi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -73,7 +73,8 @@ spec:
       volumes:
         - name: work
           emptyDir:
-            sizeLimit: 6Gi
+            # Model download (~0.6 GB) + approved bundle (~2 MB); images are streamed from S3.
+            sizeLimit: 2Gi
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi

@@ -178,7 +178,10 @@ pilot은 종료·정지됐고 두 AI 앱의 replicas 및 CD 전환은 복구했�
 - importer는 벡터 차원·NaN·0벡터·payload 누락·모델 불일치·중복이 하나라도 있으면 Qdrant에 연결하기 전에 거부한다. 같은 이름의 컬렉션이 있으면 `--resume` 없이는 실패한다.
 - `switch_alias.py`는 실제 컬렉션 이름을 alias로 쓰거나 alias를 대상으로 지정하면 거부한다. 컬렉션을 삭제하지 않는다.
 
-이미지 빌드(빌드 컨텍스트는 `infra/data-pipeline`):
+이미지 빌드(빌드 컨텍스트는 `infra/data-pipeline`). 베이스(`BASE_IMAGE`)는 노드에서 실행 중인 recommendation-service
+이미지 digest와 같아야 한다. 노드 디스크가 20GB라, 다른 베이스(3.4GB)를 받으면 디스크가 차서 Pod가 퇴거된다
+(10/28 `fashion-clip-embed-20261025-01`이 이 이유로 이미지 압축 해제 중 `no space left on device`로 실패, 임베딩 미시작).
+추천 서비스가 재배포되면 digest를 다시 확인한다.
 
 ```powershell
 docker buildx build --platform linux/arm64 --provenance=false -f indexer/Dockerfile -t <repo>/fitzza/fashion-clip:vector-20261028-01 --push .
