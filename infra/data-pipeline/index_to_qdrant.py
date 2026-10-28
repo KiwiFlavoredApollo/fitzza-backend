@@ -6,6 +6,7 @@ import numpy as np
 import requests
 from PIL import Image
 from io import BytesIO
+from pathlib import Path
 from tqdm import tqdm
 from transformers import CLIPModel, CLIPProcessor
 from qdrant_client import QdrantClient
@@ -105,7 +106,37 @@ def normalize_measurements(category_name: str, raw_measurements: dict) -> dict:
     return mapped
 
 
-def make_payload(p, img_url, raw_color, norm_color):
+def load_product_manifest(images_root, product_id):
+    """images/products/<product_id>/manifest.json에서 source_url -> S3 Key 및 로컬 파일 매핑을 로드."""
+    if images_root is None or not images_root.exists():
+        return {}
+    manifest_path = images_root / str(product_id) / "manifest.json"
+    if not manifest_path.is_file():
+        return {}
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            doc = json.load(f)
+        mapping: dict[str, dict[str, Any]] = {}
+        for img in doc.get("images") or []:
+            if not isinstance(img, dict):
+                continue
+            src = img.get("source_url")
+            s3_key = img.get("s3_key")
+            if src and s3_key:
+                clean_src = src.strip()
+                filename = s3_key.split("/")[-1]
+                local_file = images_root / str(product_id) / filename
+                mapping[clean_src] = {
+                    "s3_key": s3_key.strip(),
+                    "local_path": local_file if local_file.is_file() else None,
+                }
+        return mapping
+    except Exception as exc:
+        print(f"⚠️ manifest.json 로드 실패 (productId={product_id}): {exc}")
+        return {}
+
+
+def make_payload(p, img_url, raw_color, norm_color, s3_key=None):
     # 카테고리
     logical_cat = p.get("dataset", {}).get("logical_category")
     if logical_cat not in ["상의", "하의", "아우터", "모자", "신발"]:
@@ -134,15 +165,26 @@ def make_payload(p, img_url, raw_color, norm_color):
         "color_normalized": [norm_color],
         "features": p.get("features", {}),
         "sizes": normalized_sizes,
-        "image_url": img_url,
+        "image_url": s3_key or img_url,
+        "image_key": s3_key,
+        "image_source_url": img_url,
         "product_url": p.get("source_url", "")
     }
-
 
     return payload
 
 
-def load_image(url):
+def load_image(url, local_path=None):
+    if local_path and hasattr(local_path, "is_file") and local_path.is_file():
+        try:
+            from PIL import Image as PILImage
+            with PILImage.open(local_path) as image:
+                if image.width * image.height > 20_000_000:
+                    raise ValueError("Image dimensions exceed limit")
+                return image.convert("RGB")
+        except Exception:
+            pass  # fallback to remote url
+
     from urllib.parse import urlparse
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in {"image.msscdn.net", "image.musinsa.com", "image.musinsa.co.kr"}:
@@ -167,6 +209,13 @@ def main():
     if not collection.startswith("pipeline_staging_"):
         raise ValueError("Only staging collections are allowed")
     data_root = os.environ["DATA_ROOT"]
+    images_root_env = os.environ.get("IMAGES_ROOT")
+    if images_root_env:
+        images_root = Path(images_root_env).resolve()
+    else:
+        candidate_images_root = Path(data_root).resolve().parent / "images" / "products"
+        images_root = candidate_images_root if candidate_images_root.exists() else None
+
     products = []
     for root, _, names in os.walk(data_root):
         for name in sorted(names):
@@ -194,13 +243,13 @@ def main():
             if vectors.shape != (len(images), 512) or not np.isfinite(vectors).all():
                 raise ValueError("Invalid embedding shape or values")
             points = []
-            for (p, url, raw, color), vector in zip(records, vectors):
-                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{p['product_id']}_{raw.strip().lower()}_{url}"))
+            for (p, url, raw, color, s3_key), vector in zip(records, vectors):
+                point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{p['product_id']}_{raw.strip().lower()}_{s3_key or url}"))
                 points.append(models.PointStruct(id=point_id, vector=vector.tolist(),
-                    payload=make_payload(p, url, raw, color)))
+                    payload=make_payload(p, url, raw, color, s3_key=s3_key)))
             client.upsert(collection_name=collection, points=points, wait=True)
             point_count += len(points)
-            indexed_products.update(str(p["product_id"]) for p, _, _, _ in records)
+            indexed_products.update(str(p["product_id"]) for p, _, _, _, _ in records)
         finally:
             for image in images:
                 image.close()
@@ -209,6 +258,8 @@ def main():
 
     try:
         for product in products:
+            pid = int(product["product_id"])
+            manifest_map = load_product_manifest(images_root, pid)
             mappings = product.get("color_image_mappings") or []
             if not mappings:
                 raise ValueError("Product missing color-image mappings")
@@ -218,8 +269,11 @@ def main():
                 if key not in COLOR_MAP_DB:
                     raise ValueError("Unmapped color")
                 url = mapping["image_url"]
-                images.append(load_image(url))
-                records.append((product, url, raw, COLOR_MAP_DB[key]))
+                manifest_entry = manifest_map.get(url.strip())
+                s3_key = manifest_entry["s3_key"] if manifest_entry else None
+                local_path = manifest_entry["local_path"] if manifest_entry else None
+                images.append(load_image(url, local_path=local_path))
+                records.append((product, url, raw, COLOR_MAP_DB[key], s3_key))
                 if len(images) == 4:
                     flush()
         flush()
