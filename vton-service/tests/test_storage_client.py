@@ -472,7 +472,7 @@ def test_product_client_fetch_product_image_from_s3() -> None:
     )
 
 
-def test_product_client_qdrant_fallback() -> None:
+def test_product_client_qdrant_direct_lookup() -> None:
     settings = Settings(
         product_service_url="http://offline-product-service:8082",
         qdrant_url="http://mock-qdrant:6333",
@@ -500,7 +500,7 @@ def test_product_client_qdrant_fallback() -> None:
         }
     }
 
-    with patch("httpx.Client.get", side_effect=Exception("ConnectError")), patch(
+    with patch("httpx.Client.get") as mock_get, patch(
         "httpx.Client.post", return_value=mock_qdrant_response
     ) as mock_post:
         item = prod_client.resolve_product_item(product_id=4479884, fallback_category="상의")
@@ -509,6 +509,7 @@ def test_product_client_qdrant_fallback() -> None:
         assert item["price"] == 77000
         assert item["categoryName"] == "신발"  # Qdrant category used instead of fallback_category!
         assert mock_post.called
+        assert not mock_get.called
 
 
 def test_supported_categories_priority() -> None:

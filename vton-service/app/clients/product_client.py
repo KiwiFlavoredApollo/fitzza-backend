@@ -45,7 +45,7 @@ class ProductServiceClient:
         return bool(self.settings.product_service_url.strip())
 
     def _get_product_from_qdrant(self, product_id: int) -> dict[str, Any] | None:
-        """product-service 장애 또는 미등록 시 Qdrant 벡터 DB에서 상품 메타데이터를 폴백 조회합니다."""
+        """Qdrant 벡터 DB에서 상품 메타데이터를 직접 조회합니다."""
         qdrant_url = (self.settings.qdrant_url or "").rstrip("/")
         collection_name = (self.settings.qdrant_collection_name or "").strip()
         if not qdrant_url or not collection_name:
@@ -78,7 +78,7 @@ class ProductServiceClient:
                     return None
                 payload = points[0].get("payload") or {}
                 logger.info(
-                    "Qdrant 메타데이터 폴백 조회 성공 (productId=%s, name=%s, category=%s)",
+                    "Qdrant 메타데이터 조회 성공 (productId=%s, name=%s, category=%s)",
                     product_id,
                     payload.get("product_name"),
                     payload.get("category"),
@@ -93,7 +93,7 @@ class ProductServiceClient:
                     "_source": "qdrant",
                 }
         except Exception as exc:
-            logger.warning("Qdrant 상품 폴백 조회 실패 (productId=%s): %s", product_id, exc)
+            logger.warning("Qdrant 상품 조회 실패 (productId=%s): %s", product_id, exc)
             return None
 
     def get_product(
@@ -101,38 +101,7 @@ class ProductServiceClient:
         product_id: int,
         request_id_header: str | None = None,
     ) -> dict[str, Any] | None:
-        """product-service에서 단일 상품 정보(GET /api/products/{productId})를 조회합니다."""
-        base_url = self.settings.product_service_url.rstrip("/")
-        if self.is_configured:
-            url = f"{base_url}/api/products/{product_id}"
-            headers: dict[str, str] = {}
-            if self.settings.vton_service_token.strip():
-                headers[SERVICE_TOKEN_HEADER] = self.settings.vton_service_token
-            if request_id_header:
-                headers[REQUEST_ID_HEADER] = request_id_header
-
-            try:
-                with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
-                    response = client.get(url, headers=headers)
-                    if response.status_code == 200:
-                        payload = response.json()
-                        if isinstance(payload, dict):
-                            return payload
-                    elif response.status_code != 404:
-                        logger.warning(
-                            "product-service 상품 조회 비정상 응답 (productId=%s, status=%d)",
-                            product_id,
-                            response.status_code,
-                        )
-            except Exception as exc:
-                logger.warning(
-                    "product-service 상품 조회 실패 (productId=%s): %s: %s",
-                    product_id,
-                    type(exc).__name__,
-                    exc,
-                )
-
-        # product-service 조회 실패/404 시 Qdrant 메타데이터 폴백 시도
+        """Qdrant 벡터 DB(Single Source of Truth)에서 상품 정보 및 메타데이터를 직접 조회합니다."""
         return self._get_product_from_qdrant(product_id)
 
     def fetch_product_image_bytes(
