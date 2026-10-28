@@ -1058,3 +1058,45 @@ def test_list_recommendations_and_detail_declarative_validation() -> None:
         assert res_detail_neg.json()["code"] == "INVALID_REQUEST"
 
 
+def test_llm_services_token_contextvars_concurrency() -> None:
+    import asyncio
+    from app.services.query_parser import QueryParser
+    from app.services.harmonizer import OutfitHarmonizer
+    from app.services.response_generator import ResponseGenerator
+
+    parser = QueryParser()
+    harmonizer = OutfitHarmonizer.__new__(OutfitHarmonizer)
+    responder = ResponseGenerator()
+
+    async def task_a() -> tuple[int, int, int]:
+        parser.last_prompt_tokens = 100
+        harmonizer.last_prompt_tokens = 200
+        responder.last_prompt_tokens = 300
+        await asyncio.sleep(0.02)
+        return (
+            parser.last_prompt_tokens,
+            harmonizer.last_prompt_tokens,
+            responder.last_prompt_tokens,
+        )
+
+    async def task_b() -> tuple[int, int, int]:
+        await asyncio.sleep(0.01)
+        parser.last_prompt_tokens = 999
+        harmonizer.last_prompt_tokens = 888
+        responder.last_prompt_tokens = 777
+        await asyncio.sleep(0.02)
+        return (
+            parser.last_prompt_tokens,
+            harmonizer.last_prompt_tokens,
+            responder.last_prompt_tokens,
+        )
+
+    async def runner() -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+        return await asyncio.gather(task_a(), task_b())
+
+    res_a, res_b = asyncio.run(runner())
+    # Task A's tokens must remain completely isolated from Task B
+    assert res_a == (100, 200, 300)
+    assert res_b == (999, 888, 777)
+
+
