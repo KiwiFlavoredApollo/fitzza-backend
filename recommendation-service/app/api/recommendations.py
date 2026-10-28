@@ -176,12 +176,18 @@ def _get_vton_client(request: Request) -> VtonServiceClient:
 
 def _get_coordinator(app: Any) -> Any:
     coordinator = getattr(app.state, "coordinator", None)
+    repository = getattr(app.state, "repository", None)
     if coordinator is None:
         from app.services.coordinator import FashionPipelineCoordinator
 
         cache_service = _get_cache_service(app)
-        coordinator = FashionPipelineCoordinator(cache_service=cache_service)
+        coordinator = FashionPipelineCoordinator(
+            cache_service=cache_service,
+            repository=repository,
+        )
         app.state.coordinator = coordinator
+    elif getattr(coordinator, "repository", None) is None and repository is not None:
+        coordinator.repository = repository
     return coordinator
 
 
@@ -619,18 +625,11 @@ def create_recommendation(
 )
 def list_recommendations(
     request: Request,
-    page: int = Query(default=0),
-    size: int = Query(default=20),
+    page: int = Query(default=0, ge=0, description="페이지 번호 (0부터 시작)"),
+    size: int = Query(default=20, ge=1, le=100, description="페이지 크기 (1~100)"),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> RecommendationHistoryPageResponse:
     user_id = _require_user_id(x_user_id)
-    if page < 0 or size < 1 or size > 100:
-        raise RecommendationApiError(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVALID_REQUEST",
-            message="page는 0 이상, size는 1~100이어야 합니다.",
-        )
-
     repository = _get_repository(request)
     page_data = repository.list_user_requests(
         user_id=user_id,
@@ -730,8 +729,8 @@ def get_product_size_recommendation(
     summary="추천 결과 조회",
 )
 def get_recommendation_detail(
-    requestId: int,
     request: Request,
+    requestId: int = Path(..., alias="requestId", gt=0, description="추천 요청 ID"),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> RecommendationDetailResponse:
     user_id = _require_user_id(x_user_id)
