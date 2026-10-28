@@ -132,6 +132,27 @@ python crawler/src/review_gate.py approve --bundle <검수한-번들-폴더>
 python crawler/src/review_gate.py verify --bundle <검수한-번들-폴더>
 ```
 
+### 검수 도구 (`crawler/src/color_review.py`)
+
+Jev Job이 올린 `jev/review-bundle.tar.gz`를 받아 배포 직전 승인본까지 만든다. AWS·Jev·모델·Qdrant를 호출하지 않는다.
+`crawler` 폴더에서 실행한다(번들 경로는 절대 경로 권장).
+
+```bash
+aws s3 cp s3://<bucket>/pipeline/runs/<run-id>/jev/review-bundle.tar.gz <작업폴더>/ --profile fitzza
+tar -xzf <작업폴더>/review-bundle.tar.gz -C <작업폴더>
+python -m src.color_review page --bundle <작업폴더>            # <작업폴더>-color-review.html 생성
+python -m src.color_review apply --bundle <작업폴더> --decisions <review_decisions.json>
+python -m src.review_gate approve --bundle <작업폴더>
+python -m src.review_gate verify --bundle <작업폴더>
+python -m src.color_review package --bundle <작업폴더> --output <color-approved.tar.gz>
+```
+
+- `page`: `review_gate`가 사람 확인을 요구하는 색상(review CSV 전부, 이 데이터셋에 쓰인 overrides, etc·multi)만 실제 상품 사진·Jev 후보와 함께 보여준다. 검수 결과는 `review_decisions.json`으로 저장한다.
+- `apply`: 대상이 하나라도 빠졌거나 허용되지 않은 색이면 아무것도 바꾸지 않는다. 통과하면 `color_map.json`과 `reviewed_colors.json`을 쓴다. 이미 `_APPROVED.json`이 있으면 거부한다.
+- `package`: 인덱서(`indexer/entrypoint.py`)와 같은 규칙으로 색상 승인·상품 3000개를 확인하고 `data/`·`config/`만 담은 tar.gz를 만든다. 만든 파일을 인덱서와 같은 방식으로 다시 풀어 같은 검사를 한 번 더 한다. 같은 번들이면 같은 파일(SHA-256)이 나온다.
+- 품질 승인(`config/_QUALITY_APPROVED.json`)을 넣은 뒤 `--require-quality`로 다시 만든 파일이 `approved/bundle.tar.gz`로 올릴 최종본이다. 이 옵션 없이 만든 파일은 색상 승인본이며 인덱서가 거부한다.
+- 업로드는 운영자가 한다: `aws s3 cp <최종본> s3://<bucket>/pipeline/runs/<run-id>/approved/bundle.tar.gz --profile fitzza`
+
 이 명령은 색상 승인만 생성한다. 실측·이미지·비율·3000개 품질 검증을 대신하지 않는다.
 별도 품질 검증 후 `config/_QUALITY_APPROVED.json`에 `approved: true`, 같은 파일 목록/hash(`files`),
 FashionCLIP 모델의 40자리 commit SHA(`model_revision`)를 기록한다. 이 파일을 임의로 만들거나 검증 없이 true로 설정하지 않는다.
