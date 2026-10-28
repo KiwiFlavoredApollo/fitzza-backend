@@ -196,7 +196,10 @@ def test_analytics_data_aggregation_and_vton_tokens(repo):
 
 
 def test_analytics_api_endpoint(monkeypatch):
-    monkeypatch.setattr("app.core.config.Settings.get_admin_user_ids", lambda self: {4})
+    monkeypatch.setattr(
+        "app.clients.user_client.UserServiceClient.get_user_profile",
+        lambda self, user_id, request_id_header=None: {"role": "ADMIN" if user_id == 7 else "USER"},
+    )
     monkeypatch.setattr(
         "app.clients.vton_client.VtonServiceClient.get_token_usage_in_range",
         lambda *args, **kwargs: [],
@@ -229,10 +232,10 @@ def test_analytics_api_endpoint(monkeypatch):
     assert forbidden_res.status_code == 403
     assert forbidden_res.json()["code"] == "FORBIDDEN"
 
-    # 3. Admin user (fitzzaadm, userId=4) -> 200 OK
+    # Admin role is authoritative regardless of the numeric user ID.
     res = client.get(
         "/api/recommendations/analytics",
-        headers={"X-User-Id": "4"},
+        headers={"X-User-Id": "7"},
     )
     assert res.status_code == 200
     body = res.json()
@@ -245,7 +248,7 @@ def test_analytics_api_endpoint(monkeypatch):
     # 4. Gateway backward compatibility path /api/v1/recommendations/analytics with admin header
     compat_res = client.get(
         "/api/v1/recommendations/analytics",
-        headers={"X-User-Id": "4"},
+        headers={"X-User-Id": "7"},
     )
     assert compat_res.status_code == 200
 
@@ -254,7 +257,7 @@ def test_analytics_api_endpoint(monkeypatch):
             period_res = client.get(
                 path,
                 params={"period": period},
-                headers={"X-User-Id": "4"},
+                headers={"X-User-Id": "7"},
             )
             assert period_res.status_code == 200
             assert period_res.json() == fake_repo.get_analytics_data(period=period)
@@ -265,7 +268,7 @@ def test_analytics_api_endpoint(monkeypatch):
         invalid_res = client.get(
             "/api/recommendations/analytics",
             params={"period": period},
-            headers={"X-User-Id": "4"},
+            headers={"X-User-Id": "7"},
         )
         assert invalid_res.status_code == 400
 
