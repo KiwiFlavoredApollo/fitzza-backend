@@ -37,6 +37,7 @@ def setup_test_environment(tmp_path: Path):
     settings = Settings(
         db_path=":memory:",
         storage_dir=str(test_storage),
+        storage_backend="local",
         community_service_token="community-secret-token-32bytes-long-padding!",
         vton_service_token="vton-secret-token-32bytes-long-padding-ok!",
         product_service_url="http://localhost:8082",
@@ -297,6 +298,7 @@ def test_get_fitting_image_serving(tmp_path: Path) -> None:
     settings = Settings(
         db_path=":memory:",
         storage_dir=str(test_storage),
+        storage_backend="local",
     )
     reset_settings_for_tests(settings)
     repo = VtonRepository(db_path=":memory:")
@@ -394,6 +396,7 @@ def test_delete_fitting_and_defend_access(tmp_path: Path) -> None:
     settings = Settings(
         db_path=":memory:",
         storage_dir=str(test_storage),
+        storage_backend="local",
     )
     reset_settings_for_tests(settings)
     repo = VtonRepository(db_path=":memory:")
@@ -788,6 +791,7 @@ def test_background_vton_uses_custom_user_photo_bytes(tmp_path: Path) -> None:
         db_path=":memory:",
         storage_dir=str(test_storage),
         photos_dir=str(test_photos),
+        storage_backend="local",
     )
     reset_settings_for_tests(settings)
     repo = VtonRepository(db_path=":memory:")

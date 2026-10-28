@@ -23,8 +23,8 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 DEFAULT_MODEL = "gpt-image-2.5-sunburst"
 
-# 지원하는 5대 표준 카테고리 (product-service의 categoryL1Name과 동일)
-SUPPORTED_CATEGORIES = ("상의", "하의", "아우터", "신발", "모자")
+# 지원하는 5대 표준 카테고리 (코디 필수 조합인 상의, 하의, 신발을 우선 순위로 배치)
+SUPPORTED_CATEGORIES = ("상의", "하의", "신발", "아우터", "모자")
 
 
 class VtonError(Exception):

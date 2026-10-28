@@ -35,13 +35,25 @@ class StorageClient:
         """S3 백엔드 사용 여부."""
         return self.backend in {"s3", "aws"}
 
-    def _extract_s3_key(self, key_or_url: str) -> str:
-        """S3 키 또는 전체 URL(S3/CloudFront/LocalStack)에서 S3 객체 키를 추출합니다."""
+    def _parse_s3_location(self, key_or_url: str) -> tuple[str, str]:
+        """S3 키 또는 전체 URL(S3/CloudFront/LocalStack/Presigned)에서 (bucket, key)를 추출합니다."""
         clean = key_or_url.strip()
+        bucket = self.bucket_name
+
         if clean.startswith(("http://", "https://")):
             parsed = urllib.parse.urlparse(clean)
+            host = parsed.netloc.lower()
             path = parsed.path.lstrip("/")
-            if path.startswith(f"{self.bucket_name}/"):
+
+            if ".s3." in host:
+                bucket = host.split(".s3.")[0]
+            elif host.endswith(".s3.amazonaws.com"):
+                bucket = host[:-len(".s3.amazonaws.com")]
+            elif host.startswith("s3.") or host.startswith("s3-") or host == "s3.amazonaws.com":
+                parts = path.split("/", 1)
+                bucket = parts[0]
+                path = parts[1] if len(parts) > 1 else ""
+            elif path.startswith(f"{self.bucket_name}/"):
                 path = path[len(self.bucket_name) + 1 :]
         else:
             path = clean.lstrip("/")
@@ -50,9 +62,14 @@ class StorageClient:
         if path.startswith("api/vton/") and path.endswith("/image"):
             parts = path.split("/")
             if len(parts) == 4 and parts[2].isdigit():
-                return f"fittings/{parts[2]}.png"
+                path = f"fittings/{parts[2]}.png"
 
-        return path
+        return bucket, path
+
+    def _extract_s3_key(self, key_or_url: str) -> str:
+        """S3 키 또는 전체 URL(S3/CloudFront/LocalStack)에서 S3 객체 키를 추출합니다."""
+        _, key = self._parse_s3_location(key_or_url)
+        return key
 
     def _get_s3(self) -> Any:
         if self._s3_client is None:
@@ -60,14 +77,21 @@ class StorageClient:
                 retries={"max_attempts": 3, "mode": "standard"},
                 signature_version="s3v4",
             )
-            self._s3_client = boto3.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                region_name=self.settings.aws_region,
-                aws_access_key_id=self.settings.aws_access_key_id or None,
-                aws_secret_access_key=self.settings.aws_secret_access_key or None,
-                config=config,
+            profile_name = (self.settings.aws_profile or "").strip() or None
+            session = boto3.Session(
+                profile_name=profile_name,
+                region_name=self.settings.aws_region or None,
             )
+            kwargs: dict[str, Any] = {
+                "endpoint_url": self.endpoint_url,
+                "config": config,
+            }
+            if not profile_name:
+                if self.settings.aws_access_key_id and self.settings.aws_access_key_id != "test":
+                    kwargs["aws_access_key_id"] = self.settings.aws_access_key_id
+                if self.settings.aws_secret_access_key and self.settings.aws_secret_access_key != "test":
+                    kwargs["aws_secret_access_key"] = self.settings.aws_secret_access_key
+            self._s3_client = session.client("s3", **kwargs)
         return self._s3_client
 
     def upload_bytes(
@@ -118,11 +142,12 @@ class StorageClient:
         # Local Fallback
         return self._save_local(clean_key, data)
 
-    def download_bytes(self, key_or_path: str) -> bytes:
+    def download_bytes(self, key_or_path: str, bucket_name: str | None = None) -> bytes:
         """스토리지에서 객체 또는 로컬 파일의 바이트를 다운로드합니다.
 
         Args:
             key_or_path: S3 키(예: user-images/xxx.png), 전체 URL, 또는 로컬 파일 경로
+            bucket_name: 명시적 버킷 이름 (기본값: URL에서 파싱된 버킷 또는 기본 버킷)
 
         Returns:
             바이트 데이터
@@ -132,17 +157,19 @@ class StorageClient:
         if local_p.is_file():
             return local_p.read_bytes()
 
-        clean_key = self._extract_s3_key(key_or_path)
+        bucket, clean_key = self._parse_s3_location(key_or_path)
+        if bucket_name:
+            bucket = bucket_name
 
         # 2. S3 백엔드인 경우
         if self.is_s3:
             s3 = self._get_s3()
             try:
-                response = s3.get_object(Bucket=self.bucket_name, Key=clean_key)
+                response = s3.get_object(Bucket=bucket, Key=clean_key)
                 body = response["Body"].read()
                 logger.info(
                     "S3 다운로드 성공: s3://%s/%s (size=%d)",
-                    self.bucket_name,
+                    bucket,
                     clean_key,
                     len(body),
                 )
@@ -150,7 +177,7 @@ class StorageClient:
             except ClientError as exc:
                 code = exc.response.get("Error", {}).get("Code", "")
                 if code in {"NoSuchKey", "404"}:
-                    raise FileNotFoundError(f"스토리지에서 파일을 찾을 수 없습니다: {clean_key}") from exc
+                    raise FileNotFoundError(f"스토리지에서 파일을 찾을 수 없습니다: s3://{bucket}/{clean_key}") from exc
                 raise IOError(f"스토리지 다운로드 오류: {exc}") from exc
             except Exception as exc:
                 raise IOError(f"스토리지 다운로드 실패: {exc}") from exc

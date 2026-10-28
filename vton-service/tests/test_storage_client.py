@@ -458,3 +458,60 @@ def test_product_client_fetch_product_image_from_s3() -> None:
     s3_url = f"https://fitzza-prod.s3.ap-northeast-2.amazonaws.com/{s3_key}"
     bytes_out2 = prod_client.fetch_product_image_bytes(s3_url)
     assert bytes_out2 is not None
+
+    # 3. S3 Presigned URL with query params & databucket
+    presigned_url = (
+        f"https://fitzza-prod-foundation-databucket-wwng6wfc0hqy.s3.ap-northeast-2.amazonaws.com/{s3_key}"
+        "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=ASIAR...&X-Amz-Date=20261028"
+    )
+    bytes_out3 = prod_client.fetch_product_image_bytes(presigned_url)
+    assert bytes_out3 is not None
+    mock_s3.get_object.assert_called_with(
+        Bucket="fitzza-prod-foundation-databucket-wwng6wfc0hqy",
+        Key=s3_key,
+    )
+
+
+def test_product_client_qdrant_fallback() -> None:
+    settings = Settings(
+        product_service_url="http://offline-product-service:8082",
+        qdrant_url="http://mock-qdrant:6333",
+        qdrant_collection_name="musinsa_products",
+        storage_backend="local",
+    )
+    prod_client = ProductServiceClient(settings=settings)
+
+    mock_qdrant_response = MagicMock()
+    mock_qdrant_response.status_code = 200
+    mock_qdrant_response.json.return_value = {
+        "result": {
+            "points": [
+                {
+                    "id": "point-1",
+                    "payload": {
+                        "product_id": 4479884,
+                        "product_name": "스니커즈",
+                        "category": "신발",
+                        "price": 77000,
+                        "image_key": "pipeline/runs/collection-20261025-01/images/products/4479884/001.jpg",
+                    },
+                }
+            ]
+        }
+    }
+
+    with patch("httpx.Client.get", side_effect=Exception("ConnectError")), patch(
+        "httpx.Client.post", return_value=mock_qdrant_response
+    ) as mock_post:
+        item = prod_client.resolve_product_item(product_id=4479884, fallback_category="상의")
+        assert item["productId"] == 4479884
+        assert item["productName"] == "스니커즈"
+        assert item["price"] == 77000
+        assert item["categoryName"] == "신발"  # Qdrant category used instead of fallback_category!
+        assert mock_post.called
+
+
+def test_supported_categories_priority() -> None:
+    from app.services.vton_generator import SUPPORTED_CATEGORIES
+
+    assert SUPPORTED_CATEGORIES == ("상의", "하의", "신발", "아우터", "모자")
