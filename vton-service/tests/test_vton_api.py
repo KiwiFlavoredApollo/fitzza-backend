@@ -1039,6 +1039,24 @@ def test_resolve_product_item_prefers_normal_price() -> None:
         assert item["price"] == 26100  # price 폴백 확인
 
 
+def test_resolve_product_item_raises_when_not_found_in_qdrant() -> None:
+    from app.services.vton_generator import VtonValidationError
+
+    client = ProductServiceClient()
+    with patch.object(client, "get_product", return_value=None):
+        with pytest.raises(VtonValidationError, match="존재하지 않거나 지원하지 않는 상품입니다"):
+            client.resolve_product_item(product_id=9999999)
+
+
+def test_resolve_product_item_raises_when_category_unsupported() -> None:
+    from app.services.vton_generator import VtonValidationError
+
+    client = ProductServiceClient()
+    with patch.object(client, "get_product", return_value={"categoryL1Name": "가방"}):
+        with pytest.raises(VtonValidationError, match="지원하지 않거나 유효하지 않은 상품 카테고리"):
+            client.resolve_product_item(product_id=123)
+
+
 
 def test_post_vton_with_request_id_json_and_get_detail() -> None:
     client = TestClient(app)

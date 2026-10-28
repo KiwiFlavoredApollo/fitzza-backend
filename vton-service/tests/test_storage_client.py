@@ -344,7 +344,16 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
 
     # 1. Request fitting with userImage via multipart form
     png_data = _create_sample_png()
-    with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()):
+    with patch("app.api.vton.generate_tryon_image", return_value=_create_sample_png()), patch.object(
+        prod_client,
+        "get_product",
+        return_value={
+            "productName": "테스트 상의",
+            "price": 30000,
+            "thumbnailUrl": "pipeline/test/001.jpg",
+            "categoryL1Name": "상의",
+        },
+    ):
         response = client.post(
             "/api/vton",
             headers={"X-User-Id": "100"},

@@ -194,10 +194,9 @@ def run_background_vton(
             )
             cat = (item.get("categoryName") or "").strip()
             if not cat or cat not in SUPPORTED_CATEGORIES:
-                # 카테고리를 특정할 수 없는 경우, 중복되지 않은 지원 카테고리 탐색
-                available_cat = next((c for c in SUPPORTED_CATEGORIES if c not in category_to_product), "상의")
-                cat = available_cat
-                item["categoryName"] = cat
+                raise VtonValidationError(
+                    f"지원하지 않거나 데이터가 동기화되지 않은 상품입니다 (productId={pid}, category={cat})"
+                )
 
             if cat in category_to_product:
                 raise VtonValidationError(

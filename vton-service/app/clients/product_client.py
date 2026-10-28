@@ -11,6 +11,7 @@ import httpx
 from app.core.config import Settings, get_settings
 from app.services.vton_generator import (
     SUPPORTED_CATEGORIES,
+    VtonValidationError,
     load_sample_clothing_png,
     to_png_bytes,
 )
@@ -169,15 +170,14 @@ class ProductServiceClient:
         override_image_url: str | None = None,
     ) -> dict[str, Any]:
         """
-        product-service에서 상품 정보 및 이미지를 조회하고,
-        조회 실패 또는 이미지 다운로드 실패 시 로컬 샘플 에셋으로 자연스럽게 폴백합니다.
+        Qdrant 벡터 DB에서 상품 정보 및 이미지를 조회합니다.
+        Qdrant에 상품이 존재하지 않거나 지원하지 않는 카테고리일 경우 VtonValidationError를 발생시킵니다.
 
         Args:
             product_id: 상품 ID
             fallback_category: 카테고리 폴백값 (기본 "상의")
             request_id_header: 추적용 Request ID
             override_image_url: 추천 서비스 등에서 전달받은 특정 색상의 상품 이미지 URL.
-                                제공 시 product-service의 기본 대표 썸네일 대신 이 이미지를 우선 다운로드하여 사용합니다.
 
         반환 dict:
         {
@@ -190,26 +190,23 @@ class ProductServiceClient:
         }
         """
         product_info = self.get_product(product_id, request_id_header=request_id_header)
+        if not product_info:
+            raise VtonValidationError(f"존재하지 않거나 지원하지 않는 상품입니다: {product_id}")
 
-        product_name = ""
-        price = 0
-        image_url = ""
-        category_name = fallback_category or "상의"
+        cat_l1 = str(product_info.get("categoryL1Name") or "").strip()
+        if cat_l1 not in SUPPORTED_CATEGORIES:
+            raise VtonValidationError(
+                f"지원하지 않거나 유효하지 않은 상품 카테고리입니다 (productId={product_id}, category={cat_l1})"
+            )
+        category_name = cat_l1
+
+        product_name = str(product_info.get("productName") or f"상품 #{product_id}")
+        raw_price = product_info.get("normalPrice")
+        if raw_price is None or raw_price == 0:
+            raw_price = product_info.get("price")
+        price = int(raw_price or 0)
+        image_url = str(product_info.get("thumbnailUrl") or "")
         image_bytes: bytes | None = None
-
-        if product_info:
-            product_name = str(product_info.get("productName") or f"상품 #{product_id}")
-            # 정상가(normalPrice)를 우선 사용하고, 없을 경우 판매가(price)로 폴백
-            raw_price = product_info.get("normalPrice")
-            if raw_price is None or raw_price == 0:
-                raw_price = product_info.get("price")
-            price = int(raw_price or 0)
-            image_url = str(product_info.get("thumbnailUrl") or "")
-            cat_l1 = str(product_info.get("categoryL1Name") or "").strip()
-            if cat_l1 in SUPPORTED_CATEGORIES:
-                category_name = cat_l1
-        else:
-            product_name = f"상품 #{product_id}"
 
         # 1. 특정 색상 이미지 URL(override_image_url)이 제공된 경우 우선 다운로드
         if override_image_url and override_image_url.strip():
