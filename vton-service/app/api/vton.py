@@ -653,11 +653,17 @@ def get_fitting_image(
     fitting_id: Annotated[int, Path(alias="fittingId", gt=0, description="피팅 ID")],
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
-    if not x_user_id or x_user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="로그인이 필요한 서비스입니다.",
-        )
+    storage = get_storage_client()
+
+    # S3 백엔드(운영 환경)인 경우 게이트웨이 인증 필수
+    # 로컬 스토리지 모드(storage_backend == "local")인 경우 브라우저 <img> 태그 요청 시
+    # Authorization 헤더를 실을 수 없으므로 인증을 건너뛰고 이미지 서빙 허용
+    if storage.is_s3:
+        if not x_user_id or x_user_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="로그인이 필요한 서비스입니다.",
+            )
 
     # 1. DB에서 삭제 여부 및 상태 선행 검증 (삭제된 피팅 방어)
     repo = get_repo()
@@ -668,12 +674,13 @@ def get_fitting_image(
             detail="존재하지 않거나 삭제된 가상 피팅입니다.",
         )
 
-    # 2. 본인 피팅인지 검증 (IDOR 보안 취약점 방어)
-    if detail["userId"] != x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="본인의 피팅 결과 이미지만 조회할 수 있습니다.",
-        )
+    # 2. 본인 피팅인지 검증 (S3 운영 환경이거나 x_user_id가 명시된 경우 IDOR 보안 취약점 방어)
+    if storage.is_s3 or (x_user_id is not None and x_user_id > 0):
+        if detail["userId"] != x_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="본인의 피팅 결과 이미지만 조회할 수 있습니다.",
+            )
 
     if detail["status"] != "COMPLETED":
         raise HTTPException(
@@ -682,7 +689,6 @@ def get_fitting_image(
         )
 
     # 3. S3 백엔드인 경우 서명 URL로 307 임시 리다이렉트
-    storage = get_storage_client()
     if storage.is_s3:
         raw_target = detail.get("resultImageUrl")
         key_or_url = (
@@ -737,11 +743,16 @@ def get_fitting_user_image(
     fitting_id: Annotated[int, Path(alias="fittingId", gt=0, description="피팅 ID")],
     x_user_id: Annotated[int | None, Header(alias="X-User-Id", description="게이트웨이 인증 사용자 ID")] = None,
 ) -> Response:
-    if not x_user_id or x_user_id <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="로그인이 필요한 서비스입니다.",
-        )
+    storage = get_storage_client()
+
+    # S3 백엔드(운영 환경)인 경우 게이트웨이 인증 필수
+    # 로컬 스토리지 모드(storage_backend == "local")인 경우 브라우저 <img> 태그 요청 허용
+    if storage.is_s3:
+        if not x_user_id or x_user_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="로그인이 필요한 서비스입니다.",
+            )
 
     repo = get_repo()
     detail = repo.get_fitting_detail(fitting_id)
@@ -751,12 +762,13 @@ def get_fitting_user_image(
             detail="존재하지 않거나 삭제된 가상 피팅입니다.",
         )
 
-    # 본인 피팅인지 검증 (타인 얼굴 사진 열람 차단 / IDOR 방어)
-    if detail["userId"] != x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="본인의 피팅 이미지만 조회할 수 있습니다.",
-        )
+    # 본인 피팅인지 검증 (S3 운영 환경이거나 x_user_id가 명시된 경우 타인 얼굴 사진 열람 차단 / IDOR 방어)
+    if storage.is_s3 or (x_user_id is not None and x_user_id > 0):
+        if detail["userId"] != x_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="본인의 피팅 이미지만 조회할 수 있습니다.",
+            )
 
     photo_id = detail.get("photoId")
     if not photo_id:

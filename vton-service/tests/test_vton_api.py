@@ -305,20 +305,25 @@ def test_get_fitting_image_serving(tmp_path: Path) -> None:
     fitting_id = repo.create_fitting(user_id=7, photo_id=1, product_ids=[101])
     repo.mark_completed(fitting_id, f"/api/vton/{fitting_id}/image")
 
-    # 인증 누락 -> 401
     client = TestClient(app)
-    assert client.get(f"/api/vton/{fitting_id}/image").status_code == 401
     # 타 사용자 -> 403
     assert client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "999"}).status_code == 403
 
-    # 아직 파일이 디스크에 없음 -> 404
+    # 아직 파일이 디스크에 없음 -> 404 (인증 헤더 없이도 파일 미존재 검증)
+    assert client.get(f"/api/vton/{fitting_id}/image").status_code == 404
     resp_missing = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_missing.status_code == 404
 
-    # 이미지 파일 저장 후 본인 요청 -> 200 image/png
+    # 이미지 파일 저장 후 브라우저 <img> 요청(인증 헤더 없음) -> 200 image/png
     img_bytes = _create_sample_png()
     (test_storage / f"{fitting_id}.png").write_bytes(img_bytes)
 
+    resp_no_auth = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_no_auth.status_code == 200
+    assert resp_no_auth.headers["content-type"] == "image/png"
+    assert resp_no_auth.content == img_bytes
+
+    # 본인 헤더 요청 시에도 -> 200 image/png
     resp_ok = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
     assert resp_ok.status_code == 200
     assert resp_ok.headers["content-type"] == "image/png"
@@ -746,9 +751,11 @@ def test_get_fitting_user_image_flow(tmp_path: Path) -> None:
     detail_data = resp_detail.json()
     assert "userImageUrl" not in detail_data
 
-    # 3. 인증 헤더 누락 시 401 Unauthorized
+    # 3. 로컬 스토리지 모드에서는 브라우저 <img> 요청 시 인증 헤더 없이도 200 OK 스트리밍
     resp_no_auth = client.get(f"/api/vton/{fitting_id}/user-image")
-    assert resp_no_auth.status_code == 401
+    assert resp_no_auth.status_code == 200
+    assert resp_no_auth.headers["content-type"] == "image/png"
+    assert resp_no_auth.content == sample_bytes
 
     # 4. 타인(사용자 99) 조회 시 403 Forbidden (IDOR 방어)
     resp_other = client.get(f"/api/vton/{fitting_id}/user-image", headers={"X-User-Id": "99"})
@@ -1177,6 +1184,42 @@ def test_fitting_image_endpoint_idor_security_and_s3_redirect(tmp_path: Path) ->
     assert resp_ok.status_code == 307
     assert resp_ok.headers["location"] == presigned_target
     assert resp_ok.headers["cache-control"] == "no-cache, no-store, must-revalidate"
+
+    set_dependencies_for_tests(None, None, None, None)
+
+
+def test_fitting_image_endpoint_local_storage_serves_without_auth(tmp_path: Path, monkeypatch: Any) -> None:
+    repo = VtonRepository(db_path=":memory:")
+    mock_storage = MagicMock()
+    mock_storage.is_s3 = False
+
+    # 임시 storage_dir 설정 및 가짜 PNG 파일 생성
+    fake_png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4"
+    storage_dir = tmp_path / "fittings"
+    storage_dir.mkdir(parents=True, exist_ok=True)
+
+    from app.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "storage_dir", str(storage_dir))
+
+    set_dependencies_for_tests(repo=repo, storage_client=mock_storage)
+    client = TestClient(app)
+
+    fitting_id = repo.create_fitting(user_id=7, photo_id=None, product_ids=[101])
+    repo.mark_completed(fitting_id, result_image_url=f"/api/vton/{fitting_id}/image")
+
+    image_file = storage_dir / f"{fitting_id}.png"
+    image_file.write_bytes(fake_png_bytes)
+
+    # 1. 브라우저 <img> 태그처럼 X-User-Id 헤더가 없는 GET 요청 시 200 OK로 이미지 반환
+    resp_no_auth = client.get(f"/api/vton/{fitting_id}/image")
+    assert resp_no_auth.status_code == 200
+    assert resp_no_auth.headers["content-type"] == "image/png"
+    assert resp_no_auth.content == fake_png_bytes
+
+    # 2. X-User-Id 헤더가 있는 요청 시에도 정상 200 OK
+    resp_with_auth = client.get(f"/api/vton/{fitting_id}/image", headers={"X-User-Id": "7"})
+    assert resp_with_auth.status_code == 200
+    assert resp_with_auth.content == fake_png_bytes
 
     set_dependencies_for_tests(None, None, None, None)
 
