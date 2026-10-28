@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
@@ -234,11 +234,35 @@ def test_analytics_api_endpoint():
     assert validated.monthly.label == "월간"
     assert validated.yearly.label == "연간"
 
-    today_kst_str = datetime.now(KST).strftime("%Y-%m-%d")
-    assert validated.daily.startDate == today_kst_str
-    assert validated.daily.endDate == today_kst_str
-    assert validated.weekly.endDate == today_kst_str
-    assert validated.monthly.endDate == today_kst_str
+    valid_dates = {
+        (datetime.now(KST) - timedelta(days=1)).strftime("%Y-%m-%d"),
+        datetime.now(KST).strftime("%Y-%m-%d"),
+        (datetime.now(KST) + timedelta(days=1)).strftime("%Y-%m-%d"),
+    }
+    assert validated.daily.startDate in valid_dates
+    assert validated.daily.endDate == validated.daily.startDate
+    assert validated.weekly.endDate == validated.daily.startDate
+    assert validated.monthly.endDate == validated.daily.startDate
+
+    # 3-1. Admin user with explicit refDate anchor -> 200 OK
+    res_anchored = client.get(
+        "/api/recommendations/analytics?refDate=2026-10-27",
+        headers={"X-User-Id": "4"},
+    )
+    assert res_anchored.status_code == 200
+    validated_anchored = AnalyticsResponse(**res_anchored.json())
+    assert validated_anchored.daily.startDate == "2026-10-27"
+    assert validated_anchored.daily.endDate == "2026-10-27"
+    assert validated_anchored.weekly.endDate == "2026-10-27"
+    assert validated_anchored.monthly.endDate == "2026-10-27"
+
+    # 3-2. Invalid refDate format -> 400 BAD_REQUEST
+    res_bad_date = client.get(
+        "/api/recommendations/analytics?refDate=invalid-date",
+        headers={"X-User-Id": "4"},
+    )
+    assert res_bad_date.status_code == 400
+    assert res_bad_date.json()["code"] == "INVALID_DATE_FORMAT"
 
     # 4. Gateway backward compatibility path /api/v1/recommendations/analytics with admin header
     compat_res = client.get(

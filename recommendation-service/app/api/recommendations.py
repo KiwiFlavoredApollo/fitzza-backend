@@ -26,7 +26,7 @@ from app.clients.storage_client import get_storage_client
 from app.clients.user_client import UserServiceClient
 from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
-from app.core.database import RecommendationRepository
+from app.core.database import KST, RecommendationRepository
 from app.services.cache_service import CacheService
 from app.services.recommendation_detail_service import get_recommendation_detail_service
 
@@ -660,6 +660,11 @@ def list_recommendations(
 )
 def get_recommendation_analytics(
     request: Request,
+    ref_date: str | None = Query(
+        default=None,
+        alias="refDate",
+        description="집계 기준일자 (YYYY-MM-DD 형식, 미지정 시 현재 KST 일시 기준)",
+    ),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> AnalyticsResponse:
@@ -667,7 +672,19 @@ def get_recommendation_analytics(
     _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
     repository = _get_repository(request)
     vton_client = _get_vton_client(request)
-    data = repository.get_analytics_data(vton_client=vton_client)
+
+    reference_dt = None
+    if ref_date:
+        try:
+            reference_dt = datetime.strptime(ref_date, "%Y-%m-%d").replace(tzinfo=KST)
+        except ValueError:
+            raise RecommendationApiError(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="INVALID_DATE_FORMAT",
+                message="유효하지 않은 날짜 형식입니다. YYYY-MM-DD 형식을 사용해야 합니다.",
+            )
+
+    data = repository.get_analytics_data(reference_dt=reference_dt, vton_client=vton_client)
     return AnalyticsResponse(**data)
 
 
