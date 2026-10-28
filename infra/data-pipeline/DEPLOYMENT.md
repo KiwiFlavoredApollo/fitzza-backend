@@ -153,3 +153,39 @@ FashionCLIP 모델의 40자리 commit SHA(`model_revision`)를 기록한다. 이
 
 10/21에 요청 해석 오류로 pilot에서 상의 후보 80개·상세 5개를 수집했다. 결과는 별도 `crawler-pilot-20261021-01` prefix에 보존했다.
 pilot은 종료·정지됐고 두 AI 앱의 replicas 및 CD 전환은 복구했다. 이 이력을 전체 수집 완료로 집계하지 않는다.
+
+## FashionCLIP 벡터 적재 (2026-10-28)
+
+`index_to_qdrant.py`/`indexer/entrypoint.py`(staging 직접 적재)를 대신해, 적재 가이드의
+"임베딩은 S3에 먼저 기록 → 경량 importer → 버전 컬렉션 → 검증 후 alias 전환" 흐름으로 나눴다.
+기존 `indexer/job.yaml`은 이전 실행용으로 남겨 두며 이번 실행에 쓰지 않는다.
+
+| 단계 | 파일 | 하는 일 | Qdrant |
+| --- | --- | --- | --- |
+| 임베딩 | `indexer/embed_job.py`, `embed-job.yaml` | 승인본 재검증 → curated manifest SHA-256 대조 → S3 저장 이미지로 CPU 임베딩 → `pipeline/vector-runs/<id>/` | 접근 안 함 |
+| 적재 | `indexer/import_job.py`, `import-job.yaml` | 벡터·payload 사전 검사 → 새 `fitzza_products_<version>` 생성·인덱스 → batch upsert → 검증 보고서 | 새 컬렉션만 |
+| 전환 | `indexer/switch_alias.py` | 이전 대상 기록, 점 수 확인 후 단일 요청으로 alias 교체, 같은 명령으로 롤백 | alias만 |
+
+계약:
+
+- Point = 상품 + 색상(`color_raw.strip().lower()`) + 저장 이미지 S3 키, ID는 그 문자열의 UUIDv5.
+- 이미지는 크롤링 때 S3에 받아 둔 `images/products/<id>/` 사본을 쓴다(manifest의 sha256 대조). 받지 못한 이미지는 `failures/planning.json`에 남기고 건너뛴다.
+- 전처리·특징 추출은 recommendation-service `SearchEngine.encode_image`와 같다(CLIPProcessor → `get_image_features` → L2 정규화).
+- 모델 revision은 운영 추천 서비스가 실제로 받은 커밋(HF 캐시 snapshot 디렉터리 이름)을 `--model-revision`으로 넘긴다. 다르면 질의 벡터와 상품 벡터가 어긋난다.
+- payload: recommendation-service가 읽는 키(`product_id` 정수, `brand_name`, `color_normalized` 배열, `color_raw`, `subcategory`, `sizes` 등) + Qdrant 계약 키(`color_variant`, `normalized_color`, `brand`, `image_key`).
+- 인덱스: `product_id`·`price` integer, `category`·`subcategory`·`color_normalized`·`normalized_color`·`color_variant`·`brand`·`brand_name` keyword.
+- 이어하기: `plan.json`(데이터·모델 fingerprint)이 같을 때만 기존 part를 건너뛴다. part는 create-only로 쓴다. 다른 데이터·모델이면 새 `--vector-run-id`가 필요하다.
+- importer는 벡터 차원·NaN·0벡터·payload 누락·모델 불일치·중복이 하나라도 있으면 Qdrant에 연결하기 전에 거부한다. 같은 이름의 컬렉션이 있으면 `--resume` 없이는 실패한다.
+- `switch_alias.py`는 실제 컬렉션 이름을 alias로 쓰거나 alias를 대상으로 지정하면 거부한다. 컬렉션을 삭제하지 않는다.
+
+이미지 빌드(빌드 컨텍스트는 `infra/data-pipeline`):
+
+```powershell
+docker buildx build --platform linux/arm64 --provenance=false -f indexer/Dockerfile -t <repo>/fitzza/fashion-clip:vector-20261028-01 --push .
+```
+
+IAM(`fitzza-prod-indexer`, `indexer/policy.json`): 이번 실행의 승인본·curated manifest·저장 이미지 읽기,
+이미지와 이번 vector run 경로 목록 조회, 이번 vector run 경로 읽기·쓰기만 허용한다.
+
+검증: 가짜 S3 + 메모리 Qdrant 단위 테스트(`test_vector_run.py`), Qdrant 1.15.5 실서버에서 적재·인덱스 9개·검증 8항목·
+`--resume`·alias 전환/거부/롤백 확인. 실제 모델 추론과 운영 데이터 적재는 별도 실행 승인 후 진행한다.
