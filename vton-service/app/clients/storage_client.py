@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import time
 from typing import Any
 import urllib.parse
 
@@ -26,6 +27,8 @@ class StorageClient:
         self.cloudfront_domain = self.settings.cloudfront_domain.strip().rstrip("/")
         self.endpoint_url = self.settings.aws_endpoint_url.strip() or None
         self._s3_client: Any = None
+        self._url_cache: dict[str, tuple[str, float]] = {}
+        self._cache_max_size = 2048
 
     @property
     def is_s3(self) -> bool:
@@ -211,6 +214,22 @@ class StorageClient:
         if not clean_input:
             return ""
 
+        # 외부 HTTP(S) URL(무신사 원본 이미지 등)인 경우 그대로 유지
+        if clean_input.startswith(("http://", "https://")):
+            parsed = urllib.parse.urlparse(clean_input)
+            netloc = (parsed.netloc or "").lower()
+            is_s3_host = (
+                self.bucket_name.lower() in netloc
+                or (self.endpoint_url and urllib.parse.urlparse(self.endpoint_url).netloc.lower() == netloc)
+                or netloc.endswith(".amazonaws.com")
+            )
+            is_cf_host = bool(
+                self.cloudfront_domain
+                and urllib.parse.urlparse(self.cloudfront_domain).netloc.lower() == netloc
+            )
+            if not (is_s3_host or is_cf_host):
+                return clean_input
+
         # S3 백엔드가 아니거나 로컬 모드인 경우 원본 경로 반환
         if not self.is_s3:
             return clean_input
@@ -220,6 +239,17 @@ class StorageClient:
             return self.get_public_url(clean_input)
 
         clean_key = self._extract_s3_key(clean_input)
+        if not clean_key:
+            return clean_input
+
+        cache_key = f"{clean_key}:{expires_in}"
+        now = time.time()
+        cached = self._url_cache.get(cache_key)
+        if cached:
+            url, expire_at = cached
+            if now < expire_at - 60:
+                return url
+
         try:
             s3 = self._get_s3()
             url = s3.generate_presigned_url(
@@ -227,7 +257,12 @@ class StorageClient:
                 Params={"Bucket": self.bucket_name, "Key": clean_key},
                 ExpiresIn=expires_in,
             )
-            return str(url)
+            url_str = str(url)
+            if len(self._url_cache) >= self._cache_max_size:
+                oldest_key = next(iter(self._url_cache))
+                del self._url_cache[oldest_key]
+            self._url_cache[cache_key] = (url_str, now + expires_in)
+            return url_str
         except Exception as exc:
             logger.warning(
                 "S3 Pre-signed URL 생성 실패 (key=%s): %s. 원본 URL을 반환합니다.",

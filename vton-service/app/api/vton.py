@@ -156,6 +156,13 @@ def list_user_fittings(
             res_img_url = storage.get_presigned_url(target_key)
         else:
             res_img_url = None
+        resolved_products = [
+            {
+                **p,
+                "imageUrl": storage.get_presigned_url(p.get("imageUrl")) if p.get("imageUrl") else p.get("imageUrl", ""),
+            }
+            for p in item.get("products", [])
+        ]
         items.append(
             FittingSummaryResponse(
                 fittingId=item["fittingId"],
@@ -163,8 +170,8 @@ def list_user_fittings(
                 requestId=item.get("requestId"),
                 status=item["status"],
                 resultImageUrl=res_img_url,
-                productCount=item.get("productCount", len(item.get("products", []))),
-                products=item.get("products", []),
+                productCount=item.get("productCount", len(resolved_products)),
+                products=resolved_products,
                 createdAt=item["createdAt"],
             )
         )
@@ -569,6 +576,14 @@ def get_fitting(
     else:
         result_img_url = None
 
+    resolved_products = [
+        {
+            **p,
+            "imageUrl": storage.get_presigned_url(p.get("imageUrl")) if p.get("imageUrl") else p.get("imageUrl", ""),
+        }
+        for p in detail.get("products", [])
+    ]
+
     return FittingDetailResponse(
         fittingId=detail["fittingId"],
         userId=detail["userId"],
@@ -576,7 +591,7 @@ def get_fitting(
         status=detail["status"],
         resultImageUrl=result_img_url,
         errorMessage=detail["errorMessage"],
-        products=detail["products"],
+        products=resolved_products,
         createdAt=detail["createdAt"],
         updatedAt=detail["updatedAt"],
     )

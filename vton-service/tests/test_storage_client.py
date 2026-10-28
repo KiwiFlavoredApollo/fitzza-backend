@@ -402,3 +402,59 @@ def test_api_s3_upload_and_serving(tmp_path: Path) -> None:
     # Cleanup dependencies
     set_dependencies_for_tests(None, None, None, None)
     reset_settings_for_tests(None)
+
+
+def test_get_presigned_url_external_musinsa_bypass() -> None:
+    s_s3 = Settings(storage_backend="s3", aws_s3_bucket_name="fitzza-prod")
+    client = StorageClient(s_s3)
+    mock_s3 = MagicMock()
+    client._s3_client = mock_s3
+
+    musinsa_url = "https://image.msscdn.net/images/goods_img/20231012/123/123_1_500.jpg"
+    res = client.get_presigned_url(musinsa_url)
+    assert res == musinsa_url
+    mock_s3.generate_presigned_url.assert_not_called()
+
+
+def test_get_presigned_url_in_memory_cache() -> None:
+    s_s3 = Settings(storage_backend="s3", aws_s3_bucket_name="fitzza-prod")
+    client = StorageClient(s_s3)
+    mock_s3 = MagicMock()
+    mock_s3.generate_presigned_url.return_value = "https://fitzza-prod.s3.amazonaws.com/test.png?sig=123"
+    client._s3_client = mock_s3
+
+    s3_key = "pipeline/runs/run-01/images/products/101/001.jpg"
+    res1 = client.get_presigned_url(s3_key)
+    assert res1 == "https://fitzza-prod.s3.amazonaws.com/test.png?sig=123"
+    assert mock_s3.generate_presigned_url.call_count == 1
+
+    # Second call should use cache
+    res2 = client.get_presigned_url(s3_key)
+    assert res2 == res1
+    assert mock_s3.generate_presigned_url.call_count == 1
+
+
+def test_product_client_fetch_product_image_from_s3() -> None:
+    settings = Settings(storage_backend="s3", aws_s3_bucket_name="fitzza-prod")
+    storage = StorageClient(settings)
+    sample_png = _create_sample_png()
+
+    mock_s3 = MagicMock()
+    mock_body = MagicMock()
+    mock_body.read.return_value = sample_png
+    mock_s3.get_object.return_value = {"Body": mock_body}
+    storage._s3_client = mock_s3
+
+    prod_client = ProductServiceClient(settings=settings, storage_client=storage)
+
+    # 1. S3 Object Key
+    s3_key = "pipeline/runs/run-01/images/products/101/001.jpg"
+    bytes_out = prod_client.fetch_product_image_bytes(s3_key)
+    assert bytes_out is not None
+    assert len(bytes_out) > 0
+    mock_s3.get_object.assert_called_with(Bucket="fitzza-prod", Key=s3_key)
+
+    # 2. S3 URL
+    s3_url = f"https://fitzza-prod.s3.ap-northeast-2.amazonaws.com/{s3_key}"
+    bytes_out2 = prod_client.fetch_product_image_bytes(s3_url)
+    assert bytes_out2 is not None

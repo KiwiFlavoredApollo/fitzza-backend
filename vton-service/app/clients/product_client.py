@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -21,8 +22,23 @@ REQUEST_ID_HEADER = "X-Request-Id"
 
 
 class ProductServiceClient:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        storage_client: Any | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.storage_client = storage_client
+
+    def _get_storage(self) -> Any:
+        if self.storage_client is None:
+            try:
+                from app.services.vton_processor import get_storage_client
+
+                self.storage_client = get_storage_client()
+            except Exception:
+                self.storage_client = None
+        return self.storage_client
 
     @property
     def is_configured(self) -> bool:
@@ -68,27 +84,58 @@ class ProductServiceClient:
         self,
         image_url: str,
     ) -> bytes | None:
-        """원격 URL에서 상품 이미지를 다운로드하여 PNG 바이트로 변환합니다."""
+        """원격 URL 또는 S3/로컬 스토리지에서 상품 이미지를 다운로드하여 PNG 바이트로 변환합니다."""
         if not image_url or not image_url.strip():
             return None
 
         clean_url = image_url.strip()
-        if not (clean_url.startswith("http://") or clean_url.startswith("https://")):
-            return None
 
-        try:
-            with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
-                resp = client.get(clean_url)
-                resp.raise_for_status()
-                return to_png_bytes(resp.content)
-        except Exception as exc:
-            logger.warning(
-                "상품 이미지 다운로드/변환 실패 (url=%s): %s: %s",
-                clean_url,
-                type(exc).__name__,
-                exc,
+        # 1. S3 Object Key 형태이거나 S3 버킷 URL인 경우 StorageClient를 통해 직접 다운로드 시도
+        storage = self.storage_client or self._get_storage()
+        if storage and storage.is_s3:
+            is_http = clean_url.startswith(("http://", "https://"))
+            is_s3_target = not is_http or (
+                storage.bucket_name in clean_url
+                or (storage.endpoint_url and storage.endpoint_url in clean_url)
+                or ".amazonaws.com" in clean_url
             )
-            return None
+            if is_s3_target:
+                try:
+                    raw_bytes = storage.download_bytes(clean_url)
+                    if raw_bytes:
+                        return to_png_bytes(raw_bytes)
+                except Exception as exc:
+                    logger.warning(
+                        "S3 의류 이미지 다운로드 실패 (key_or_url=%s): %s. HTTP 다운로드로 폴백합니다.",
+                        clean_url,
+                        exc,
+                    )
+
+        # 2. HTTP(S) URL 다운로드 (외부 무신사 CDN 또는 fallback)
+        if clean_url.startswith(("http://", "https://")):
+            try:
+                with httpx.Client(timeout=self.settings.http_timeout_seconds) as client:
+                    resp = client.get(clean_url)
+                    resp.raise_for_status()
+                    return to_png_bytes(resp.content)
+            except Exception as exc:
+                logger.warning(
+                    "상품 이미지 HTTP 다운로드/변환 실패 (url=%s): %s: %s",
+                    clean_url,
+                    type(exc).__name__,
+                    exc,
+                )
+                return None
+
+        # 3. 로컬 파일 시스템 경로인 경우
+        try:
+            local_p = Path(clean_url)
+            if local_p.is_file():
+                return to_png_bytes(local_p.read_bytes())
+        except Exception:
+            pass
+
+        return None
 
     def resolve_product_item(
         self,
