@@ -985,3 +985,76 @@ def test_get_product_size_recommendation_edge_cases() -> None:
         assert invalid_id_res.json()["code"] == "INVALID_REQUEST"
 
 
+def test_coordinator_attach_size_info_uses_learned_preference_from_repository() -> None:
+    from unittest.mock import MagicMock
+    from app.services.coordinator import FashionPipelineCoordinator
+    from app.services.query_parser import SlotQuery
+
+    mock_repo = MagicMock()
+    mock_repo.get_user_size_preference.return_value = {
+        "총장": 73.0,
+        "어깨너비": 52.0,
+        "가슴단면": 60.0,
+    }
+
+    coordinator = FashionPipelineCoordinator.__new__(FashionPipelineCoordinator)
+    coordinator.repository = mock_repo
+    coordinator.size_resolver = MagicMock()
+    coordinator.size_resolver.resolve_and_calculate_size.return_value = {
+        "source_type": "learned_preference",
+        "recommendation": {"size": "L"},
+    }
+
+    items = [{"product_id": 999, "name": "오버핏 셔츠"}]
+    slot = SlotQuery(
+        category="top",
+        subcategory="셔츠/블라우스",
+        clip_query_en="oversized shirt",
+        fit_type="오버 사이즈",
+    )
+
+    result = coordinator._attach_size_info(items=items, slot=slot, user_id="user_77")
+
+    mock_repo.get_user_size_preference.assert_called_once_with(
+        user_id="user_77",
+        subcategory="셔츠/블라우스",
+    )
+    coordinator.size_resolver.resolve_and_calculate_size.assert_called_once_with(
+        user_id="user_77",
+        subcategory="셔츠/블라우스",
+        fit_type="오버 사이즈",
+        candidate_products=[{"product_id": 999, "name": "오버핏 셔츠", "size_recommendation": {"size": "L"}, "fit_source_type": "learned_preference"}],
+        category_type="top",
+        learned_preference={"총장": 73.0, "어깨너비": 52.0, "가슴단면": 60.0},
+    )
+    assert result[0]["size_recommendation"] == {"size": "L"}
+    assert result[0]["fit_source_type"] == "learned_preference"
+
+
+def test_list_recommendations_and_detail_declarative_validation() -> None:
+    with TestClient(app) as client:
+        # page < 0
+        res_page_neg = client.get("/api/v1/recommendations?page=-1", headers={"X-User-Id": "1"})
+        assert res_page_neg.status_code == 400
+        assert res_page_neg.json()["code"] == "INVALID_REQUEST"
+
+        # size < 1
+        res_size_zero = client.get("/api/v1/recommendations?size=0", headers={"X-User-Id": "1"})
+        assert res_size_zero.status_code == 400
+        assert res_size_zero.json()["code"] == "INVALID_REQUEST"
+
+        # size > 100
+        res_size_large = client.get("/api/v1/recommendations?size=101", headers={"X-User-Id": "1"})
+        assert res_size_large.status_code == 400
+        assert res_size_large.json()["code"] == "INVALID_REQUEST"
+
+        # requestId <= 0 in GET /{requestId}
+        res_detail_zero = client.get("/api/v1/recommendations/0", headers={"X-User-Id": "1"})
+        assert res_detail_zero.status_code == 400
+        assert res_detail_zero.json()["code"] == "INVALID_REQUEST"
+
+        res_detail_neg = client.get("/api/v1/recommendations/-10", headers={"X-User-Id": "1"})
+        assert res_detail_neg.status_code == 400
+        assert res_detail_neg.json()["code"] == "INVALID_REQUEST"
+
+
