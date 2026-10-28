@@ -135,3 +135,71 @@ def test_singleton_get_and_set_storage_client():
     custom = StorageClient(Settings(storage_backend="s3", aws_s3_bucket_name="custom-bucket"))
     set_storage_client(custom)
     assert get_storage_client() is custom
+
+
+def test_recommendation_detail_service():
+    from app.services.recommendation_detail_service import RecommendationDetailService
+
+    mock_storage = MagicMock()
+    mock_storage.get_presigned_url.side_effect = lambda k: f"https://signed.example.com/{k}" if k else None
+
+    service = RecommendationDetailService(storage_client=mock_storage)
+
+    record = {
+        "requestId": 999,
+        "userId": 42,
+        "queryText": "미니멀 코디",
+        "status": "DONE",
+        "searchType": "TEXT",
+        "tpoSummary": "데이트룩",
+        "message": "추천 완료",
+        "items": [
+            {
+                "productId": 101,
+                "productName": "니트",
+                "price": 45000,
+                "imageUrl": "pipeline/runs/01/images/products/101/0.jpg",
+            }
+        ],
+        "combos": [
+            {
+                "comboId": 1,
+                "totalPrice": 45000,
+                "passStatus": "PASS",
+                "harmonyScore": 95.0,
+                "feedbackSummary": "조화로운 매칭",
+                "budgetExceeded": False,
+                "items": [
+                    {
+                        "productId": 101,
+                        "productName": "니트",
+                        "price": 45000,
+                        "imageUrl": "pipeline/runs/01/images/products/101/0.jpg",
+                    }
+                ],
+            }
+        ],
+    }
+
+    res = service.build_detail_response(record)
+    assert res.requestId == 999
+    assert res.items[0].imageUrl == "https://signed.example.com/pipeline/runs/01/images/products/101/0.jpg"
+    assert res.combos[0].items[0].imageUrl == "https://signed.example.com/pipeline/runs/01/images/products/101/0.jpg"
+
+    combo_record = {
+        "comboId": 1,
+        "userId": 42,
+        "totalPrice": 45000,
+        "feedbackSummary": "굿",
+        "items": [
+            {
+                "productId": 101,
+                "productName": "니트",
+                "price": 45000,
+                "imageUrl": "pipeline/runs/01/images/products/101/0.jpg",
+            }
+        ],
+    }
+    internal_res = service.build_internal_combo_response(combo_record)
+    assert internal_res.owned is True
+    assert internal_res.items[0].imageUrl == "https://signed.example.com/pipeline/runs/01/images/products/101/0.jpg"

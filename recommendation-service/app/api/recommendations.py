@@ -28,6 +28,7 @@ from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
 from app.core.database import RecommendationRepository
 from app.services.cache_service import CacheService
+from app.services.recommendation_detail_service import get_recommendation_detail_service
 
 from app.schemas.recommendation import (
     InternalComboProductItem,
@@ -753,32 +754,8 @@ def get_recommendation_detail(
             message="본인의 추천 결과만 조회할 수 있습니다.",
         )
 
-    storage_client = get_storage_client()
-
-    def _resolve_item(item_data: dict[str, Any]) -> dict[str, Any]:
-        raw = item_data.get("imageUrl") or item_data.get("image_url")
-        if raw:
-            item_copy = dict(item_data)
-            item_copy["imageUrl"] = storage_client.get_presigned_url(raw)
-            return item_copy
-        return item_data
-
-    items = [RecommendedProductItem(**_resolve_item(item)) for item in record["items"]]
-    combos = []
-    for combo in record["combos"]:
-        combo_items = [_resolve_item(i) for i in combo.get("items") or []]
-        combos.append(RecommendedComboItem(**{**combo, "items": combo_items}))
-
-    return RecommendationDetailResponse(
-        requestId=record["requestId"],
-        queryText=str(record.get("queryText") or ""),
-        status=record["status"],
-        searchType=record["searchType"],
-        tpoSummary=record["tpoSummary"],
-        items=items,
-        combos=combos,
-        message=record["message"],
-    )
+    detail_service = get_recommendation_detail_service()
+    return detail_service.build_detail_response(record)
 
 
 MAX_SEARCH_IMAGE_SIZE_BYTES = 15 * 1024 * 1024  # 15MB
@@ -940,25 +917,8 @@ def get_combo_internal(
             feedbackSummary=None,
         )
 
-    storage_client = get_storage_client()
-    mapped_items = [
-        InternalComboProductItem(
-            productId=item.get("productId") or 0,
-            productName=item.get("productName") or "",
-            price=item.get("price") or 0,
-            imageUrl=storage_client.get_presigned_url(
-                item.get("imageUrl") or item.get("image_url")
-            ),
-        )
-        for item in combo["items"]
-    ]
-
-    return InternalComboResponse(
-        owned=True,
-        items=mapped_items,
-        totalPrice=combo["totalPrice"],
-        feedbackSummary=combo["feedbackSummary"],
-    )
+    detail_service = get_recommendation_detail_service()
+    return detail_service.build_internal_combo_response(combo)
 
 
 @internal_router.post(
