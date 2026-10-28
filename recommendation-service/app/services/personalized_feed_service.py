@@ -9,6 +9,7 @@ from qdrant_client.http import models
 
 from pydantic import ValidationError
 
+from app.clients.storage_client import get_storage_client
 from app.core.config import get_settings
 from app.schemas.recommendation import (
     PersonalizedPageResponse,
@@ -41,8 +42,10 @@ class PersonalizedFeedService:
         vector_engine: Optional[PersonalizedVectorEngine] = None,
         history_collector: Optional[UserHistoryCollector] = None,
         qdrant_url: Optional[str] = None,
+        storage_client: Optional[Any] = None,
     ) -> None:
         settings = get_settings()
+        self.storage_client = storage_client or get_storage_client()
         self.collection_name = (
             collection_name or settings.qdrant_collection_name or "musinsa_products"
         )
@@ -142,7 +145,9 @@ class PersonalizedFeedService:
                 productName=str(payload.get("product_name") or ""),
                 brandName=payload.get("brand_name"),
                 price=int(payload.get("price") or 0),
-                thumbnailUrl=payload.get("image_url"),
+                thumbnailUrl=self.storage_client.get_presigned_url(
+                    payload.get("image_url")
+                ),
                 status="ON_SALE",
                 category=payload.get("category"),
                 wished=(pid in wished_ids),

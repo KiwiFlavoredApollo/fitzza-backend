@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
 from app.clients.redis_client import RedisClient
+from app.clients.storage_client import get_storage_client
 from app.clients.user_client import UserServiceClient
 from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
@@ -360,7 +361,9 @@ def _map_product_item(item: dict[str, Any]) -> dict[str, Any]:
         category=item.get("category"),
         subcategory=item.get("subcategory"),
         price=price,
-        imageUrl=item.get("image_url") or item.get("imageUrl"),
+        imageUrl=get_storage_client().get_presigned_url(
+            item.get("image_url") or item.get("imageUrl")
+        ) or None,
         color=item.get("color") or _extract_color_text(item),
         recommendedSize=recommended_size,
         availableSizes=_extract_sizes_list(item),
@@ -750,14 +753,30 @@ def get_recommendation_detail(
             message="본인의 추천 결과만 조회할 수 있습니다.",
         )
 
+    storage_client = get_storage_client()
+
+    def _resolve_item(item_data: dict[str, Any]) -> dict[str, Any]:
+        raw = item_data.get("imageUrl") or item_data.get("image_url")
+        if raw:
+            item_copy = dict(item_data)
+            item_copy["imageUrl"] = storage_client.get_presigned_url(raw)
+            return item_copy
+        return item_data
+
+    items = [RecommendedProductItem(**_resolve_item(item)) for item in record["items"]]
+    combos = []
+    for combo in record["combos"]:
+        combo_items = [_resolve_item(i) for i in combo.get("items") or []]
+        combos.append(RecommendedComboItem(**{**combo, "items": combo_items}))
+
     return RecommendationDetailResponse(
         requestId=record["requestId"],
         queryText=str(record.get("queryText") or ""),
         status=record["status"],
         searchType=record["searchType"],
         tpoSummary=record["tpoSummary"],
-        items=[RecommendedProductItem(**item) for item in record["items"]],
-        combos=[RecommendedComboItem(**combo) for combo in record["combos"]],
+        items=items,
+        combos=combos,
         message=record["message"],
     )
 
@@ -852,6 +871,7 @@ async def search_products_by_image(
             message="이미지 유사 상품 검색 처리 중 서버 오류가 발생했습니다.",
         ) from exc
 
+    storage_client = get_storage_client()
     items = [
         VisualSearchResultItem(
             productId=item.get("product_id") or 0,
@@ -860,7 +880,7 @@ async def search_products_by_image(
             category=item.get("category"),
             subcategory=item.get("subcategory"),
             price=item.get("price") or 0,
-            imageUrl=item.get("image_url"),
+            imageUrl=storage_client.get_presigned_url(item.get("image_url")),
             color=(
                 item.get("color_raw")
                 or (item.get("color_normalized")[0] if item.get("color_normalized") else None)
@@ -920,9 +940,22 @@ def get_combo_internal(
             feedbackSummary=None,
         )
 
+    storage_client = get_storage_client()
+    mapped_items = [
+        InternalComboProductItem(
+            productId=item.get("productId") or 0,
+            productName=item.get("productName") or "",
+            price=item.get("price") or 0,
+            imageUrl=storage_client.get_presigned_url(
+                item.get("imageUrl") or item.get("image_url")
+            ),
+        )
+        for item in combo["items"]
+    ]
+
     return InternalComboResponse(
         owned=True,
-        items=[InternalComboProductItem(**item) for item in combo["items"]],
+        items=mapped_items,
         totalPrice=combo["totalPrice"],
         feedbackSummary=combo["feedbackSummary"],
     )
