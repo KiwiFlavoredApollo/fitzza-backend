@@ -40,8 +40,8 @@ def manifest_hashes(manifest: dict[str, Any], prefix: str) -> dict[str, str]:
     curated = f"{prefix}curated/"
     for record in manifest.get("products") or []:
         key = record["s3_key"]
-        if not key.startswith(curated):
-            raise ValueError(f"manifest product key outside run prefix: {key}")
+        if not key.startswith(f"{curated}data/") or not key.endswith(".json"):
+            raise ValueError(f"manifest product key is not a curated product JSON: {key}")
         hashes[key[len(curated):]] = record["sha256"]
     return hashes
 
@@ -62,7 +62,8 @@ def validate_run(s3: Any, bucket: str, prefix: str) -> dict[str, Any]:
     missing_review_products = sorted(set(product_ids) - review_ids)
 
     listed = {key[len(f"{prefix}curated/"):] for key in products}
-    expected_products = {relative for relative in expected if relative.startswith("data/")}
+    expected_products = {relative for relative in expected
+                         if relative.startswith("data/") and relative.endswith(".json")}
     not_in_manifest = sorted(listed - expected_products)
     missing_in_s3 = sorted(expected_products - listed)
 

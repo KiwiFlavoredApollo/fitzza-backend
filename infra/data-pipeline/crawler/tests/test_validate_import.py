@@ -1,6 +1,8 @@
 import hashlib
 import json
 
+import pytest
+
 from src.validate_import import validate_run
 
 
@@ -92,3 +94,21 @@ def test_products_outside_manifest_and_missing_objects_fail():
     assert report["valid"] is False
     assert report["products_not_in_manifest"] == ["data/cat/303.json"]
     assert report["manifest_products_missing_in_s3"] == ["data/cat/202.json"]
+
+
+def test_products_manifest_keys_must_be_curated_product_json():
+    for key in ("r/curated/manifest.json", "r/curated/report.json", "r/curated/data/cat/101.txt"):
+        manifest = {"products": [{"product_id": "101", "s3_key": key, "sha256": "0" * 64}]}
+        with pytest.raises(ValueError, match="not a curated product JSON"):
+            validate_run(run_objects(manifest), "bucket", "r")
+
+
+def test_legacy_non_json_data_entry_is_hash_checked_not_reported_missing():
+    note = b"note"
+    manifest = {"files": {"data/cat/101.json": hashlib.sha256(PRODUCT).hexdigest(),
+                          "data/README.txt": hashlib.sha256(note).hexdigest()}}
+    report = validate_run(run_objects(manifest, {"r/curated/data/README.txt": note}), "bucket", "r")
+
+    assert report["valid"] is True
+    assert report["manifest_products_missing_in_s3"] == []
+    assert report["manifest_sha256_checked_count"] == 2
