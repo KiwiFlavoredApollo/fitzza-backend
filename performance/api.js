@@ -62,8 +62,16 @@ const publicEndpoints = [
 ];
 
 const memberEndpoints = [
-  { name: 'my_profile', path: '/api/v1/users/me', valid: isProfileResponse },
-  { name: 'cart', path: '/api/v1/carts', valid: Array.isArray },
+  {
+    name: 'my_profile',
+    path: '/api/v1/users/me',
+    valid: isProfileResponse
+  },
+  {
+    name: 'cart',
+    path: '/api/v1/carts',
+    valid: Array.isArray
+  },
   {
     name: 'orders',
     path: '/api/v1/orders?page=0&size=20',
