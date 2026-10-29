@@ -53,7 +53,11 @@ const publicEndpoints = [
     path: '/api/v1/products?page=0&size=20',
     valid: isPageResponse,
   },
-  { name: 'categories', path: '/api/v1/categories', valid: Array.isArray },
+  {
+    name: 'categories',
+    path: '/api/v1/categories',
+    valid: Array.isArray
+  },
   {
     name: 'community_feed',
     path: '/api/v1/community/posts?page=0&size=20',
