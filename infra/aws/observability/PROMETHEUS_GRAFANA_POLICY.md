@@ -73,9 +73,19 @@ FITZZA-308의 최초 values 후보는 다음 합계를 넘지 않도록 조정�
 | Alertmanager(활성화 시) | 25m | 64Mi | 100m | 128Mi |
 | 합계(노드 1대, Alertmanager 포함) | 285m | 736Mi | 1050m | 1472Mi |
 
-배포 직전 `kubectl describe node`와 전체 Pod requests를 확인한다. 모니터링 스택을
-추가한 뒤에도 allocatable CPU와 메모리 각각 20% 이상이 남고 최대 Pod 수를 넘지
-않을 때만 진행한다. 조건을 만족하지 않으면 다음 순서로 중단·축소한다.
+배포는 승인된 작업 시간에 다음 순서로 진행한다.
+
+1. `foundation.yaml`이 정의한 `fitzza-prod-node-scaler`를 `{"desiredSize":1}`로
+   호출한다. 템플릿의 기본 `DesiredSize: 0`은 변경하지 않는다.
+2. node group의 desired size가 1인지 확인하고,
+   `kubectl wait --for=condition=Ready node --all --timeout=10m`으로 노드가 `Ready`가
+   될 때까지 기다린다. 실패하거나 timeout이면 배포를 중단한다.
+3. `kubectl describe node`의 allocatable과 시스템 Pod를 포함한 전체 Pod requests,
+   limits, Pod 수를 확인한다.
+4. 모니터링 스택을 추가한 뒤에도 allocatable CPU와 메모리 각각 20% 이상이 남고
+   최대 Pod 수를 넘지 않을 때만 Prometheus와 Grafana를 배포한다.
+
+용량 조건을 만족하지 않으면 다음 순서로 중단·축소한다.
 
 1. Alertmanager를 비활성화한다.
 2. 불필요한 기본 scrape target과 recording rule을 줄인다.
