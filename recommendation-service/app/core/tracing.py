@@ -8,6 +8,7 @@ Jaeger에서 하나의 trace로 이어지게 한다.
 """
 
 import logging
+import math
 import os
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,10 @@ def sampling_probability() -> float:
         value = float(raw)
     except ValueError:
         logger.warning("MANAGEMENT_TRACING_SAMPLING_PROBABILITY 값이 숫자가 아니라 추적을 끕니다: %r", raw)
+        return 0.0
+    # nan·inf도 float()은 받는다. nan을 그대로 두면 샘플러 생성에서 서비스가 뜨지 않으므로 끈다.
+    if not math.isfinite(value):
+        logger.warning("MANAGEMENT_TRACING_SAMPLING_PROBABILITY 값이 유한한 숫자가 아니라 추적을 끕니다: %r", raw)
         return 0.0
     return min(max(value, 0.0), 1.0)
 

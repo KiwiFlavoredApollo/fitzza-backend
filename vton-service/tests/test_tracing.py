@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+import pytest
 
 from app.core import tracing
 
@@ -17,6 +18,14 @@ def test_invalid_probability_turns_tracing_off(monkeypatch):
     monkeypatch.setenv("MANAGEMENT_TRACING_SAMPLING_PROBABILITY", "abc")
 
     assert tracing.sampling_probability() == 0.0
+
+
+@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "-inf"])
+def test_non_finite_probability_turns_tracing_off(monkeypatch, raw):
+    monkeypatch.setenv("MANAGEMENT_TRACING_SAMPLING_PROBABILITY", raw)
+
+    assert tracing.sampling_probability() == 0.0
+    assert tracing.setup_tracing("test-service") is False
 
 
 def test_probability_is_clamped(monkeypatch):
