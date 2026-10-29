@@ -1,7 +1,9 @@
 # EKS Jaeger 파일럿
 
-Compose의 `jaegertracing/all-in-one:1.76.0`을 기존 `fitzza` namespace에 배포한다.
+지원되는 Jaeger v2 이미지 `cr.jaegertracing.io/jaegertracing/jaeger:2.22.0`을 기존
+`fitzza` namespace에 배포한다. Jaeger v1은 EOL이므로 운영 파일럿에도 사용하지 않는다.
 애플리케이션 배포와 별도로 관리하며 기본 prod/delivery overlay에는 포함하지 않는다.
+FITZZA-303에서 이 메모리 기반 파일럿과 운영 샘플링 `0.1` 적용을 승인했다.
 
 ## 용량과 저장 정책
 
@@ -58,14 +60,16 @@ MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
 MANAGEMENT_TRACING_SAMPLING_PROBABILITY: "0.1"
 ```
 
-Compose에서 OTLP 환경 변수를 받는 Java 추적 대상만 한 개씩 재시작한다.
-Config Server와 Discovery Service는 제외한다. FastAPI 계측은 별도 확인이 필요하다.
+OTLP 환경 변수를 받는 추적 대상을 한 개씩 재시작한다. Config Server와 Discovery
+Service는 제외한다. FastAPI 서비스는 FITZZA-283 코드가 포함된 운영 이미지인지 먼저
+확인한다.
 각 Deployment가 Ready가 된 뒤 다음 Deployment를 진행한다.
 
 ```powershell
 $tracedDeployments = @(
   'gateway-service', 'user-service', 'product-service', 'order-service',
-  'community-service', 'review-service', 'notification-service'
+  'community-service', 'review-service', 'notification-service',
+  'recommendation-service', 'vton-service', 'vton-worker'
 )
 foreach ($deploymentName in $tracedDeployments) {
   kubectl -n fitzza rollout restart deployment/$deploymentName
