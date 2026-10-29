@@ -1,0 +1,228 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Fitzza data-pipeline Step Functions and optional EventBridge schedule.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: fitzza
+    AllowedPattern: '^[a-z][a-z0-9-]{1,20}$'
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging, dev]
+  DefinitionBucket:
+    Type: String
+    Description: S3 bucket containing orchestration.asl.json.
+  DefinitionKey:
+    Type: String
+    Default: pipeline/orchestration.asl.json
+  DefinitionVersion:
+    Type: String
+    Default: ''
+  CrawlerRunnerLambdaArn:
+    Type: String
+  InitializeRunLambdaArn:
+    Type: String
+  ValidateImportLambdaArn:
+    Type: String
+  JevRunnerLambdaArn:
+    Type: String
+  ApprovalCheckerLambdaArn:
+    Type: String
+  FashionClipRunnerLambdaArn:
+    Type: String
+  StatusWriterLambdaArn:
+    Type: String
+  RunnerLambdaRoleArn:
+    Type: String
+    Description: IAM role ARN shared by the runner Lambda functions.
+  RunnerLambdaRoleName:
+    Type: String
+    Description: IAM role name corresponding to RunnerLambdaRoleArn.
+  EksClusterName:
+    Type: String
+    Default: fitzza-prod
+  RunnerNamespace:
+    Type: String
+    Default: fitzza
+  DataBucketName:
+    Type: String
+    Description: Private bucket containing the approved baseline manifest and pipeline reports.
+  ScheduleExpression:
+    Type: String
+    Default: 'cron(0 18 * * ? *)'
+  DailyScheduleInput:
+    Type: String
+    Default: '{"run_mode":"incremental"}'
+  WeeklyScheduleExpression:
+    Type: String
+    Default: 'cron(0 19 ? * SUN *)'
+  WeeklyScheduleInput:
+    Type: String
+    Default: '{"run_mode":"integrity"}'
+  ScheduleState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+
+Conditions:
+  HasDefinitionVersion: !Not [!Equals [!Ref DefinitionVersion, '']]
+
+Resources:
+  PipelineJobRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-pipeline-job'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: pods.eks.amazonaws.com }
+            Action: [sts:AssumeRole, sts:TagSession]
+      Policies:
+        - PolicyName: read-baseline-write-reports
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/*'
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/runs/*'
+
+  PipelineJobPodIdentity:
+    Type: AWS::EKS::PodIdentityAssociation
+    Properties:
+      ClusterName: !Ref EksClusterName
+      Namespace: !Ref RunnerNamespace
+      ServiceAccount: fitzza-pipeline
+      RoleArn: !GetAtt PipelineJobRole.Arn
+
+  RunnerLambdaEksDescribePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${ProjectName}-${Environment}-runner-eks-describe'
+      Roles: [!Ref RunnerLambdaRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: eks:DescribeCluster
+            Resource: !Sub 'arn:${AWS::Partition}:eks:${AWS::Region}:${AWS::AccountId}:cluster/${EksClusterName}'
+
+  RunnerLambdaEksAccessEntry:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref EksClusterName
+      PrincipalArn: !Ref RunnerLambdaRoleArn
+      Type: STANDARD
+      # CloudFormation attaches access policies on the entry itself; there is no separate association resource.
+      AccessPolicies:
+        - PolicyArn: !Sub 'arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSEditPolicy'
+          AccessScope:
+            Type: namespace
+            Namespaces: [!Ref RunnerNamespace]
+
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-pipeline-sfn'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: states.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: invoke-pipeline-adapters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !Ref CrawlerRunnerLambdaArn
+                  - !Ref InitializeRunLambdaArn
+                  - !Ref ValidateImportLambdaArn
+                  - !Ref JevRunnerLambdaArn
+                  - !Ref ApprovalCheckerLambdaArn
+                  - !Ref FashionClipRunnerLambdaArn
+                  - !Ref StatusWriterLambdaArn
+
+  PipelineStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: !Sub '${ProjectName}-${Environment}-data-pipeline'
+      StateMachineType: STANDARD
+      RoleArn: !GetAtt StateMachineRole.Arn
+      DefinitionS3Location:
+        Bucket: !Ref DefinitionBucket
+        Key: !Ref DefinitionKey
+        Version: !If [HasDefinitionVersion, !Ref DefinitionVersion, !Ref AWS::NoValue]
+      DefinitionSubstitutions:
+        CrawlerRunnerLambdaArn: !Ref CrawlerRunnerLambdaArn
+        InitializeRunLambdaArn: !Ref InitializeRunLambdaArn
+        ValidateImportLambdaArn: !Ref ValidateImportLambdaArn
+        JevRunnerLambdaArn: !Ref JevRunnerLambdaArn
+        ApprovalCheckerLambdaArn: !Ref ApprovalCheckerLambdaArn
+        FashionClipRunnerLambdaArn: !Ref FashionClipRunnerLambdaArn
+        StatusWriterLambdaArn: !Ref StatusWriterLambdaArn
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  ScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-pipeline-schedule'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: events.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: start-pipeline-execution
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: states:StartExecution
+                Resource: !Ref PipelineStateMachine
+
+  DailyPipelineSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-data-pipeline-daily'
+      Description: Starts incremental data collection at 03:00 Asia/Seoul when enabled.
+      ScheduleExpression: !Ref ScheduleExpression
+      State: !Ref ScheduleState
+      Targets:
+        - Id: pipeline-state-machine-daily
+          Arn: !Ref PipelineStateMachine
+          RoleArn: !GetAtt ScheduleRole.Arn
+          Input: !Ref DailyScheduleInput
+
+  WeeklyPipelineSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-data-pipeline-weekly'
+      Description: Starts integrity, image-access, and index-state checks at 04:00 Asia/Seoul on Sunday when enabled. It does not recrawl the full catalog.
+      ScheduleExpression: !Ref WeeklyScheduleExpression
+      State: !Ref ScheduleState
+      Targets:
+        - Id: pipeline-state-machine-weekly
+          Arn: !Ref PipelineStateMachine
+          RoleArn: !GetAtt ScheduleRole.Arn
+          Input: !Ref WeeklyScheduleInput
+
+Outputs:
+  StateMachineArn:
+    Description: Data pipeline Step Functions state machine ARN.
+    Value: !Ref PipelineStateMachine
+  ScheduleRuleArn:
+    Description: EventBridge schedule ARN.
+    Value: !GetAtt DailyPipelineSchedule.Arn
