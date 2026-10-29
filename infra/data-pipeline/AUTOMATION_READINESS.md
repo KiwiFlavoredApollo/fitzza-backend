@@ -135,7 +135,10 @@ alias 전환 가드(안):
   integrity `cron(0 2 ? * MON *)`(월 11:00 KST)이다. EventBridge 규칙의 cron은 UTC 기준이므로,
   2절 1번 결정이 다르면 UTC로 바꿔 넣고 실행 창(평일 09:30~16:00 KST) 안에 두는지 확인한다
 - [ ] `ScheduleState=ENABLED` change set 실행, 첫 예약 실행 결과 확인
-- [ ] 노드가 쉬는 공휴일·제외일은 runner가 모른다. 그날은 Job 생성 단계에서 실패로 기록된다
+- [ ] 노드가 쉬는 공휴일·제외일은 runner가 모른다. 그날도 실행 창 시간이면 runner가 Job을 만들고,
+  노드가 없어 Pod가 `PENDING`으로 남으면 상태 머신이 300초마다 다시 확인한다. Job의
+  `activeDeadlineSeconds`(6시간)가 지나면 Job이 실패하고, runner 재시도 후 `RecordFailure`가 실패를 기록한다.
+  그날 예약을 미리 끄거나 실행을 중단하면 6시간 대기를 피할 수 있다
 
 ## 7. 예상 비용 (추정, 켜기 전에 다시 확인)
 
@@ -158,4 +161,4 @@ alias 전환 가드(안):
 | 승인 이벤트 끄기 | `EnableApprovalEvents=false` |
 | 알림 끄기 | review-request 함수의 `REVIEW_TOPIC_ARN` 제거 또는 `EnableReviewNotification=false` |
 | 잘못 전환된 alias | `switch_alias`가 출력한 이전 대상으로 다시 전환(컬렉션은 지우지 않음) |
-| 전체 철거 | 스택 삭제(상태 머신·규칙·주제만 삭제, S3 데이터와 Lambda 함수는 남음) |
+| 전체 철거 | 스택 삭제. 스택이 만든 상태 머신, 예약·승인 이벤트 규칙, SNS 주제·구독, Lambda 호출 권한과 함께 `PipelineJobRole`, `PipelineJobPodIdentity`, `RunnerLambdaEksDescribePolicy`, `RunnerLambdaEksAccessEntry`, `StateMachineRole`, `ScheduleRole`도 삭제된다. 스택 밖의 Lambda 함수·역할과 S3 데이터는 남지만, EKS 접근 항목과 Pod Identity가 없어져 그 함수로 Job을 만들거나 Job이 S3에 접근할 수 없으므로 다시 쓰려면 스택을 다시 배포해야 한다 |
