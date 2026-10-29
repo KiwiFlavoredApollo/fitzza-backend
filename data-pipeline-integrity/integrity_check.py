@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -16,6 +17,8 @@ from botocore.config import Config
 
 MAX_FAILURE_SAMPLES = 100
 HTTP_TIMEOUT_SECONDS = 10
+QDRANT_SCROLL_LIMIT = 1000
+MAX_QDRANT_PAGES = 1000
 
 
 def _s3() -> Any:
@@ -77,6 +80,37 @@ def _qdrant_points(url: str, collection: str) -> int | None:
     return points if isinstance(points, int) else None
 
 
+def _qdrant_product_ids(url: str, collection: str) -> set[str] | None:
+    """Collect the product_id of every point, reading payload only, so each product's presence can be checked."""
+    product_ids: set[str] = set()
+    offset: Any = None
+    for _ in range(MAX_QDRANT_PAGES):
+        body: dict[str, Any] = {"limit": QDRANT_SCROLL_LIMIT, "with_payload": ["product_id"], "with_vector": False}
+        if offset is not None:
+            body["offset"] = offset
+        request = Request(
+            f"{url.rstrip('/')}/collections/{collection}/points/scroll",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+                if response.status != 200:
+                    return None
+                result = json.loads(response.read()).get("result") or {}
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            return None
+        for point in result.get("points") or []:
+            value = (point.get("payload") or {}).get("product_id")
+            if value is not None:
+                product_ids.add(str(value))
+        offset = result.get("next_page_offset")
+        if offset is None:
+            return product_ids
+    return None
+
+
 def _object_key(manifest_key: str, record: dict[str, Any]) -> str:
     explicit = record.get("s3_key") or record.get("object_key") or record.get("object_path")
     if isinstance(explicit, str) and explicit:
@@ -95,20 +129,29 @@ def check_catalog(client: Any, bucket: str, manifest_key: str, qdrant_url: str, 
         raise ValueError("baseline manifest must have non-empty products")
 
     missing_objects: list[str] = []
+    invalid_objects: list[str] = []
     invalid_products: list[str] = []
     inaccessible_images: list[str] = []
-    missing_object_count = invalid_image_reference_count = unreachable_image_count = 0
+    missing_object_count = invalid_object_count = invalid_image_reference_count = unreachable_image_count = 0
     for record in products:
         product_id = str(record.get("product_id", "")) if isinstance(record, dict) else ""
         try:
             raw = _read_object(client, bucket, _object_key(manifest_key, record))
-            product = json.loads(raw)
-            if str(product.get("product_id")) != product_id:
-                raise ValueError("product id mismatch")
         except Exception:
             missing_object_count += 1
             if len(missing_objects) < MAX_FAILURE_SAMPLES:
                 missing_objects.append(product_id)
+            continue
+        try:
+            if hashlib.sha256(raw).hexdigest() != record.get("sha256"):
+                raise ValueError("object does not match the manifest sha256")
+            product = json.loads(raw)
+            if str(product.get("product_id")) != product_id:
+                raise ValueError("product id mismatch")
+        except Exception:
+            invalid_object_count += 1
+            if len(invalid_objects) < MAX_FAILURE_SAMPLES:
+                invalid_objects.append(product_id)
             continue
         image = _image_url(product)
         if not image:
@@ -121,21 +164,36 @@ def check_catalog(client: Any, bucket: str, manifest_key: str, qdrant_url: str, 
                 inaccessible_images.append(product_id)
 
     points = _qdrant_points(qdrant_url, collection)
+    indexed = _qdrant_product_ids(qdrant_url, collection)
+    expected = {str(record.get("product_id", "")) if isinstance(record, dict) else "" for record in products}
+    unindexed = sorted(expected - indexed, key=lambda value: (len(value), value)) if indexed is not None else []
     report = {
         "schema_version": 1,
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "product_count": len(products),
-        "s3": {"missing_object_count": missing_object_count, "sample_product_ids": missing_objects},
+        "s3": {
+            "missing_object_count": missing_object_count,
+            "sample_product_ids": missing_objects,
+            "invalid_object_count": invalid_object_count,
+            "invalid_object_sample_product_ids": invalid_objects,
+        },
         "product": {"invalid_image_reference_count": invalid_image_reference_count, "sample_product_ids": invalid_products},
         "image": {"unreachable_count": unreachable_image_count, "sample_product_ids": inaccessible_images},
-        "qdrant": {"collection": collection, "points_count": points, "minimum_expected_points": len(products)},
+        "qdrant": {
+            "collection": collection,
+            "points_count": points,
+            "product_lookup_ok": indexed is not None,
+            "unindexed_product_count": len(unindexed),
+            "sample_product_ids": unindexed[:MAX_FAILURE_SAMPLES],
+        },
     }
     report["ok"] = (
         missing_object_count == 0
+        and invalid_object_count == 0
         and invalid_image_reference_count == 0
         and unreachable_image_count == 0
-        and points is not None
-        and points >= len(products)
+        and indexed is not None
+        and not unindexed
     )
     return report
 
