@@ -74,11 +74,27 @@ helm template fitzza-monitoring prometheus-community/kube-prometheus-stack `
   --version 92.14.1 `
   --namespace fitzza-monitoring `
   --create-namespace `
+  --include-crds `
   --values infra/k8s/observability/prometheus/values.yaml `
   --output-dir .tmp/fitzza-monitoring-render
+kubectl create --dry-run=client `
+  --filename .tmp/fitzza-monitoring-render/kube-prometheus-stack/crds `
+  --output name
+kubectl get customresourcedefinition
+```
+
+먼저 렌더된 CRD의 client-side 검증을 통과해야 한다. 위 CRD 이름이 클러스터의
+`kubectl get customresourcedefinition` 결과에 모두 존재할 때만 전체 manifest의
+server-side dry-run을 실행한다.
+
+```powershell
 kubectl apply --dry-run=server --namespace fitzza-monitoring `
   --filename .tmp/fitzza-monitoring-render/kube-prometheus-stack
 ```
+
+최초 설치라 필요한 CRD가 아직 없다면 전체 server-side dry-run을 건너뛴다. 승인된
+`helm upgrade --install`이 CRD를 먼저 설치하며, 이후 upgrade부터 전체 server-side
+dry-run을 실행한다. dry-run을 위해 CRD만 별도로 클러스터에 적용하지 않는다.
 
 또는 저장소 루트에서 다음처럼 실행한다.
 
@@ -131,7 +147,7 @@ Prometheus Targets에서 kubelet, node-exporter, kube-state-metrics가 `UP`인�
 ## 롤백과 저장소
 
 ```powershell
-helm rollback fitzza-monitoring 1 --namespace fitzza-monitoring --wait --timeout 10m
+helm rollback fitzza-monitoring --namespace fitzza-monitoring --wait --timeout 10m
 ```
 
 rollback이 불가능하거나 배포를 중단해야 하면 `helm uninstall` 전에 Prometheus PVC와

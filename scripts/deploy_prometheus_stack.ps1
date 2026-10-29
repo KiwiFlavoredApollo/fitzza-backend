@@ -24,6 +24,19 @@ function Invoke-Checked {
     }
 }
 
+function Invoke-Captured {
+    param(
+        [Parameter(Mandatory)] [string]$Command,
+        [Parameter(Mandatory)] [string[]]$Arguments
+    )
+
+    $output = @(& $Command @Arguments)
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed with exit code $LASTEXITCODE"
+    }
+    return $output
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $valuesFile = Join-Path $repoRoot 'infra/k8s/observability/prometheus/values.yaml'
 if (-not (Test-Path -LiteralPath $valuesFile -PathType Leaf)) {
@@ -56,6 +69,18 @@ if ($storageClass.reclaimPolicy -ne 'Retain') {
 if ($storageClass.volumeBindingMode -ne 'WaitForFirstConsumer') {
     throw "fitzza-gp3-retain must use WaitForFirstConsumer, found $($storageClass.volumeBindingMode)."
 }
+$storageParametersProperty = $storageClass.PSObject.Properties['parameters']
+$storageParameters = if ($null -eq $storageParametersProperty) { $null } else { $storageParametersProperty.Value }
+$storageTypeProperty = if ($null -eq $storageParameters) { $null } else { $storageParameters.PSObject.Properties['type'] }
+$storageType = if ($null -eq $storageTypeProperty) { '<missing>' } else { [string]$storageTypeProperty.Value }
+if ($storageType -ne 'gp3') {
+    throw "fitzza-gp3-retain must use parameters.type gp3, found '$storageType'."
+}
+$storageEncryptedProperty = if ($null -eq $storageParameters) { $null } else { $storageParameters.PSObject.Properties['encrypted'] }
+$storageEncrypted = if ($null -eq $storageEncryptedProperty) { '<missing>' } else { [string]$storageEncryptedProperty.Value }
+if ($storageEncrypted -ne 'true') {
+    throw "fitzza-gp3-retain must use parameters.encrypted true, found '$storageEncrypted'."
+}
 
 Invoke-Checked kubectl @('get', 'nodes', '-o', 'wide')
 Invoke-Checked kubectl @('describe', 'nodes')
@@ -68,9 +93,33 @@ try {
 }
 
 try {
-    Invoke-Checked kubectl @('-n', $Namespace, 'get', 'secret', 'fitzza-grafana-admin')
+    $grafanaSecretJson = Invoke-Captured kubectl @('-n', $Namespace, 'get', 'secret', 'fitzza-grafana-admin', '-o', 'json')
+    $grafanaSecret = ($grafanaSecretJson -join "`n") | ConvertFrom-Json
 } catch {
     throw 'Create fitzza-grafana-admin from the approved secret store before installation; this script never creates credentials.'
+}
+
+$secretDataProperty = $grafanaSecret.PSObject.Properties['data']
+if ($null -eq $secretDataProperty -or $null -eq $secretDataProperty.Value) {
+    throw 'fitzza-grafana-admin must contain non-empty admin-user and admin-password values.'
+}
+$secretData = $secretDataProperty.Value
+
+foreach ($secretKey in @('admin-user', 'admin-password')) {
+    $secretProperty = $secretData.PSObject.Properties[$secretKey]
+    if ($null -eq $secretProperty -or [string]::IsNullOrWhiteSpace([string]$secretProperty.Value)) {
+        throw "fitzza-grafana-admin must contain a non-empty '$secretKey' value."
+    }
+
+    try {
+        $decodedSecretValue = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($secretProperty.Value))
+    } catch {
+        throw "fitzza-grafana-admin '$secretKey' must contain a valid base64-encoded value."
+    }
+    if ([string]::IsNullOrWhiteSpace($decodedSecretValue)) {
+        throw "fitzza-grafana-admin must contain a non-empty '$secretKey' value."
+    }
+    $decodedSecretValue = $null
 }
 
 Invoke-Checked helm @('repo', 'add', 'prometheus-community', 'https://prometheus-community.github.io/helm-charts', '--force-update')
@@ -84,13 +133,37 @@ try {
         '--version', $ChartVersion,
         '--namespace', $Namespace,
         '--create-namespace',
+        '--include-crds',
         '--values', $valuesFile,
         '--output-dir', $renderRoot
     )
 
     $manifestRoot = Join-Path $renderRoot 'kube-prometheus-stack'
-    Invoke-Checked kubectl @('apply', '--dry-run=server', '--namespace', $Namespace, '--filename', $manifestRoot)
-    Write-Host "Rendered and server-side validated: $manifestRoot"
+    $crdRoot = Join-Path $manifestRoot 'crds'
+    if (-not (Test-Path -LiteralPath $crdRoot -PathType Container)) {
+        throw "Rendered CRD directory not found: $crdRoot"
+    }
+
+    $renderedCrdResources = @(Invoke-Captured kubectl @(
+        'create', '--dry-run=client', '--filename', $crdRoot, '--output', 'name'
+    ))
+    $missingCrdNames = @()
+    foreach ($renderedCrdResource in $renderedCrdResources) {
+        $crdName = ($renderedCrdResource -split '/', 2)[-1]
+        $existingCrd = @(Invoke-Captured kubectl @(
+            'get', 'customresourcedefinition', $crdName, '--ignore-not-found', '--output', 'name'
+        ))
+        if ($existingCrd.Count -eq 0) {
+            $missingCrdNames += $crdName
+        }
+    }
+
+    if ($missingCrdNames.Count -eq 0) {
+        Invoke-Checked kubectl @('apply', '--dry-run=server', '--namespace', $Namespace, '--filename', $manifestRoot)
+        Write-Host "Rendered and server-side validated: $manifestRoot"
+    } else {
+        Write-Warning "Skipping full server-side dry-run until Helm installs required CRDs: $($missingCrdNames -join ', ')"
+    }
 
     if (-not $Apply) {
         Write-Host 'Dry-run complete. Re-run with -Apply during the approved operating window to install.'
