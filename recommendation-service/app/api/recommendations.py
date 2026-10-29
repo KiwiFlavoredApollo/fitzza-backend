@@ -884,7 +884,7 @@ async def search_products_by_image(
             category=item.get("category"),
             subcategory=item.get("subcategory"),
             price=item.get("price") or 0,
-            imageUrl=storage_client.get_presigned_url(item.get("image_url")),
+            imageUrl=storage_client.get_presigned_url(item.get("image_url")) or None,
             color=(
                 item.get("color_raw")
                 or (item.get("color_normalized")[0] if item.get("color_normalized") else None)

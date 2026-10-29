@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import threading
 import time
 from typing import Any
 import urllib.parse
@@ -28,6 +29,7 @@ class StorageClient:
         self.endpoint_url = self.settings.aws_endpoint_url.strip() or None
         self._s3_client: Any = None
         self._url_cache: dict[str, tuple[str, float]] = {}
+        self._cache_lock = threading.Lock()
         self._cache_max_size = 2048
 
     @property
@@ -271,11 +273,12 @@ class StorageClient:
 
         cache_key = f"{clean_key}:{expires_in}"
         now = time.time()
-        cached = self._url_cache.get(cache_key)
-        if cached:
-            url, expire_at = cached
-            if now < expire_at - 60:
-                return url
+        with self._cache_lock:
+            cached = self._url_cache.get(cache_key)
+            if cached:
+                url, expire_at = cached
+                if now < expire_at - 60:
+                    return url
 
         try:
             s3 = self._get_s3()
@@ -285,10 +288,12 @@ class StorageClient:
                 ExpiresIn=expires_in,
             )
             url_str = str(url)
-            if len(self._url_cache) >= self._cache_max_size:
-                oldest_key = next(iter(self._url_cache))
-                del self._url_cache[oldest_key]
-            self._url_cache[cache_key] = (url_str, now + expires_in)
+            with self._cache_lock:
+                if len(self._url_cache) >= self._cache_max_size:
+                    oldest_key = next(iter(self._url_cache), None)
+                    if oldest_key is not None:
+                        self._url_cache.pop(oldest_key, None)
+                self._url_cache[cache_key] = (url_str, now + expires_in)
             return url_str
         except Exception as exc:
             logger.warning(

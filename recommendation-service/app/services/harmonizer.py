@@ -305,7 +305,7 @@ class OutfitHarmonizer:
                 continue
 
             image_url = get_storage_client().get_presigned_url(raw_image_url)
-            if not image_url:
+            if not image_url or not image_url.startswith(("http://", "https://")):
                 continue
 
             content.append(
