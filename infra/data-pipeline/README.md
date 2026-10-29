@@ -241,11 +241,13 @@ definition.
 The deployable wrapper is `infra/aws/cloudformation/orchestration.yaml`. Upload
 the ASL file to a versioned private S3 bucket, deploy this stack with the seven
 adapter Lambda ARNs, and keep `ScheduleState=DISABLED` until the adapters and
-run contract are deployed. The daily rule defaults to 03:00 Asia/Seoul with
-`{"run_mode":"incremental"}`. It reads the approved current baseline manifest
+run contract are deployed. The incremental rule defaults to Tuesday and
+Thursday 10:00 Asia/Seoul (`cron(0 1 ? * TUE,THU *)`; EventBridge rule cron is
+UTC) with `{"run_mode":"incremental"}`. It reads the approved current baseline manifest
 and incremental checkpoint, so the crawler must submit only new or changed product
-IDs; it must not rebuild the existing 3,000-product set. The weekly rule defaults
-to Sunday 04:00 with `{"run_mode":"integrity"}` and is routed directly to the
+IDs; it must not rebuild the existing 3,000-product set. The integrity rule
+defaults to Monday 11:00 Asia/Seoul (`cron(0 2 ? * MON *)`) with
+`{"run_mode":"integrity"}` and is routed directly to the
 validation adapter: it checks stored product data, image accessibility, and index
 state without recrawling the catalog. A `full` run is manual-only and requires
 `manual_approved: true`; use it only after a data-quality incident, site structure
@@ -279,9 +281,8 @@ The node runs only on weekdays 09:00-18:00 Asia/Seoul, so runners create a new
 Job only inside `PIPELINE_RUN_WINDOW` (default `MON-FRI 09:30-16:00`, Asia/Seoul).
 Outside it they fail with `JobNotStartedError`, which the state machine does not
 retry; an already created Job is still observed. Holidays on which the node stays
-off are not known to the runner. The default schedule times above predate this
-window and must be changed to fall inside it (or the window widened for a
-dedicated node) before `ScheduleState` is enabled.
+off are not known to the runner. Both default schedules fall inside this window;
+keep them there, or widen the window together with a dedicated node.
 
 ### Stages without a runtime yet
 

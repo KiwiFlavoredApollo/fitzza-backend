@@ -62,3 +62,11 @@ def test_job_role_cannot_upload_approved_bundles():
     block = template[template.index("  PipelineJobRole:\n"):template.index("  PipelineJobPodIdentity:\n")]
     assert "Sid: DenyApprovedBundleWrites\n                Effect: Deny\n                Action: s3:PutObject" in block
     assert "/pipeline/runs/*/approved/*'" in block
+
+
+def test_template_default_schedules_match_the_example_and_run_window():
+    template = yaml.load((ROOT / "infra/aws/cloudformation/orchestration.yaml").read_text(encoding="utf-8"), Loader=CfnLoader)
+    example = json.loads((ROOT / "infra/aws/cloudformation/orchestration-parameters.example.json").read_text(encoding="utf-8"))
+    values = {item["ParameterKey"]: item["ParameterValue"] for item in example}
+    for key in ("ScheduleExpression", "WeeklyScheduleExpression"):
+        assert template["Parameters"][key]["Default"] == values[key], key

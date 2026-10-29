@@ -12,7 +12,7 @@
 | 구성 | 상태 |
 | --- | --- |
 | 상태 머신 정의(`orchestration.asl.json`)·스택 템플릿(`orchestration.yaml`) | 저장소에만 있음. AWS 정의 검증 OK, 배포 안 함 |
-| 예약 실행 | `ScheduleState` 기본 `DISABLED`. 기본 시각(매일 03:00, 일요일 04:00 KST)은 노드가 꺼진 시간 |
+| 예약 실행 | `ScheduleState` 기본 `DISABLED`. 기본 시각은 실행 창 안(증분 화·목 10:00, integrity 월 11:00 KST) |
 | Crawler·FashionCLIP runner | 코드 있음. 한 번 호출에 최대 10분 대기, 상태 머신이 5분마다 재확인. 새 Job은 평일 09:30~16:00 KST에만 생성 |
 | 사람 검수 대기·알림·승인본 수신 | 코드 있음. 알림(SNS)·승인 이벤트(EventBridge) 기본 꺼짐 |
 | Validate/Import, Jev 단계 | 자리 어댑터(`not_enabled`). 호출되면 아무것도 바꾸지 않고 실행이 멈춤 |
@@ -131,8 +131,9 @@ alias 전환 가드(안):
 
 ### D. 예약 켜기 (승인 필요)
 
-- [ ] 예약 시각을 실행 창 안으로 변경. EventBridge 규칙의 cron은 UTC 기준이다.
-  예시 파일 값: 증분 `cron(0 1 ? * TUE,THU *)`(화·목 10:00 KST), integrity `cron(0 2 ? * MON *)`(월 11:00 KST)
+- [ ] 예약 시각 확인. 기본값(예시 파일과 같음)은 증분 `cron(0 1 ? * TUE,THU *)`(화·목 10:00 KST),
+  integrity `cron(0 2 ? * MON *)`(월 11:00 KST)이다. EventBridge 규칙의 cron은 UTC 기준이므로,
+  2절 1번 결정이 다르면 UTC로 바꿔 넣고 실행 창(평일 09:30~16:00 KST) 안에 두는지 확인한다
 - [ ] `ScheduleState=ENABLED` change set 실행, 첫 예약 실행 결과 확인
 - [ ] 노드가 쉬는 공휴일·제외일은 runner가 모른다. 그날은 Job 생성 단계에서 실패로 기록된다
 
