@@ -141,13 +141,19 @@ class RedisClient:
         full_key = self._format_key(key)
         ttl = ttl_seconds if ttl_seconds is not None else self.settings.redis_ttl_seconds
         try:
-            assert self._client is not None
+            def _json_default(obj: Any) -> Any:
+                if hasattr(obj, "model_dump") and callable(obj.model_dump):
+                    return obj.model_dump()
+                if hasattr(obj, "dict") and callable(obj.dict):
+                    return obj.dict()
+                return str(obj)
+
             if isinstance(value, (dict, list, bool, int, float)) or value is None:
-                serialized = json.dumps(value, ensure_ascii=False)
+                serialized = json.dumps(value, ensure_ascii=False, default=_json_default)
             elif isinstance(value, str):
                 serialized = value
             else:
-                serialized = json.dumps(value, ensure_ascii=False, default=str)
+                serialized = json.dumps(value, ensure_ascii=False, default=_json_default)
 
             if ttl > 0:
                 res = bool(self._client.set(full_key, serialized, ex=ttl))
