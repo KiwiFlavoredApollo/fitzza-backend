@@ -597,5 +597,12 @@ def test_validate_override_image_url_security() -> None:
     # 5. 타사 임의 S3 버킷 및 비인가 도메인 차단
     assert prod_client._validate_override_image_url("https://malicious-bucket.s3.amazonaws.com/evil.png") is False
     assert prod_client._validate_override_image_url("https://evil-attacker.com/image.png") is False
+    # 공격자 도메인의 S3 서브도메인 우회 시도 차단
+    assert prod_client._validate_override_image_url("https://fitzza-prod-assets-vton.s3.attacker.com/x.png") is False
+    assert prod_client._validate_override_image_url("https://s3.attacker.com/fitzza-prod-assets-vton/x.png") is False
+    assert prod_client._validate_override_image_url("https://fitzza-prod-assets-vton.other.s3.amazonaws.com/x.png") is False
+    # 공식 무신사 S3 허용 목록 확인
+    assert prod_client._validate_override_image_url("https://musinsa-images.s3.ap-northeast-2.amazonaws.com/goods/123.jpg") is True
+
 
 

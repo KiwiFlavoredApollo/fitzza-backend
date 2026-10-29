@@ -251,23 +251,7 @@ class ProductServiceClient:
             else ""
         )
 
-        # 1) S3 패턴 호스트 (예: *.amazonaws.com 또는 bucket.s3.xxx)
-        if ".amazonaws.com" in hostname or "s3." in hostname or "s3-" in hostname:
-            path = parsed.path.lstrip("/")
-            is_valid_bucket = (
-                (configured_bucket and hostname.startswith(f"{configured_bucket}."))
-                or (configured_bucket and path.startswith(f"{configured_bucket}/"))
-            )
-            if not is_valid_bucket:
-                logger.warning(
-                    "override_image_url 타사/비인가 S3 버킷 접근 거부 (url=%s, expected_bucket=%s)",
-                    clean_url,
-                    configured_bucket,
-                )
-                return False
-            return True
-
-        # 2) CloudFront CDN 또는 무신사 공식 CDN 도메인
+        # 1) CloudFront CDN 또는 무신사 공식 CDN 도메인
         allowed_domains = (
             "image.msscdn.net",
             "msscdn.net",
@@ -278,6 +262,39 @@ class ProductServiceClient:
             return True
 
         if configured_cf and hostname == configured_cf:
+            return True
+
+        # 2) AWS S3 도메인 검증: 반드시 .amazonaws.com 또는 지정된 endpoint_url 로 한정
+        endpoint_netloc = (
+            urllib.parse.urlparse(self.settings.aws_endpoint_url).netloc.lower()
+            if getattr(self.settings, "aws_endpoint_url", None)
+            else ""
+        )
+        is_aws_s3 = hostname.endswith(".amazonaws.com")
+        is_local_s3 = bool(endpoint_netloc and hostname == endpoint_netloc)
+
+        if is_aws_s3 or is_local_s3:
+            path = parsed.path.lstrip("/")
+            is_valid_bucket = False
+            if configured_bucket:
+                # Virtual-hosted style: <bucket>.s3.<region>.amazonaws.com 또는 <bucket>.s3.amazonaws.com
+                if (
+                    hostname.startswith(f"{configured_bucket}.s3.")
+                    or hostname.startswith(f"{configured_bucket}.s3-")
+                    or hostname == f"{configured_bucket}.s3.amazonaws.com"
+                ):
+                    is_valid_bucket = True
+                # Path style: s3.<region>.amazonaws.com/<bucket>/... 또는 localhost:4566/<bucket>/...
+                elif path.startswith(f"{configured_bucket}/"):
+                    is_valid_bucket = True
+
+            if not is_valid_bucket:
+                logger.warning(
+                    "override_image_url 타사/비인가 S3 버킷 접근 거부 (url=%s, expected_bucket=%s)",
+                    clean_url,
+                    configured_bucket,
+                )
+                return False
             return True
 
         # 그 외 알려지지 않은 외부 호스트는 거부

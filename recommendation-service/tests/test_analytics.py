@@ -233,21 +233,18 @@ def test_analytics_api_endpoint(monkeypatch):
     assert forbidden_res.json()["code"] == "FORBIDDEN"
 
     # Admin role is authoritative regardless of the numeric user ID.
+    before_kst = datetime.now(KST).strftime("%Y-%m-%d")
     res = client.get(
         "/api/recommendations/analytics",
         headers={"X-User-Id": "7"},
     )
+    after_kst = datetime.now(KST).strftime("%Y-%m-%d")
     assert res.status_code == 200
     body = res.json()
     validated = PeriodAnalytics(**body)
     assert validated.label == "일간"
 
-    valid_dates = {
-        (datetime.now(KST) - timedelta(days=1)).strftime("%Y-%m-%d"),
-        datetime.now(KST).strftime("%Y-%m-%d"),
-        (datetime.now(KST) + timedelta(days=1)).strftime("%Y-%m-%d"),
-    }
-    assert validated.startDate in valid_dates
+    assert validated.startDate in (before_kst, after_kst)
     assert validated.endDate == validated.startDate
 
     # 3-1. Admin user with explicit refDate anchor -> 200 OK
@@ -267,6 +264,13 @@ def test_analytics_api_endpoint(monkeypatch):
     )
     assert res_bad_date.status_code == 400
     assert res_bad_date.json()["code"] == "INVALID_DATE_FORMAT"
+
+    res_bad_format = client.get(
+        "/api/recommendations/analytics?refDate=2026-1-5",
+        headers={"X-User-Id": "7"},
+    )
+    assert res_bad_format.status_code == 400
+    assert res_bad_format.json()["code"] == "INVALID_DATE_FORMAT"
 
     # 4. Gateway backward compatibility path /api/v1/recommendations/analytics with admin header
     compat_res = client.get(

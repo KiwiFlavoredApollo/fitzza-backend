@@ -273,11 +273,13 @@ class StorageClient:
 
         cache_key = f"{clean_key}:{expires_in}"
         now = time.time()
+        # 남은 유효 시간이 요청 기간 대비 안전 마진(최대 300초 또는 유효기간 절반) 이상일 때만 캐시 재사용
+        min_margin = min(300, expires_in // 2) if expires_in > 60 else 10
         with self._cache_lock:
             cached = self._url_cache.get(cache_key)
             if cached:
                 url, expire_at = cached
-                if now < expire_at - 60:
+                if now < expire_at - min_margin:
                     return url
 
         try:

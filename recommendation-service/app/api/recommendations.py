@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
@@ -681,6 +682,12 @@ def get_recommendation_analytics(
 
     reference_dt = None
     if ref_date:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", ref_date):
+            raise RecommendationApiError(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="INVALID_DATE_FORMAT",
+                message="유효하지 않은 날짜 형식입니다. YYYY-MM-DD 형식을 사용해야 합니다.",
+            )
         try:
             reference_dt = datetime.strptime(ref_date, "%Y-%m-%d").replace(tzinfo=KST)
         except ValueError:
