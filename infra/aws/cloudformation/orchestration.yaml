@@ -117,17 +117,12 @@ Resources:
       ClusterName: !Ref EksClusterName
       PrincipalArn: !Ref RunnerLambdaRoleArn
       Type: STANDARD
-
-  RunnerLambdaEksPolicyAssociation:
-    Type: AWS::EKS::AccessPolicyAssociation
-    DependsOn: RunnerLambdaEksAccessEntry
-    Properties:
-      ClusterName: !Ref EksClusterName
-      PrincipalArn: !Ref RunnerLambdaRoleArn
-      PolicyArn: !Sub 'arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSEditPolicy'
-      AccessScope:
-        Type: namespace
-        Namespaces: [!Ref RunnerNamespace]
+      # CloudFormation attaches access policies on the entry itself; there is no separate association resource.
+      AccessPolicies:
+        - PolicyArn: !Sub 'arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSEditPolicy'
+          AccessScope:
+            Type: namespace
+            Namespaces: [!Ref RunnerNamespace]
 
   StateMachineRole:
     Type: AWS::IAM::Role
