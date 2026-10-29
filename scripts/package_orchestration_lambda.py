@@ -14,6 +14,7 @@ SOURCES = (
     "infra/aws/orchestration/job_runner.py",
     "infra/aws/orchestration/job_spec.py",
     "infra/aws/orchestration/eks_kubernetes_api.py",
+    "infra/aws/orchestration/operating_window.py",
 )
 
 

@@ -5,6 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# Same placement as the existing data-pipeline Jobs; a dedicated pipeline node can be selected per deployment.
+DEFAULT_NODE_SELECTOR = {"kubernetes.io/arch": "arm64"}
+
 
 def render_job(
     stage: str,
@@ -15,6 +18,7 @@ def render_job(
     cpu_limit: str = "2",
     memory_request: str = "1Gi",
     memory_limit: str = "4Gi",
+    node_selector: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Create a deterministic, resource-bounded Job spec for one pipeline stage."""
     if stage not in {"crawler", "fashion-clip", "integrity"}:
@@ -24,6 +28,9 @@ def render_job(
         raise ValueError("invalid run_id")
     if not image or not command:
         raise ValueError("image and command are required")
+    selector = DEFAULT_NODE_SELECTOR if node_selector is None else node_selector
+    if not selector or not all(isinstance(k, str) and isinstance(v, str) and k and v for k, v in selector.items()):
+        raise ValueError("node_selector must be a non-empty mapping of strings")
     name = f"fitzza-{stage}-{run_id}"[:63].rstrip("-")
     labels = {"app.kubernetes.io/part-of": "fitzza-data-pipeline", "fitzza.io/run-id": run_id}
     if stage in {"fashion-clip", "integrity"}:
@@ -51,7 +58,7 @@ def render_job(
                 "spec": {
                     "restartPolicy": "Never",
                     "serviceAccountName": "fitzza-pipeline",
-                    "nodeSelector": {"kubernetes.io/arch": "arm64", "fitzza.io/pipeline-worker": "true"},
+                    "nodeSelector": dict(selector),
                     "containers": [{
                         "name": stage.replace("-", "-"),
                         "image": image,

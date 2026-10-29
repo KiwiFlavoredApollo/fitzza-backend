@@ -30,10 +30,16 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": { "FunctionName": "${CrawlerRunnerLambdaArn}", "Payload.$": "$" },
       "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2 }],
+      "Retry": [{ "ErrorEquals": ["JobNotStartedError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
-      "Next": "ValidateAndImport"
+      "Next": "CheckCrawlerJob"
     },
+    "CheckCrawlerJob": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.job_status", "StringEquals": "SUCCEEDED", "Next": "ValidateAndImport" }],
+      "Default": "WaitForCrawlerJob"
+    },
+    "WaitForCrawlerJob": { "Type": "Wait", "Seconds": 300, "Next": "RunCrawler" },
     "ValidateAndImport": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
@@ -72,10 +78,16 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": { "FunctionName": "${FashionClipRunnerLambdaArn}", "Payload.$": "$" },
       "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2 }],
+      "Retry": [{ "ErrorEquals": ["JobNotStartedError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 30, "MaxAttempts": 2, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
-      "Next": "RecordSuccess"
+      "Next": "CheckFashionClipJob"
     },
+    "CheckFashionClipJob": {
+      "Type": "Choice",
+      "Choices": [{ "Variable": "$.job_status", "StringEquals": "SUCCEEDED", "Next": "RecordSuccess" }],
+      "Default": "WaitForFashionClipJob"
+    },
+    "WaitForFashionClipJob": { "Type": "Wait", "Seconds": 300, "Next": "RunFashionClip" },
     "RecordSuccess": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",

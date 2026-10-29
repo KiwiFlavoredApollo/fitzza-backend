@@ -262,13 +262,26 @@ CIDRs must include the runner's egress path.
 
 `infra/aws/orchestration/job_spec.py` renders the Crawler and FashionCLIP Job
 specifications used by the runner adapters. Each Job receives the run contract,
-has CPU/memory requests and limits, targets a dedicated ARM64 pipeline node,
-and uses a deterministic name to prevent duplicate execution.
+has CPU/memory requests and limits, and uses a deterministic name to prevent
+duplicate execution. Jobs are placed like the other pipeline Jobs
+(`kubernetes.io/arch: arm64`); set `PIPELINE_NODE_SELECTOR_JSON` on a runner to
+target a dedicated pipeline node once one exists.
 
 `infra/aws/orchestration/job_runner.py` provides the idempotent runner logic:
-it reuses an existing Job for the same run, waits for completion, and surfaces
-failure or timeout without creating a duplicate. The production adapter must
-provide a Kubernetes API client with the namespace-scoped Job permissions.
+it reuses an existing Job for the same run and surfaces failure without creating
+a duplicate. A Lambda invocation cannot outlive a pipeline Job, so the runner
+waits at most `PIPELINE_JOB_WAIT_SECONDS` (default 600; keep the Lambda timeout
+above it) and returns `job_status` `RUNNING` or `PENDING`. The state machine then
+waits five minutes and calls the runner again until `SUCCEEDED`. The Job's
+`activeDeadlineSeconds` (6 hours) bounds the total run.
+
+The node runs only on weekdays 09:00-18:00 Asia/Seoul, so runners create a new
+Job only inside `PIPELINE_RUN_WINDOW` (default `MON-FRI 09:30-16:00`, Asia/Seoul).
+Outside it they fail with `JobNotStartedError`, which the state machine does not
+retry; an already created Job is still observed. Holidays on which the node stays
+off are not known to the runner. The default schedule times above predate this
+window and must be changed to fall inside it (or the window widened for a
+dedicated node) before `ScheduleState` is enabled.
 
 The Job service account `fitzza-pipeline` is defined in
 `infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline
