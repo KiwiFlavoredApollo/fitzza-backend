@@ -58,6 +58,9 @@ class Settings:
     product_service_url: str = field(
         default_factory=lambda: os.getenv("PRODUCT_SERVICE_URL", "")
     )
+    vton_service_url: str = field(
+        default_factory=lambda: os.getenv("VTON_SERVICE_URL", "http://localhost:8091")
+    )
     order_service_url: str = field(
         default_factory=lambda: os.getenv("ORDER_SERVICE_URL", "")
     )
@@ -66,6 +69,9 @@ class Settings:
     )
     recommendation_service_token: str = field(
         default_factory=lambda: os.getenv("RECOMMENDATION_SERVICE_TOKEN", "")
+    )
+    vton_service_token: str = field(
+        default_factory=lambda: os.getenv("VTON_SERVICE_TOKEN", "")
     )
     community_service_token: str = field(
         default_factory=lambda: os.getenv("COMMUNITY_SERVICE_TOKEN", "")
@@ -81,6 +87,9 @@ class Settings:
     )
     http_timeout_seconds: float = field(
         default_factory=lambda: float(os.getenv("HTTP_TIMEOUT_SECONDS", "5.0"))
+    )
+    redis_url: str = field(
+        default_factory=lambda: os.getenv("REDIS_URL", "")
     )
     redis_host: str = field(
         default_factory=lambda: os.getenv("REDIS_HOST", "localhost")
@@ -109,8 +118,6 @@ class Settings:
     redis_socket_timeout: float = field(
         default_factory=lambda: float(os.getenv("REDIS_SOCKET_TIMEOUT", "2.0"))
     )
-
-
     def get_postgres_dsn(self) -> str | None:
         if self.database_url.strip():
             return self.database_url.strip()

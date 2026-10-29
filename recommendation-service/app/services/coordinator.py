@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 # 자연어 의도 분석 -> 단품/코디 분기 -> 조화도 검수 -> 응답 생성하는 전체 흐름 총괄
 
 class FashionPipelineCoordinator:
-    def __init__(self, cache_service: Any = None):
+    def __init__(self, cache_service: Any = None, repository: Any = None):
         logger.info("패션 추천 파이프라인 컴포넌트 초기화 중...")
         self.cache_service = cache_service
+        self.repository = repository
         self.parser = QueryParser()
         self.engine = FashionSearchEngine(cache_service=cache_service)
         self.size_resolver = SizeProfileResolver()
@@ -22,7 +23,6 @@ class FashionPipelineCoordinator:
 
         logger.info("전체 파이프라인 준비 완료")
 
-
     def _attach_size_info(
             self,
             items: list[dict[str, Any]],
@@ -30,7 +30,23 @@ class FashionPipelineCoordinator:
             user_id: str,
     ) -> list[dict[str, Any]]:
         """
-        검색된 상품 후보군에 대해 SizeProfileResolver를 통해 최적 사이즈를 산출하고 부착한다.        """
+        검색된 상품 후보군에 대해 SizeProfileResolver를 통해 최적 사이즈를 산출하고 부착한다.
+        """
+        learned_pref: dict[str, float] | None = None
+        if self.repository is not None and slot.subcategory:
+            try:
+                learned_pref = self.repository.get_user_size_preference(
+                    user_id=user_id,
+                    subcategory=slot.subcategory,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "선호 실측 DB 조회 실패 (userId=%s, subcategory=%s): %s",
+                    user_id,
+                    slot.subcategory,
+                    exc,
+                )
+
         evaluated_items = []
         for item in items:
             size_result = self.size_resolver.resolve_and_calculate_size(
@@ -39,6 +55,7 @@ class FashionPipelineCoordinator:
                 fit_type=slot.fit_type,
                 candidate_products=[item],
                 category_type=slot.category,
+                learned_preference=learned_pref,
             )
 
             item["size_recommendation"] = size_result.get("recommendation")
@@ -132,6 +149,14 @@ class FashionPipelineCoordinator:
             )
 
             comment = self.responder.generate_single_response(user_query, intent.tpo_summary, evaluated_items)
+            total_prompt_tokens = (
+                int(getattr(self.parser, "last_prompt_tokens", 0) or 0)
+                + int(getattr(self.responder, "last_prompt_tokens", 0) or 0)
+            )
+            total_completion_tokens = (
+                int(getattr(self.parser, "last_completion_tokens", 0) or 0)
+                + int(getattr(self.responder, "last_completion_tokens", 0) or 0)
+            )
             return {
                 "type": "single",
                 "query": user_query,
@@ -139,7 +164,9 @@ class FashionPipelineCoordinator:
                 "intent": intent,
                 "excluded_categories": [] if evaluated_items else [slot.category],
                 "comment": comment,
-                "results": evaluated_items
+                "results": evaluated_items,
+                "prompt_tokens": total_prompt_tokens,
+                "completion_tokens": total_completion_tokens,
             }
 
         # [2단계 - 코디 검색] 슬롯이 2개 이상 복합으로 들어온 경우
@@ -184,6 +211,8 @@ class FashionPipelineCoordinator:
                 "excluded_categories": excluded_categories,
                 "comment": "요청하신 조건에 맞는 추천 조합을 찾지 못했습니다. 검색 조건을 조금 완화해 다시 시도해주세요.",
                 "outfits": [],
+                "prompt_tokens": int(getattr(self.parser, "last_prompt_tokens", 0) or 0),
+                "completion_tokens": int(getattr(self.parser, "last_completion_tokens", 0) or 0),
             }
 
         # 일부 슬롯이 제외된 경우, 살아남은 슬롯들의 slot_budget 합계를 반영해 유효 예산 산출
@@ -213,6 +242,16 @@ class FashionPipelineCoordinator:
 
         # [4단계] 자연어 응답 생성
         comment = self.responder.generate_coordination_response(user_query, intent.tpo_summary, best_outfits)
+        total_prompt_tokens = (
+            int(getattr(self.parser, "last_prompt_tokens", 0) or 0)
+            + int(getattr(self.harmonizer, "last_prompt_tokens", 0) or 0)
+            + int(getattr(self.responder, "last_prompt_tokens", 0) or 0)
+        )
+        total_completion_tokens = (
+            int(getattr(self.parser, "last_completion_tokens", 0) or 0)
+            + int(getattr(self.harmonizer, "last_completion_tokens", 0) or 0)
+            + int(getattr(self.responder, "last_completion_tokens", 0) or 0)
+        )
         return {
             "type": "coordination",
             "query": user_query,
@@ -220,5 +259,7 @@ class FashionPipelineCoordinator:
             "intent": intent,
             "excluded_categories": excluded_categories,
             "comment": comment,
-            "outfits": best_outfits
-        }
+            "outfits": best_outfits,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+        }

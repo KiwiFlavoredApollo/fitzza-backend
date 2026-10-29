@@ -74,6 +74,18 @@ notification-service의 8086 포트는 호스트에 공개하지 않습니다. �
 
 Gateway는 모든 전달 요청에서 클라이언트의 `X-User-Id`를 제거하고, 보호된 사용자 API에서는 서명·만료 시각·사용자 ID(subject)를 검증한 JWT의 ID로 설정합니다.
 
+### 사용자 역할 (USER / ADMIN)
+
+user-service는 사용자마다 역할(`users.role`, `USER`·`ADMIN`, 기본 `USER`)을 저장합니다(이슈 #225). Access Token의 `role` 클레임에 역할이 실리고, Gateway는 검증한 토큰의 역할을 `X-User-Role` 헤더로 넘깁니다. 클라이언트가 보낸 `X-User-Role`은 `X-User-Id`와 마찬가지로 항상 지웁니다. `role` 클레임이 없는 예전 토큰이나 모르는 값은 `USER`로 넘깁니다. 관리자 API는 `X-User-Role: ADMIN`인지 확인합니다.
+
+로그인 응답과 `GET /api/users/me` 응답에도 `role`이 있습니다. FE는 이 값으로 관리자 메뉴를 보여줄지만 정하고, 실제 권한 검사는 서버가 헤더로 합니다.
+
+관리자 지정 API는 없습니다. 관리자 계정은 운영 DB에서 `user_service_app` 계정으로 지정하고, 지정한 사용자는 다시 로그인(또는 토큰 재발급)해야 새 역할이 토큰에 실립니다.
+
+```sql
+UPDATE user_service.users SET role = 'ADMIN' WHERE email = '<관리자 이메일>';
+```
+
 Gateway는 요청마다 `X-Request-Id`를 정해 뒤쪽 서비스로 넘기고 응답 헤더에도 담습니다(브라우저에서도 읽을 수 있음). 클라이언트가 영문·숫자·`._-` 8~64자로 보내면 그 값을 이어 쓰고, 아니면 새로 만듭니다. user·community·notification-service는 이 값을 로그 줄마다 `[요청 ID]`로 찍고, community-service는 다른 서비스를 호출할 때도 같은 값을 넘깁니다. 오류 문의를 받으면 응답의 `X-Request-Id`로 `docker compose logs | grep <ID>` 해서 같은 요청의 로그를 모아 볼 수 있습니다.
 
 `POST /api/auth/signup`, `/api/auth/signin`, `/api/auth/refresh`, `/api/auth/signout`(또는 같은 경로의 `/api/v1/auth/...`)은 토큰 없이 호출할 수 있습니다. 회원가입에서 이메일이나 닉네임이 이미 쓰이고 있으면 409 `DUPLICATE_VALUE`와 함께 `errors` 배열에 중복된 필드를 모두 담아 돌려줍니다. 그 외 사용자 API(`GET /api/users/me`, `PATCH /api/users/me`)에는 `Authorization: Bearer <access-token>`이 필요합니다. 추천 API(`/api/v1/recommendations/**`)도 회원만 쓸 수 있어 토큰이 없으면 Gateway가 401 `UNAUTHENTICATED`로 막습니다. 인증 실패 시 Gateway는 401을 반환합니다.
@@ -109,10 +121,11 @@ curl -X POST http://localhost:8080/api/v1/recommendations \
 
 ## 서비스별 DB 계정
 
-user·community·review·notification-service는 서비스 전용 DB 계정(`<스키마>_app`, 예: `user_service_app`)으로 접속할 수 있습니다.
+운영의 Java 6개 서비스(user·product·order·community·review·notification)는 서비스 전용 DB 계정(`<스키마>_app`, 예: `user_service_app`)으로 접속합니다.
 각 계정은 자기 스키마의 소유자라서 그 안에서만 Flyway로 테이블을 만들고 바꿀 수 있고, 다른 서비스 스키마에는 접근할 수 없습니다.
 
-- 앱 설정: `USER_SERVICE_DB_USER`/`USER_SERVICE_DB_PASSWORD`처럼 서비스별 값이 있으면 그 계정을 쓰고, 없으면 공용 `POSTGRES_USER`/`POSTGRES_PASSWORD`를 씁니다.
+- 앱 설정: `USER_SERVICE_DB_USER`/`USER_SERVICE_DB_PASSWORD`처럼 서비스별 값을 필수로 사용합니다. Java 6개 서비스에는 공용 `POSTGRES_USER`/`POSTGRES_PASSWORD` fallback이 없습니다.
+- Kubernetes: `fitzza-db-secrets`에 6개 서비스의 `*_DB_USER`/`*_DB_PASSWORD` 12개 키를 등록합니다. 공개 가능한 형식은 `infra/k8s/base/db-secret.example.yaml`을 참고합니다.
 - 계정 준비: 관리자 계정(로컬 `POSTGRES_USER`, RDS 마스터 계정)으로 `infra/postgres/service-accounts.sql`을 실행합니다. 비밀번호는 `USER_SERVICE_DB_PASSWORD` 같은 환경 변수로만 받고, 값이 없는 서비스는 건너뜁니다. 계정 생성, 스키마 소유자 지정, 관리자 계정이 만든 기존 테이블의 소유자 이전을 한 번에 하며 다시 실행해도 됩니다. psql 15 이상이 필요합니다.
 
 ```bash
@@ -183,7 +196,7 @@ AWS 배포 기반은 [infra/aws/cloudformation/README.md](infra/aws/cloudformati
 
 ## Refresh Token 쿠키 인증
 
-로그인(`POST /api/auth/signin`)은 `{ "accessToken": "...", "userId": 1, "nickname": "..." }`을 반환합니다.
+로그인(`POST /api/auth/signin`)은 `{ "accessToken": "...", "userId": 1, "nickname": "...", "role": "USER" }`을 반환합니다.
 Refresh Token은 `Set-Cookie: refreshToken=...; Path=/api; HttpOnly; SameSite=Lax`로만 전달합니다.
 Refresh Token을 JSON 응답에 포함하거나 JSON 요청 본문에서 받지 않습니다.
 

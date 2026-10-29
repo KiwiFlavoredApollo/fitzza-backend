@@ -127,11 +127,6 @@ class FittingDetailResponse(BaseModel):
         description="가상 피팅을 요청했던 추천 대화의 requestId",
         json_schema_extra={"example": 6},
     )
-    userImageUrl: str | None = Field(
-        default=None,
-        description="사용자 원본 얼굴/전신 사진 URL (요청 시 업로드한 경우)",
-        json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/user-image"},
-    )
     status: Literal["PENDING", "COMPLETED", "FAILED"] = Field(
         description="피팅 진행 상태 (PENDING, COMPLETED, FAILED)",
         json_schema_extra={"example": "COMPLETED"},
@@ -182,11 +177,6 @@ class FittingSummaryResponse(BaseModel):
         description="피팅 완성 이미지 URL",
         json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/image"},
     )
-    userImageUrl: str | None = Field(
-        default=None,
-        description="피팅에 사용된 사용자 얼굴 이미지 URL",
-        json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/user-image"},
-    )
     productCount: int = Field(
         default=0,
         description="착용한 상품 개수",
@@ -211,6 +201,22 @@ class FittingListResponse(BaseModel):
         default=0,
         description="전체 피팅 건수",
         json_schema_extra={"example": 5},
+    )
+    page: int | None = Field(
+        default=None,
+        description="현재 페이지 번호 (0부터 시작)",
+    )
+    size: int | None = Field(
+        default=None,
+        description="페이지 크기",
+    )
+    totalPages: int | None = Field(
+        default=None,
+        description="전체 페이지 수",
+    )
+    hasNext: bool = Field(
+        default=False,
+        description="다음 페이지 존재 여부 (무한 스크롤 트리거)",
     )
 
 
@@ -244,12 +250,25 @@ class InternalFittingResponse(BaseModel):
     )
     resultImageUrl: str | None = Field(
         default=None,
-        description="완성된 이미지 URL (status가 COMPLETED일 때만 유효)",
-        json_schema_extra={"example": "http://api.fitzza.com/api/vton/1/image"},
+        description="피팅 완료 이미지 URL (COMPLETED 상태일 때만 반환)",
+        json_schema_extra={"example": "https://cdn.example.com/fitting-1.png"},
     )
     products: list[InternalResultProduct] = Field(
         default_factory=list,
-        description="피팅에 사용된 상품 정보 목록 (community-service 호환용)",
+        description="피팅에 사용된 상품 목록 (ID, 상품명, 가격, 이미지 URL)",
+    )
+
+
+class TokenUsageRecord(BaseModel):
+    promptTokens: int = Field(default=0, description="입력(프롬프트) 토큰 수")
+    completionTokens: int = Field(default=0, description="출력(생성) 토큰 수")
+    createdAt: str = Field(..., description="피팅 생성 일시 (ISO-8601 UTC)")
+
+
+class InternalTokenUsageResponse(BaseModel):
+    records: list[TokenUsageRecord] = Field(
+        default_factory=list,
+        description="기간 내 완료된 가상 피팅 토큰 사용량 목록",
     )
 
 

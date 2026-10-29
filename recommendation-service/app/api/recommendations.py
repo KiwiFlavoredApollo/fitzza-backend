@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -7,6 +8,7 @@ from fastapi import (
     File,
     Form,
     Header,
+    Path,
     Query,
     Request,
     Response,
@@ -20,7 +22,8 @@ logger = logging.getLogger(__name__)
 from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
 from app.clients.redis_client import RedisClient
-from app.clients.user_client import UserServiceClient
+from app.clients.user_client import UserServiceClient, UserServiceUnavailableError
+from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
 from app.core.database import RecommendationRepository
 from app.services.cache_service import CacheService
@@ -30,6 +33,7 @@ from app.schemas.recommendation import (
     InternalComboResponse,
     PersonalizedPageResponse,
     PersonalizedProductItem,
+    ProductSizeRecommendationResponse,
     RecommendationAcceptedResponse,
     RecommendationCreateRequest,
     RecommendationDetailResponse,
@@ -41,13 +45,17 @@ from app.schemas.recommendation import (
     VisualSearchResultItem,
     VisualSearchResponse,
 )
-
-FIT_SOURCE_EVIDENCE_MAP: dict[str, str] = {
-    "learned_preference": "기존 구매·설문 기반 선호 실측과 가장 유사한 사이즈입니다.",
-    "recent_purchase": "최근 구매하신 상품 실측을 기준으로 추천된 사이즈입니다.",
-    "similar_body_profile": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다.",
-    "body_profile": "등록하신 사용자 신체 프로필 정보를 기준으로 추천된 사이즈입니다.",
-}
+from app.schemas.analytics import PeriodAnalytics
+from app.services.size_resolver import (
+    FIT_SOURCE_EVIDENCE_MAP,
+    evaluate_single_product_size,
+    extract_payload_metadata,
+    fetch_qdrant_product_payload,
+    process_size_feedback,
+    resolve_product_for_size,
+    sync_user_body,
+    sync_user_size_preference,
+)
 
 
 class RecommendationApiError(Exception):
@@ -96,6 +104,30 @@ def _require_service_token(
         )
 
 
+def _require_admin(
+    request: Request,
+    x_user_id: str | None,
+) -> None:
+    user_id = _require_user_id(x_user_id)
+    user_client = getattr(request.app.state, "user_client", None) or UserServiceClient(_get_settings(request))
+    try:
+        profile = user_client.get_user_profile(
+            user_id, request_id_header=request.headers.get("X-Request-Id")
+        )
+    except UserServiceUnavailableError:
+        raise RecommendationApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="AUTH_UNAVAILABLE",
+            message="관리자 권한을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.",
+        ) from None
+    if profile.get("role") != "ADMIN":
+        raise RecommendationApiError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="FORBIDDEN",
+            message="관리자 권한이 필요합니다.",
+        )
+
+
 def _get_repository(request: Request) -> RecommendationRepository:
     repo = getattr(request.app.state, "repository", None)
     if repo is None:
@@ -140,14 +172,29 @@ def _get_cache_service(app: Any) -> CacheService:
     return cache_service
 
 
+def _get_vton_client(request: Request) -> VtonServiceClient:
+    vton_client = getattr(request.app.state, "vton_client", None)
+    if vton_client is None:
+        settings = _get_settings(request)
+        vton_client = VtonServiceClient(settings)
+        request.app.state.vton_client = vton_client
+    return vton_client
+
+
 def _get_coordinator(app: Any) -> Any:
     coordinator = getattr(app.state, "coordinator", None)
+    repository = getattr(app.state, "repository", None)
     if coordinator is None:
         from app.services.coordinator import FashionPipelineCoordinator
 
         cache_service = _get_cache_service(app)
-        coordinator = FashionPipelineCoordinator(cache_service=cache_service)
+        coordinator = FashionPipelineCoordinator(
+            cache_service=cache_service,
+            repository=repository,
+        )
         app.state.coordinator = coordinator
+    elif getattr(coordinator, "repository", None) is None and repository is not None:
+        coordinator.repository = repository
     return coordinator
 
 
@@ -187,60 +234,71 @@ def _get_personalized_feed_service(app: Any) -> Any:
 
 
 
-def _sync_user_body(
-    size_resolver: Any,
-    user_id: str,
-    user_body: dict[str, Any],
-) -> None:
-    if size_resolver is None or not user_body:
-        return
-    raw_height = user_body.get("height")
-    raw_weight = user_body.get("weight")
-    raw_shoe = user_body.get("shoeSize")
+_sync_user_body = sync_user_body
+_sync_user_size_preference = sync_user_size_preference
 
-    try:
-        height = float(raw_height) if raw_height is not None else None
-    except (TypeError, ValueError):
-        height = None
 
-    try:
-        weight = float(raw_weight) if raw_weight is not None else None
-    except (TypeError, ValueError):
-        weight = None
+def _get_size_resolver(app: Any) -> Any:
+    size_resolver = getattr(app.state, "size_resolver", None)
+    if size_resolver is not None and hasattr(size_resolver, "resolve_and_calculate_size"):
+        return size_resolver
 
-    try:
-        shoe_size = float(raw_shoe) if raw_shoe is not None else None
-    except (TypeError, ValueError):
-        shoe_size = None
+    coordinator = getattr(app.state, "coordinator", None)
+    if coordinator is not None:
+        coord_resolver = getattr(coordinator, "size_resolver", None)
+        if coord_resolver is not None and hasattr(coord_resolver, "resolve_and_calculate_size"):
+            return coord_resolver
 
-    if height is None and weight is None and shoe_size is None:
-        return
+    from app.services.size_resolver import SizeProfileResolver
 
-    mock_db = getattr(size_resolver, "mock_db", None)
-    if not isinstance(mock_db, dict):
-        return
+    size_resolver = SizeProfileResolver()
+    app.state.size_resolver = size_resolver
+    return size_resolver
 
-    users = mock_db.setdefault("users", [])
-    existing = next(
-        (u for u in users if str(u.get("user_id")) == str(user_id)),
-        None,
+
+def _get_qdrant_client(app: Any) -> Any:
+    qdrant_client = getattr(app.state, "qdrant_client", None)
+    if qdrant_client is None:
+        search_engine = getattr(app.state, "search_engine", None)
+        if search_engine is not None:
+            qdrant_client = getattr(search_engine, "client", None)
+    if qdrant_client is None:
+        coordinator = getattr(app.state, "coordinator", None)
+        if coordinator is not None:
+            engine = getattr(coordinator, "engine", None)
+            if engine is not None:
+                qdrant_client = getattr(engine, "client", None)
+    if qdrant_client is None:
+        feed_service = getattr(app.state, "personalized_feed_service", None)
+        if feed_service is not None:
+            qdrant_client = getattr(feed_service, "client", None)
+
+    if qdrant_client is None:
+        import os
+
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            settings = _get_settings_from_app(app)
+            try:
+                from qdrant_client import QdrantClient
+
+                qdrant_client = QdrantClient(url=settings.qdrant_url)
+                app.state.qdrant_client = qdrant_client
+            except Exception as exc:
+                logger.warning("QdrantClient 지연 초기화 실패: %s", exc)
+
+    return qdrant_client
+
+
+def _get_qdrant_product_payload(app: Any, product_id: int) -> dict[str, Any] | None:
+    qdrant_client = _get_qdrant_client(app)
+    if qdrant_client is None:
+        return None
+    settings = _get_settings_from_app(app)
+    return fetch_qdrant_product_payload(
+        qdrant_client=qdrant_client,
+        collection_name=settings.qdrant_collection_name,
+        product_id=product_id,
     )
-    if existing is None:
-        entry: dict[str, Any] = {"user_id": str(user_id)}
-        if height is not None:
-            entry["height"] = height
-        if weight is not None:
-            entry["weight"] = weight
-        if shoe_size is not None:
-            entry["shoe_size"] = shoe_size
-        users.append(entry)
-    else:
-        if height is not None:
-            existing["height"] = height
-        if weight is not None:
-            existing["weight"] = weight
-        if shoe_size is not None:
-            existing["shoe_size"] = shoe_size
 
 
 def _extract_color_text(item: dict[str, Any]) -> str | None:
@@ -421,6 +479,9 @@ def process_recommendation_request(
 
         tpo_summary = pipeline_result.get("tpo")
         comment = pipeline_result.get("comment")
+        is_cache_hit = cached_result is not None
+        prompt_tokens = 0 if is_cache_hit else int(pipeline_result.get("prompt_tokens") or 0)
+        completion_tokens = 0 if is_cache_hit else int(pipeline_result.get("completion_tokens") or 0)
 
         if result_type == "single":
             raw_items = pipeline_result.get("results") or []
@@ -430,6 +491,8 @@ def process_recommendation_request(
                 tpo_summary=tpo_summary,
                 items=mapped_items,
                 message=comment,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
         else:
             raw_outfits = pipeline_result.get("outfits") or []
@@ -440,6 +503,8 @@ def process_recommendation_request(
                 tpo_summary=tpo_summary,
                 combos=mapped_combos,
                 message=comment,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
     except Exception as exc:
         logger.error(
@@ -567,18 +632,11 @@ def create_recommendation(
 )
 def list_recommendations(
     request: Request,
-    page: int = Query(default=0),
-    size: int = Query(default=20),
+    page: int = Query(default=0, ge=0, description="페이지 번호 (0부터 시작)"),
+    size: int = Query(default=20, ge=1, le=100, description="페이지 크기 (1~100)"),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> RecommendationHistoryPageResponse:
     user_id = _require_user_id(x_user_id)
-    if page < 0 or size < 1 or size > 100:
-        raise RecommendationApiError(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            code="INVALID_REQUEST",
-            message="page는 0 이상, size는 1~100이어야 합니다.",
-        )
-
     repository = _get_repository(request)
     page_data = repository.list_user_requests(
         user_id=user_id,
@@ -589,8 +647,85 @@ def list_recommendations(
     return RecommendationHistoryPageResponse(
         content=items,
         page=page_data["page"],
+        size=page_data.get("size", size),
+        totalElements=page_data.get("totalElements", 0),
         totalPages=page_data["totalPages"],
+        hasNext=page_data.get("hasNext", False),
     )
+
+
+@public_router.get(
+    "/analytics",
+    response_model=PeriodAnalytics,
+    status_code=status.HTTP_200_OK,
+    summary="관리자 대시보드 통계 집계 조회",
+    description="현재 날짜(KST)를 기준으로 period에 지정한 기간의 통계를 반환합니다. period를 생략하면 daily(일간) 통계를 반환합니다.",
+)
+def get_recommendation_analytics(
+    request: Request,
+    period: Literal["daily", "weekly", "monthly", "yearly"] = Query(default="daily"),
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> PeriodAnalytics:
+    _require_admin(request, x_user_id=x_user_id)
+    repository = _get_repository(request)
+    vton_client = _get_vton_client(request)
+    data = repository.get_analytics_data(period=period, vton_client=vton_client)
+    return PeriodAnalytics(**data)
+
+
+@public_router.get(
+    "/{productId}/size",
+    response_model=ProductSizeRecommendationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="상품 상세페이지 단일 상품 맞춤 사이즈 추천 조회",
+    description=(
+        "상품 상세페이지의 사이즈 표 상단에 표시할 사용자 맞춤 추천 사이즈와 추천 근거를 반환합니다.\n\n"
+        "- 우선순위 체인: 1순위 설문 응답 학습(`learned_preference`) → 2순위 최근 구매 이력(`recent_purchase`) "
+        "→ 3순위 신체 프로필/유사 체형(`body_profile` / `similar_body_profile`)\n"
+        "- 신체 정보가 없거나 단일 사이즈(FREE) 상품인 경우에도 200 OK와 함께 `recommendedSize: null` 및 안내 문구(`evidence`)를 반환합니다."
+    ),
+)
+def get_product_size_recommendation(
+    request: Request,
+    product_id: int = Path(..., alias="productId", gt=0, description="상품 ID"),
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    x_request_id: str | None = Header(default=None, alias="X-Request-Id"),
+) -> ProductSizeRecommendationResponse:
+    user_id = _require_user_id(x_user_id)
+
+    settings = _get_settings(request)
+    repository = _get_repository(request)
+    product_client: ProductServiceClient = getattr(
+        request.app.state, "product_client", None
+    ) or ProductServiceClient(settings)
+    user_client: UserServiceClient = getattr(
+        request.app.state, "user_client", None
+    ) or UserServiceClient(settings)
+    size_resolver = _get_size_resolver(request.app)
+
+    product_data = resolve_product_for_size(
+        product_id=product_id,
+        qdrant_client=_get_qdrant_client(request.app),
+        collection_name=settings.qdrant_collection_name,
+        product_client=product_client,
+        request_id_header=x_request_id,
+    )
+    if product_data is None:
+        raise RecommendationApiError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="PRODUCT_NOT_FOUND",
+            message="상품을 찾을 수 없습니다.",
+        )
+
+    result = evaluate_single_product_size(
+        size_resolver=size_resolver,
+        repository=repository,
+        user_client=user_client,
+        user_id=user_id,
+        product_data=product_data,
+        request_id_header=x_request_id,
+    )
+    return ProductSizeRecommendationResponse(**result)
 
 
 @public_router.get(
@@ -600,8 +735,8 @@ def list_recommendations(
     summary="추천 결과 조회",
 )
 def get_recommendation_detail(
-    requestId: int,
     request: Request,
+    requestId: int = Path(..., alias="requestId", gt=0, description="추천 요청 ID"),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
 ) -> RecommendationDetailResponse:
     user_id = _require_user_id(x_user_id)
@@ -623,6 +758,7 @@ def get_recommendation_detail(
 
     return RecommendationDetailResponse(
         requestId=record["requestId"],
+        queryText=str(record.get("queryText") or ""),
         status=record["status"],
         searchType=record["searchType"],
         tpoSummary=record["tpoSummary"],
@@ -820,23 +956,25 @@ def receive_size_feedback(
     product_client: ProductServiceClient = getattr(
         request.app.state, "product_client", None
     ) or ProductServiceClient(settings)
-
-    purchased_spec = product_client.find_option_measurement(
-        product_id=payload.productId,
-        option_id=payload.optionId,
-        request_id_header=x_request_id,
+    size_resolver = getattr(request.app.state, "size_resolver", None) or getattr(
+        getattr(request.app.state, "coordinator", None), "size_resolver", None
     )
+    cache_service = _get_cache_service(request.app)
+    qdrant_payload = _get_qdrant_product_payload(request.app, payload.productId)
 
-    repository.save_size_feedback(
+    process_size_feedback(
         user_id=payload.userId,
         product_id=payload.productId,
         option_id=payload.optionId,
         size_feedback=payload.sizeFeedback,
-        purchased_spec=purchased_spec,
+        repository=repository,
+        product_client=product_client,
+        qdrant_payload=qdrant_payload,
+        size_resolver=size_resolver,
+        cache_service=cache_service,
+        request_id_header=x_request_id,
     )
 
-    cache_service = _get_cache_service(request.app)
-    cache_service.invalidate_user_pipeline(user_id=str(payload.userId))
-
     return Response(status_code=status.HTTP_202_ACCEPTED)
+
 

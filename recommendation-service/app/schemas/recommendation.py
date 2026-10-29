@@ -42,6 +42,7 @@ class RecommendedComboItem(BaseModel):
 
 class RecommendationDetailResponse(BaseModel):
     requestId: int
+    queryText: str = ""
     status: Literal["PROCESSING", "DONE", "FAILED"]
     searchType: Optional[str] = None
     tpoSummary: Optional[str] = None
@@ -60,7 +61,10 @@ class RecommendationHistoryItem(BaseModel):
 class RecommendationHistoryPageResponse(BaseModel):
     content: list[RecommendationHistoryItem] = Field(default_factory=list)
     page: int
+    size: int = 20
+    totalElements: int = 0
     totalPages: int
+    hasNext: bool = False
 
 
 class InternalComboProductItem(BaseModel):
@@ -122,4 +126,25 @@ class PersonalizedPageResponse(BaseModel):
     totalElements: int = Field(..., ge=0, description="전체 추천 후보 상품 수", json_schema_extra={"example": 80})
     totalPages: int = Field(..., ge=0, description="전체 페이지 수", json_schema_extra={"example": 4})
     hasNext: bool = Field(..., description="다음 페이지 존재 여부", json_schema_extra={"example": True})
+
+
+class ProductSizeRecommendationResponse(BaseModel):
+    recommendedSize: Optional[str] = Field(
+        None,
+        description="추천 사이즈 (예: S, M, L, 270). 추천 불가 시 null",
+        json_schema_extra={"example": "L"},
+    )
+    fitPercent: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=100.0,
+        description="사이즈 적합도 퍼센트 (0.0 ~ 100.0). 추천 불가 시 null",
+        json_schema_extra={"example": 92.0},
+    )
+    evidence: Optional[str] = Field(
+        None,
+        description="사용자에게 노출할 추천 근거 또는 안내 문구",
+        json_schema_extra={"example": "유사 체형 사용자의 실측 데이터를 기준으로 추천된 사이즈입니다."},
+    )
+
 

@@ -101,6 +101,22 @@ class UserAuthenticationGatewayTest {
     }
 
     @Test
+    void routesPreferenceOptionsWithoutATokenOrForgedIdentity() {
+        for (String prefix : new String[] {"/api", "/api/v1"}) {
+            for (String option : new String[] {"fits", "styles"}) {
+                client().get().uri(prefix + "/users/preferences/" + option).header("X-User-Id", "999")
+                        .exchange().expectStatus().isOk().expectBody(String.class)
+                        .isEqualTo("/api/users/preferences/" + option + ":anonymous");
+            }
+        }
+        client().post().uri("/api/users/preferences/fits")
+                .exchange().expectStatus().isUnauthorized();
+        client().get().uri("/api/users/preferences/fits")
+                .headers(headers -> headers.setBearerAuth("invalid-token"))
+                .exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
     void authenticatesProfileReadsAndBodyUpdatesThroughActualGatewayRoute() {
         String token = Jwts.builder().subject("42").issuedAt(new Date())
                 .expiration(Date.from(Instant.now().plusSeconds(900)))
@@ -129,6 +145,23 @@ class UserAuthenticationGatewayTest {
                 .headers(headers -> headers.setBearerAuth(expired))
                 .exchange().expectStatus().isUnauthorized()
                 .expectBody(String.class).value(body -> assertThat(body).contains("\"code\":\"TOKEN_EXPIRED\""));
+    }
+
+    @Test
+    void analyticsAliasPreservesQueryAndRequiresLogin() {
+        String token = Jwts.builder().subject("42").issuedAt(new Date())
+                .expiration(Date.from(Instant.now().plusSeconds(900)))
+                .signWith(Keys.hmacShaKeyFor("test-only-jwt-secret-with-32-bytes-or-more"
+                        .getBytes(StandardCharsets.UTF_8)), Jwts.SIG.HS256).compact();
+
+        client().get().uri("/api/v1/analytics?period=daily").header("X-User-Id", "999")
+                .exchange().expectStatus().isUnauthorized();
+        for (String path : new String[] {"/api/v1/analytics", "/api/v1/recommendations/analytics"}) {
+            client().get().uri(path + "?period=daily")
+                    .headers(headers -> headers.setBearerAuth(token))
+                    .exchange().expectStatus().isOk()
+                    .expectBody(String.class).isEqualTo("/api/v1/recommendations/analytics?period=daily:42");
+        }
     }
 
     @Test
