@@ -349,6 +349,10 @@ need:
   `orchestration/review/` prefix (so a missing request reads as 404, not 403),
   and `states:SendTaskSuccess` and `states:SendTaskFailure` on the state machine.
 
+Everything above is defined but switched off. What still has to be decided,
+implemented and deployed before the pipeline can run on a schedule, with costs
+and rollback, is in [AUTOMATION_READINESS.md](AUTOMATION_READINESS.md) (Korean).
+
 The Job service account `fitzza-pipeline` is defined in
 `infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline
 manifests in this directory it is applied manually; it is not part of the CD
