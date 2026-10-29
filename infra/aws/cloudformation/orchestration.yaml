@@ -123,6 +123,11 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/runs/*'
+              # Uploading approved/bundle.tar.gz resumes a waiting run; only a human operator may do that.
+              - Sid: DenyApprovedBundleWrites
+                Effect: Deny
+                Action: s3:PutObject
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/runs/*/approved/*'
 
   PipelineJobPodIdentity:
     Type: AWS::EKS::PodIdentityAssociation

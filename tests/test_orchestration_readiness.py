@@ -55,3 +55,10 @@ def test_color_dictionary_example_uses_known_colors_and_versions():
         assert set(value) == set(entry["required"])
         assert value["color"] in entry["properties"]["color"]["enum"]
         assert value["basis"] in entry["properties"]["basis"]["enum"]
+
+
+def test_job_role_cannot_upload_approved_bundles():
+    template = (ROOT / "infra/aws/cloudformation/orchestration.yaml").read_text(encoding="utf-8")
+    block = template[template.index("  PipelineJobRole:\n"):template.index("  PipelineJobPodIdentity:\n")]
+    assert "Sid: DenyApprovedBundleWrites\n                Effect: Deny\n                Action: s3:PutObject" in block
+    assert "/pipeline/runs/*/approved/*'" in block

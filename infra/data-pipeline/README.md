@@ -312,8 +312,9 @@ with `ORCHESTRATION_ACTION=review_requester` and waits on a Step Functions task
 token:
 
 - The token is stored at `orchestration/review/<run-id>/task-token.json`, outside
-  the `pipeline/` prefix that pipeline Job roles can read, so a Job cannot approve
-  its own run. `request.json` next to it records the bundle keys and the deadline.
+  the `pipeline/` prefix that pipeline Job roles can read, and the Job role is
+  denied writes under `pipeline/runs/*/approved/`, so a Job cannot approve its own
+  run. `request.json` next to the token records the bundle keys and the deadline.
 - When `REVIEW_TOPIC_ARN` is set, the review instructions (download, `color_review`
   and `review_gate`, quality approval, upload command) are published to that SNS
   topic. When it is unset nothing is sent.
