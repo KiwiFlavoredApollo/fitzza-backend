@@ -88,3 +88,6 @@ vton-service/data/
 
 
 .run/
+/summary.json
+/k6-report.html
+/performance/results/
