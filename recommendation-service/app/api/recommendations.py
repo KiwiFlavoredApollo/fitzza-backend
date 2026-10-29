@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import (
     APIRouter,
@@ -23,7 +23,7 @@ from app.clients.notification_client import NotificationServiceClient
 from app.clients.product_client import ProductServiceClient
 from app.clients.redis_client import RedisClient
 from app.clients.storage_client import get_storage_client
-from app.clients.user_client import UserServiceClient
+from app.clients.user_client import UserServiceClient, UserServiceUnavailableError
 from app.clients.vton_client import VtonServiceClient
 from app.core.config import Settings, get_settings
 from app.core.database import KST, RecommendationRepository
@@ -47,7 +47,7 @@ from app.schemas.recommendation import (
     VisualSearchResultItem,
     VisualSearchResponse,
 )
-from app.schemas.analytics import AnalyticsResponse
+from app.schemas.analytics import PeriodAnalytics
 from app.services.size_resolver import (
     FIT_SOURCE_EVIDENCE_MAP,
     evaluate_single_product_size,
@@ -107,15 +107,22 @@ def _require_service_token(
 
 
 def _require_admin(
-    settings: Settings,
+    request: Request,
     x_user_id: str | None,
-    x_admin_token: str | None = None,
 ) -> None:
-    if settings.verify_admin_token(x_admin_token):
-        return
-
     user_id = _require_user_id(x_user_id)
-    if user_id not in settings.get_admin_user_ids():
+    user_client = getattr(request.app.state, "user_client", None) or UserServiceClient(_get_settings(request))
+    try:
+        profile = user_client.get_user_profile(
+            user_id, request_id_header=request.headers.get("X-Request-Id")
+        )
+    except UserServiceUnavailableError:
+        raise RecommendationApiError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="AUTH_UNAVAILABLE",
+            message="관리자 권한을 확인할 수 없습니다. 잠시 후 다시 시도해주세요.",
+        ) from None
+    if profile.get("role") != "ADMIN":
         raise RecommendationApiError(
             status_code=status.HTTP_403_FORBIDDEN,
             code="FORBIDDEN",
@@ -653,23 +660,22 @@ def list_recommendations(
 
 @public_router.get(
     "/analytics",
-    response_model=AnalyticsResponse,
+    response_model=PeriodAnalytics,
     status_code=status.HTTP_200_OK,
     summary="관리자 대시보드 통계 집계 조회",
-    description="현재 날짜(KST)를 기준으로 일간/주간/월간/연간 토큰 사용량 추이, 인기 스타일 키워드, 추천 상품 통계를 집계하여 반환합니다.",
+    description="현재 날짜(KST)를 기준으로 period에 지정한 기간의 통계를 반환합니다. period를 생략하면 daily(일간) 통계를 반환합니다.",
 )
 def get_recommendation_analytics(
     request: Request,
+    period: Literal["daily", "weekly", "monthly", "yearly"] = Query(default="daily"),
     ref_date: str | None = Query(
         default=None,
         alias="refDate",
         description="집계 기준일자 (YYYY-MM-DD 형식, 미지정 시 현재 KST 일시 기준)",
     ),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
-    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-) -> AnalyticsResponse:
-    settings = _get_settings(request)
-    _require_admin(settings, x_user_id=x_user_id, x_admin_token=x_admin_token)
+) -> PeriodAnalytics:
+    _require_admin(request, x_user_id=x_user_id)
     repository = _get_repository(request)
     vton_client = _get_vton_client(request)
 
@@ -684,8 +690,12 @@ def get_recommendation_analytics(
                 message="유효하지 않은 날짜 형식입니다. YYYY-MM-DD 형식을 사용해야 합니다.",
             )
 
-    data = repository.get_analytics_data(reference_dt=reference_dt, vton_client=vton_client)
-    return AnalyticsResponse(**data)
+    data = repository.get_analytics_data(
+        reference_dt=reference_dt,
+        vton_client=vton_client,
+        period=period,
+    )
+    return PeriodAnalytics(**data)
 
 
 @public_router.get(
