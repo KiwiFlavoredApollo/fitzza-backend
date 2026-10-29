@@ -15,6 +15,9 @@ remote_write, 공개 Ingress와 LoadBalancer는 설치하지 않는다. 설계·
 - `fitzza-gp3-retain` StorageClass가 존재하고 `Retain`, 암호화 gp3,
   `WaitForFirstConsumer` 설정을 유지해야 한다.
 - Helm 3.18 이상과 `kubectl`이 설치되고, 대상 EKS cluster context가 확인되어야 한다.
+- server-side dry-run을 실행하려면 `fitzza-monitoring` namespace가 이미 존재해야 한다.
+  실제 Helm 설치의 `--create-namespace`는 namespace를 만들 수 있지만, 이 프리플라이트는
+  기존 namespace와 API 권한을 먼저 검증한다.
 - chart `92.14.1`이 사용하는 컨테이너 이미지가 노드 ARM64 아키텍처를 지원하는지
   실제 pull 전 확인해야 한다.
 - Grafana 관리자 Secret은 운영 비밀 저장소에서 생성한다. Secret 값은 저장소, Jira,
@@ -58,6 +61,9 @@ allocatable CPU·메모리 각각 20%와 Pod 슬롯이 남지 않으면 설치�
 
 ## 렌더링과 server-side 검증
 
+저장소의 안전한 기본 실행기는 `scripts/deploy_prometheus_stack.ps1`다. 기본 동작은
+읽기·렌더링·server-side dry-run뿐이며, 실제 설치는 `-Apply`를 명시해야 한다.
+
 Helm repository를 추가하고, 적용 전에 출력 manifest를 검토한다.
 
 ```powershell
@@ -72,6 +78,12 @@ helm template fitzza-monitoring prometheus-community/kube-prometheus-stack `
   --output-dir .tmp/fitzza-monitoring-render
 kubectl apply --dry-run=server --namespace fitzza-monitoring `
   --filename .tmp/fitzza-monitoring-render/kube-prometheus-stack
+```
+
+또는 저장소 루트에서 다음처럼 실행한다.
+
+```powershell
+.\scripts\deploy_prometheus_stack.ps1
 ```
 
 검토할 항목:
