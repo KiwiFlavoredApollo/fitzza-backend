@@ -56,23 +56,19 @@
       "OutputPath": "$.Payload",
       "Retry": [{ "ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 60, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
-      "Next": "CheckHumanApproval"
+      "Next": "WaitForHumanReview"
     },
-    "CheckHumanApproval": {
+    "WaitForHumanReview": {
+      "Comment": "Notify reviewers and wait for an uploaded approved bundle; see human_review.py.",
       "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": { "FunctionName": "${ApprovalCheckerLambdaArn}", "Payload.$": "$" },
-      "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 10, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
+      "Parameters": { "FunctionName": "${ReviewRequestLambdaArn}", "Payload": { "contract.$": "$", "task_token.$": "$$.Task.Token" } },
+      "TimeoutSeconds": 259200,
+      "ResultPath": "$.review",
+      "Retry": [{ "ErrorEquals": ["Lambda.ServiceException", "Lambda.SdkClientException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 10, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
-      "Next": "ApprovalDecision"
+      "Next": "RunFashionClip"
     },
-    "ApprovalDecision": {
-      "Type": "Choice",
-      "Choices": [{ "Variable": "$.approved", "BooleanEquals": true, "Next": "RunFashionClip" }],
-      "Default": "WaitForApproval"
-    },
-    "WaitForApproval": { "Type": "Wait", "Seconds": 60, "Next": "CheckHumanApproval" },
     "RunFashionClip": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",

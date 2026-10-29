@@ -233,9 +233,9 @@ FashionCLIP/Qdrant indexing.
 The first state-machine definition is `orchestration.asl.json`. It invokes
 small Lambda adapters so provider-specific EKS Job details stay outside the
 workflow. Deploy-time substitutions must provide
-`CrawlerRunnerLambdaArn`, `ValidateImportLambdaArn`, `JevRunnerLambdaArn`,
-`ApprovalCheckerLambdaArn`, `FashionClipRunnerLambdaArn`, and
-`StatusWriterLambdaArn`. No credentials or secrets are stored in the
+`InitializeRunLambdaArn`, `CrawlerRunnerLambdaArn`, `ValidateImportLambdaArn`,
+`JevRunnerLambdaArn`, `ReviewRequestLambdaArn`, `FashionClipRunnerLambdaArn`,
+and `StatusWriterLambdaArn`. No credentials or secrets are stored in the
 definition.
 
 The deployable wrapper is `infra/aws/cloudformation/orchestration.yaml`. Upload
@@ -304,6 +304,50 @@ A real adapter replacing a placeholder must keep this contract:
   not duplicate rows, objects or Jev calls.
 - Jev: it ends at `jev/review-bundle.tar.gz` and never creates an approval
   marker; human review stays a separate step.
+
+### Human color review (FITZZA-305)
+
+After Jev the run stops at `WaitForHumanReview`, which invokes the shared handler
+with `ORCHESTRATION_ACTION=review_requester` and waits on a Step Functions task
+token:
+
+- The token is stored at `orchestration/review/<run-id>/task-token.json`, outside
+  the `pipeline/` prefix that pipeline Job roles can read, so a Job cannot approve
+  its own run. `request.json` next to it records the bundle keys and the deadline.
+- When `REVIEW_TOPIC_ARN` is set, the review instructions (download, `color_review`
+  and `review_gate`, quality approval, upload command) are published to that SNS
+  topic. When it is unset nothing is sent.
+- The run waits at most three days (`TimeoutSeconds` 259200, kept equal to
+  `REVIEW_TIMEOUT_SECONDS`) and is then recorded as failed. Waiting adds no state
+  transitions.
+
+The approval receiver (`ORCHESTRATION_ACTION=approval_receiver`, with
+`PIPELINE_BUCKET` set) handles EventBridge `Object Created` events for
+`pipeline/runs/<run-id>/approved/bundle.tar.gz`. It streams the bundle once and
+requires `config/_APPROVED.json` with `human_color_review_approved: true` and
+`config/_QUALITY_APPROVED.json` with `approved: true`, the same `files` and a
+40-character `model_revision`. It then resumes the run with the bundle SHA-256
+under `$.review`; a bundle that fails these checks fails the run with
+`ApprovalRejected`, and a corrected bundle needs a new run. `embed_job` still
+re-verifies the full fingerprint. The decision is written once to
+`orchestration/review/<run-id>/decision.json`; other objects, other buckets and
+runs without a pending request are ignored.
+
+Both are off by default in the stack. `EnableReviewNotification=true` creates
+the SNS topic, plus an email subscription when `ReviewNotificationEmail` is set
+(the address must confirm it). `EnableApprovalEvents=true` with
+`ApprovalReceiverLambdaArn` creates the EventBridge rule and the invoke
+permission; the data bucket must also have EventBridge notifications turned on,
+which this stack does not change. The Lambda roles are not part of the stack and
+need:
+
+- review requester: `s3:PutObject` on `orchestration/review/*`, and `sns:Publish`
+  on the topic when notifications are on;
+- approval receiver: `s3:GetObject` on `pipeline/runs/*/approved/bundle.tar.gz`
+  and `orchestration/review/*`, `s3:PutObject` on
+  `orchestration/review/*/decision.json`, `s3:ListBucket` limited to the
+  `orchestration/review/` prefix (so a missing request reads as 404, not 403),
+  and `states:SendTaskSuccess` and `states:SendTaskFailure` on the state machine.
 
 The Job service account `fitzza-pipeline` is defined in
 `infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline

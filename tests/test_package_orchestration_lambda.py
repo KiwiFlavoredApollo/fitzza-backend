@@ -12,3 +12,4 @@ def test_package_contains_all_adapter_modules(tmp_path):
         assert "infra/aws/orchestration/handler.py" in archive.namelist()
         assert "infra/aws/orchestration/runner_lambda.py" in archive.namelist()
         assert "infra/aws/orchestration/operating_window.py" in archive.namelist()
+        assert "infra/aws/orchestration/human_review.py" in archive.namelist()

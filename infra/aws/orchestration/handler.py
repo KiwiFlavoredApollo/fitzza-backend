@@ -10,6 +10,8 @@ from typing import Any
 
 import boto3
 
+from .human_review import receive_approval, request_review
+
 
 class ContractError(ValueError):
     """Raised when an execution input does not satisfy the run contract."""
@@ -179,22 +181,6 @@ def write_status(event: dict[str, Any], s3: Any | None = None) -> dict[str, Any]
     return document
 
 
-def check_approval(event: dict[str, Any], s3: Any | None = None) -> dict[str, Any]:
-    _contract(event)
-    client = s3 or _s3()
-    approval = json.loads(_read_bytes(
-        client,
-        event["s3"]["bucket"],
-        f"{event['s3']['prefix'].rstrip('/')}/approval.json",
-    ))
-    approved = (
-        approval.get("approved") is True
-        and approval.get("run_id") == event["run_id"]
-        and approval.get("input_manifest_sha256") == event["input_manifest_sha256"]
-    )
-    return {**event, "approved": approved}
-
-
 def stage_not_enabled(event: dict[str, Any], stage: str) -> dict[str, Any]:
     """Fail closed: stop the run before a stage without a runtime can report success."""
     if stage not in NOT_ENABLED_STAGES:
@@ -211,6 +197,13 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         return initialize_run(event)
     if action == "status_writer":
         return write_status(event)
-    if action == "approval_checker":
-        return check_approval(event)
-    raise ContractError("ORCHESTRATION_ACTION must be initialize_run, status_writer, approval_checker, or not_enabled")
+    if action == "review_requester":
+        topic_arn = os.environ.get("REVIEW_TOPIC_ARN", "").strip()
+        sns = boto3.client("sns", region_name=os.environ.get("AWS_REGION")) if topic_arn else None
+        return request_review(event, _s3(), sns, topic_arn)
+    if action == "approval_receiver":
+        sfn = boto3.client("stepfunctions", region_name=os.environ.get("AWS_REGION"))
+        return receive_approval(event, _s3(), sfn, os.environ.get("PIPELINE_BUCKET", "").strip())
+    raise ContractError(
+        "ORCHESTRATION_ACTION must be initialize_run, status_writer, review_requester, approval_receiver, or not_enabled"
+    )

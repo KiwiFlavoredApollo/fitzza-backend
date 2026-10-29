@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = (
     "infra/aws/orchestration/handler.py",
+    "infra/aws/orchestration/human_review.py",
     "infra/aws/orchestration/runner_lambda.py",
     "infra/aws/orchestration/job_runner.py",
     "infra/aws/orchestration/job_spec.py",
