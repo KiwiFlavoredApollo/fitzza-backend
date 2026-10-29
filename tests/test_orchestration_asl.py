@@ -77,3 +77,16 @@ def test_schedules_stay_disabled_by_default():
 def test_placeholder_stage_failures_are_not_retried():
     for name in ("RunIntegrityChecks", "ValidateAndImport", "RunJev"):
         assert STATES[name]["Retry"][0] == {"ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0}
+
+
+def test_human_review_waits_on_a_task_token_and_fails_closed():
+    state = STATES["WaitForHumanReview"]
+
+    assert STATES["RunJev"]["Next"] == "WaitForHumanReview"
+    assert state["Resource"] == "arn:aws:states:::lambda:invoke.waitForTaskToken"
+    assert state["Parameters"]["Payload"] == {"contract.$": "$", "task_token.$": "$$.Task.Token"}
+    assert state["ResultPath"] == "$.review"
+    assert state["Next"] == "RunFashionClip"
+    assert state["Catch"][0] == {"ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure"}
+    assert all("States.Timeout" not in retry["ErrorEquals"] for retry in state["Retry"])
+    assert not any(other["Type"] == "Wait" and other["Next"] == "WaitForHumanReview" for other in STATES.values())

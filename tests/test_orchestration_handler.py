@@ -3,7 +3,7 @@ import json
 import pytest
 
 from infra.aws.orchestration import handler
-from infra.aws.orchestration.handler import ContractError, StageNotEnabledError, check_approval, initialize_run, write_status
+from infra.aws.orchestration.handler import ContractError, StageNotEnabledError, initialize_run, write_status
 
 
 def contract():
@@ -67,13 +67,6 @@ def test_write_status_persists_contract_status():
     assert json.loads(s3.put["Body"])["run_id"] == event["run_id"]
 
 
-def test_check_approval_rejects_a_different_run():
-    event = contract()
-    s3 = FakeS3({"approved": True, "run_id": "other", "input_manifest_sha256": "0" * 64})
-
-    assert check_approval(event, s3)["approved"] is False
-
-
 def test_contract_rejects_a_mismatched_prefix():
     event = {**contract(), "status": "RUNNING", "s3": {"bucket": "fitzza-data", "prefix": "pipeline/runs/other"}}
 
@@ -116,6 +109,36 @@ def test_unimplemented_stages_fail_closed(monkeypatch, stage):
 def test_placeholder_requires_a_known_stage(monkeypatch):
     monkeypatch.setenv("ORCHESTRATION_ACTION", "not_enabled")
     monkeypatch.setenv("PIPELINE_STAGE_NAME", "crawler")
+
+    with pytest.raises(ContractError):
+        handler.lambda_handler(contract(), None)
+
+
+def test_review_actions_are_routed(monkeypatch):
+    calls = []
+    monkeypatch.setattr(handler, "_s3", lambda: "s3")
+    monkeypatch.setattr(handler.boto3, "client", lambda name, **kwargs: f"{name}-client")
+    monkeypatch.setattr(handler, "request_review", lambda event, s3, sns, topic: calls.append(("request", s3, sns, topic)) or {})
+    monkeypatch.setattr(handler, "receive_approval", lambda event, s3, sfn, bucket: calls.append(("receive", s3, sfn, bucket)) or {})
+    monkeypatch.setenv("PIPELINE_BUCKET", "fitzza-data")
+
+    monkeypatch.setenv("ORCHESTRATION_ACTION", "review_requester")
+    monkeypatch.delenv("REVIEW_TOPIC_ARN", raising=False)
+    handler.lambda_handler({}, None)
+    monkeypatch.setenv("REVIEW_TOPIC_ARN", "arn:aws:sns:ap-northeast-2:111111111111:review")
+    handler.lambda_handler({}, None)
+    monkeypatch.setenv("ORCHESTRATION_ACTION", "approval_receiver")
+    handler.lambda_handler({}, None)
+
+    assert calls == [
+        ("request", "s3", None, ""),
+        ("request", "s3", "sns-client", "arn:aws:sns:ap-northeast-2:111111111111:review"),
+        ("receive", "s3", "stepfunctions-client", "fitzza-data"),
+    ]
+
+
+def test_removed_approval_checker_action_is_rejected(monkeypatch):
+    monkeypatch.setenv("ORCHESTRATION_ACTION", "approval_checker")
 
     with pytest.raises(ContractError):
         handler.lambda_handler(contract(), None)

@@ -27,8 +27,13 @@ Parameters:
     Type: String
   JevRunnerLambdaArn:
     Type: String
-  ApprovalCheckerLambdaArn:
+  ReviewRequestLambdaArn:
     Type: String
+    Description: Shared handler with ORCHESTRATION_ACTION=review_requester; the state machine waits on its task token.
+  ApprovalReceiverLambdaArn:
+    Type: String
+    Default: ''
+    Description: Shared handler with ORCHESTRATION_ACTION=approval_receiver. Required only when EnableApprovalEvents is true.
   FashionClipRunnerLambdaArn:
     Type: String
   StatusWriterLambdaArn:
@@ -64,9 +69,37 @@ Parameters:
     Type: String
     Default: DISABLED
     AllowedValues: [ENABLED, DISABLED]
+  EnableReviewNotification:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Create the SNS topic used to ask reviewers for a color review.
+  ReviewNotificationEmail:
+    Type: String
+    Default: ''
+    Description: Optional reviewer address subscribed to the topic; the address must confirm the subscription.
+  EnableApprovalEvents:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: Route approved bundle uploads to the receiver. The data bucket must also send events to EventBridge.
+
+Rules:
+  ApprovalEventsNeedReceiver:
+    RuleCondition: !Equals [!Ref EnableApprovalEvents, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ApprovalReceiverLambdaArn, '']]
+        AssertDescription: EnableApprovalEvents requires ApprovalReceiverLambdaArn.
 
 Conditions:
   HasDefinitionVersion: !Not [!Equals [!Ref DefinitionVersion, '']]
+  ReviewNotificationEnabled: !Equals [!Ref EnableReviewNotification, 'true']
+  HasReviewNotificationEmail: !And
+    - !Condition ReviewNotificationEnabled
+    - !Not [!Equals [!Ref ReviewNotificationEmail, '']]
+  ApprovalEventsEnabled: !And
+    - !Equals [!Ref EnableApprovalEvents, 'true']
+    - !Not [!Equals [!Ref ApprovalReceiverLambdaArn, '']]
 
 Resources:
   PipelineJobRole:
@@ -146,7 +179,7 @@ Resources:
                   - !Ref InitializeRunLambdaArn
                   - !Ref ValidateImportLambdaArn
                   - !Ref JevRunnerLambdaArn
-                  - !Ref ApprovalCheckerLambdaArn
+                  - !Ref ReviewRequestLambdaArn
                   - !Ref FashionClipRunnerLambdaArn
                   - !Ref StatusWriterLambdaArn
 
@@ -165,7 +198,7 @@ Resources:
         InitializeRunLambdaArn: !Ref InitializeRunLambdaArn
         ValidateImportLambdaArn: !Ref ValidateImportLambdaArn
         JevRunnerLambdaArn: !Ref JevRunnerLambdaArn
-        ApprovalCheckerLambdaArn: !Ref ApprovalCheckerLambdaArn
+        ReviewRequestLambdaArn: !Ref ReviewRequestLambdaArn
         FashionClipRunnerLambdaArn: !Ref FashionClipRunnerLambdaArn
         StatusWriterLambdaArn: !Ref StatusWriterLambdaArn
       Tags:
@@ -219,6 +252,54 @@ Resources:
           RoleArn: !GetAtt ScheduleRole.Arn
           Input: !Ref WeeklyScheduleInput
 
+  ReviewNotificationTopic:
+    Type: AWS::SNS::Topic
+    Condition: ReviewNotificationEnabled
+    Properties:
+      TopicName: !Sub '${ProjectName}-${Environment}-pipeline-review'
+      DisplayName: Fitzza review
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  ReviewNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasReviewNotificationEmail
+    Properties:
+      TopicArn: !Ref ReviewNotificationTopic
+      Protocol: email
+      Endpoint: !Ref ReviewNotificationEmail
+
+  ApprovalUploadedRule:
+    Type: AWS::Events::Rule
+    Condition: ApprovalEventsEnabled
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-pipeline-approval-uploaded'
+      Description: Resumes the waiting run when an approved bundle is uploaded for it.
+      State: ENABLED
+      EventPattern:
+        source: [aws.s3]
+        detail-type: [Object Created]
+        detail:
+          bucket:
+            name: [!Ref DataBucketName]
+          object:
+            key: [{ wildcard: 'pipeline/runs/*/approved/bundle.tar.gz' }]
+      Targets:
+        - Id: approval-receiver
+          Arn: !Ref ApprovalReceiverLambdaArn
+
+  ApprovalReceiverInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: ApprovalEventsEnabled
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApprovalReceiverLambdaArn
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ApprovalUploadedRule.Arn
+
 Outputs:
   StateMachineArn:
     Description: Data pipeline Step Functions state machine ARN.
@@ -226,3 +307,7 @@ Outputs:
   ScheduleRuleArn:
     Description: EventBridge schedule ARN.
     Value: !GetAtt DailyPipelineSchedule.Arn
+  ReviewNotificationTopicArn:
+    Condition: ReviewNotificationEnabled
+    Description: Set as REVIEW_TOPIC_ARN on the review requester Lambda.
+    Value: !Ref ReviewNotificationTopic
