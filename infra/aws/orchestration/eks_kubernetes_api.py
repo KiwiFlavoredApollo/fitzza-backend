@@ -36,7 +36,8 @@ class EksKubernetesApi:
         credentials = self.session.get_credentials().get_frozen_credentials()
         request = AWSRequest(
             method="GET",
-            url="https://sts.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",
+            # The presigned host must be the regional endpoint that matches the signing region.
+            url=f"https://sts.{self.region}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",
             headers={"x-k8s-aws-id": self.cluster_name},
         )
         SigV4QueryAuth(credentials, "sts", self.region, expires=60).add_auth(request)

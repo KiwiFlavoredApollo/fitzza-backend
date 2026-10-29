@@ -111,6 +111,15 @@ def approved_bundle(**changes):
     return bundle(approval, quality)
 
 
+def raw_marker_bundle(marker):
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz") as archive:
+        info = tarfile.TarInfo("config/_APPROVED.json")
+        info.size = len(marker)
+        archive.addfile(info, io.BytesIO(marker))
+    return raw.getvalue()
+
+
 def uploaded(s3, data, bucket=BUCKET, key=APPROVED_KEY):
     s3.objects[(bucket, key)] = data
     return {"source": "aws.s3", "detail-type": "Object Created", "detail": {"bucket": {"name": bucket}, "object": {"key": key}}}
@@ -189,6 +198,8 @@ def test_valid_approved_bundle_resumes_the_run_once():
         (approved_bundle(files={"other": "c" * 64}), "same files"),
         (approved_bundle(model_revision="main"), "model revision"),
         (b"not a tarball", "readable tar.gz"),
+        (raw_marker_bundle(b"\xff\xfe not utf-8"), "readable tar.gz"),
+        (raw_marker_bundle(b"[" * 100000 + b"]" * 100000), "readable tar.gz"),
     ],
 )
 def test_invalid_bundle_fails_the_run_with_a_reason(data, reason):

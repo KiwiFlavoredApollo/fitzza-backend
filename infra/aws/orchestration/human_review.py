@@ -160,7 +160,9 @@ def inspect_bundle(s3: Any, bucket: str, key: str, limit: int = MAX_BUNDLE_BYTES
                 markers[member.name] = json.loads(archive.extractfile(member).read())
         while reader.read(1024 * 1024):
             pass
-    except (tarfile.TarError, OSError, EOFError, json.JSONDecodeError) as error:
+    except BundleRejected:
+        raise
+    except (tarfile.TarError, OSError, EOFError, ValueError, RecursionError) as error:
         raise BundleRejected(f"approved bundle is not a readable tar.gz with JSON markers: {error}") from error
     finally:
         close = getattr(body, "close", None)

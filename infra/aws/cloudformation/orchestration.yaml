@@ -55,13 +55,15 @@ Parameters:
     Description: Private bucket containing the approved baseline manifest and pipeline reports.
   ScheduleExpression:
     Type: String
-    Default: 'cron(0 18 * * ? *)'
+    Default: 'cron(0 1 ? * TUE,THU *)'
+    Description: Incremental collection schedule in UTC. The default is Tuesday and Thursday 10:00 Asia/Seoul, inside the runners' MON-FRI 09:30-16:00 window.
   DailyScheduleInput:
     Type: String
     Default: '{"run_mode":"incremental"}'
   WeeklyScheduleExpression:
     Type: String
-    Default: 'cron(0 19 ? * SUN *)'
+    Default: 'cron(0 2 ? * MON *)'
+    Description: Integrity check schedule in UTC. The default is Monday 11:00 Asia/Seoul, inside the runners' MON-FRI 09:30-16:00 window.
   WeeklyScheduleInput:
     Type: String
     Default: '{"run_mode":"integrity"}'
@@ -123,6 +125,11 @@ Resources:
               - Effect: Allow
                 Action: s3:PutObject
                 Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/runs/*'
+              # Uploading approved/bundle.tar.gz resumes a waiting run; only a human operator may do that.
+              - Sid: DenyApprovedBundleWrites
+                Effect: Deny
+                Action: s3:PutObject
+                Resource: !Sub 'arn:${AWS::Partition}:s3:::${DataBucketName}/pipeline/runs/*/approved/*'
 
   PipelineJobPodIdentity:
     Type: AWS::EKS::PodIdentityAssociation
@@ -230,7 +237,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-data-pipeline-daily'
-      Description: Starts incremental data collection at 03:00 Asia/Seoul when enabled.
+      Description: Starts incremental data collection (default Tuesday and Thursday 10:00 Asia/Seoul) when enabled.
       ScheduleExpression: !Ref ScheduleExpression
       State: !Ref ScheduleState
       Targets:
@@ -243,7 +250,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: !Sub '${ProjectName}-${Environment}-data-pipeline-weekly'
-      Description: Starts integrity, image-access, and index-state checks at 04:00 Asia/Seoul on Sunday when enabled. It does not recrawl the full catalog.
+      Description: Starts integrity, image-access, and index-state checks (default Monday 11:00 Asia/Seoul) when enabled. It does not recrawl the full catalog.
       ScheduleExpression: !Ref WeeklyScheduleExpression
       State: !Ref ScheduleState
       Targets:

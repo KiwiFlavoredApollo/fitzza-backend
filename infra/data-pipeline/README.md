@@ -241,11 +241,13 @@ definition.
 The deployable wrapper is `infra/aws/cloudformation/orchestration.yaml`. Upload
 the ASL file to a versioned private S3 bucket, deploy this stack with the seven
 adapter Lambda ARNs, and keep `ScheduleState=DISABLED` until the adapters and
-run contract are deployed. The daily rule defaults to 03:00 Asia/Seoul with
-`{"run_mode":"incremental"}`. It reads the approved current baseline manifest
+run contract are deployed. The incremental rule defaults to Tuesday and
+Thursday 10:00 Asia/Seoul (`cron(0 1 ? * TUE,THU *)`; EventBridge rule cron is
+UTC) with `{"run_mode":"incremental"}`. It reads the approved current baseline manifest
 and incremental checkpoint, so the crawler must submit only new or changed product
-IDs; it must not rebuild the existing 3,000-product set. The weekly rule defaults
-to Sunday 04:00 with `{"run_mode":"integrity"}` and is routed directly to the
+IDs; it must not rebuild the existing 3,000-product set. The integrity rule
+defaults to Monday 11:00 Asia/Seoul (`cron(0 2 ? * MON *)`) with
+`{"run_mode":"integrity"}` and is routed directly to the
 validation adapter: it checks stored product data, image accessibility, and index
 state without recrawling the catalog. A `full` run is manual-only and requires
 `manual_approved: true`; use it only after a data-quality incident, site structure
@@ -279,9 +281,8 @@ The node runs only on weekdays 09:00-18:00 Asia/Seoul, so runners create a new
 Job only inside `PIPELINE_RUN_WINDOW` (default `MON-FRI 09:30-16:00`, Asia/Seoul).
 Outside it they fail with `JobNotStartedError`, which the state machine does not
 retry; an already created Job is still observed. Holidays on which the node stays
-off are not known to the runner. The default schedule times above predate this
-window and must be changed to fall inside it (or the window widened for a
-dedicated node) before `ScheduleState` is enabled.
+off are not known to the runner. Both default schedules fall inside this window;
+keep them there, or widen the window together with a dedicated node.
 
 ### Stages without a runtime yet
 
@@ -312,8 +313,9 @@ with `ORCHESTRATION_ACTION=review_requester` and waits on a Step Functions task
 token:
 
 - The token is stored at `orchestration/review/<run-id>/task-token.json`, outside
-  the `pipeline/` prefix that pipeline Job roles can read, so a Job cannot approve
-  its own run. `request.json` next to it records the bundle keys and the deadline.
+  the `pipeline/` prefix that pipeline Job roles can read, and the Job role is
+  denied writes under `pipeline/runs/*/approved/`, so a Job cannot approve its own
+  run. `request.json` next to the token records the bundle keys and the deadline.
 - When `REVIEW_TOPIC_ARN` is set, the review instructions (download, `color_review`
   and `review_gate`, quality approval, upload command) are published to that SNS
   topic. When it is unset nothing is sent.
@@ -348,6 +350,10 @@ need:
   `orchestration/review/*/decision.json`, `s3:ListBucket` limited to the
   `orchestration/review/` prefix (so a missing request reads as 404, not 403),
   and `states:SendTaskSuccess` and `states:SendTaskFailure` on the state machine.
+
+Everything above is defined but switched off. What still has to be decided,
+implemented and deployed before the pipeline can run on a schedule, with costs
+and rollback, is in [AUTOMATION_READINESS.md](AUTOMATION_READINESS.md) (Korean).
 
 The Job service account `fitzza-pipeline` is defined in
 `infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline
