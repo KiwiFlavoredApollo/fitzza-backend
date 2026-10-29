@@ -283,6 +283,28 @@ off are not known to the runner. The default schedule times above predate this
 window and must be changed to fall inside it (or the window widened for a
 dedicated node) before `ScheduleState` is enabled.
 
+### Stages without a runtime yet
+
+Validate/Import and Jev have no adapter runtime. Until they do, deploy their
+Lambda ARNs with the shared handler and `ORCHESTRATION_ACTION=not_enabled`,
+`PIPELINE_STAGE_NAME=validate_import` or `jev`. Such an adapter raises
+`StageNotEnabledError` without touching S3, RDS or Jev, the state machine records
+the run as failed and does not retry, and nothing after that stage runs. The
+weekly `integrity` route also goes through the Validate/Import ARN, so it stops
+the same way.
+
+A real adapter replacing a placeholder must keep this contract:
+
+- Input: the run contract produced by `InitializeRun` (plus `stage`, `job_name`
+  and `job_status` from the previous runner). Reject a contract whose `run_id`,
+  `s3.prefix` or `input_manifest_sha256` does not match.
+- Output: the same contract, returned only after the stage's
+  `stages.<name>.success_marker` object has been written.
+- Idempotency: a rerun of the same `run_id` must reuse finished work and must
+  not duplicate rows, objects or Jev calls.
+- Jev: it ends at `jev/review-bundle.tar.gz` and never creates an approval
+  marker; human review stays a separate step.
+
 The Job service account `fitzza-pipeline` is defined in
 `infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline
 manifests in this directory it is applied manually; it is not part of the CD

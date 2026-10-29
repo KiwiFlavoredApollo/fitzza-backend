@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from infra.aws.orchestration.handler import ContractError, check_approval, initialize_run, write_status
+from infra.aws.orchestration import handler
+from infra.aws.orchestration.handler import ContractError, StageNotEnabledError, check_approval, initialize_run, write_status
 
 
 def contract():
@@ -100,3 +101,21 @@ def test_initialize_run_rejects_a_full_run_without_manual_approval():
             {"run_mode": "full", "bucket": "fitzza-data", "baseline_manifest_key": "manifest.json"},
             FakeS3(manifest=b'{"products":[{"product_id":"101"}]}'),
         )
+
+
+@pytest.mark.parametrize("stage", ["validate_import", "jev"])
+def test_unimplemented_stages_fail_closed(monkeypatch, stage):
+    monkeypatch.setenv("ORCHESTRATION_ACTION", "not_enabled")
+    monkeypatch.setenv("PIPELINE_STAGE_NAME", stage)
+    monkeypatch.setattr(handler, "_s3", lambda: pytest.fail("a placeholder adapter must not touch S3"))
+
+    with pytest.raises(StageNotEnabledError, match="collection-20261027-01"):
+        handler.lambda_handler(contract(), None)
+
+
+def test_placeholder_requires_a_known_stage(monkeypatch):
+    monkeypatch.setenv("ORCHESTRATION_ACTION", "not_enabled")
+    monkeypatch.setenv("PIPELINE_STAGE_NAME", "crawler")
+
+    with pytest.raises(ContractError):
+        handler.lambda_handler(contract(), None)

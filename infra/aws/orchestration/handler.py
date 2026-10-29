@@ -15,6 +15,13 @@ class ContractError(ValueError):
     """Raised when an execution input does not satisfy the run contract."""
 
 
+class StageNotEnabledError(RuntimeError):
+    """Raised by a placeholder adapter for a stage whose runtime is not implemented yet."""
+
+
+NOT_ENABLED_STAGES = {"validate_import", "jev"}
+
+
 def _contract(event: dict[str, Any]) -> dict[str, Any]:
     required = ("schema_version", "run_mode", "run_id", "input_manifest_sha256", "s3")
     missing = [key for key in required if key not in event]
@@ -188,12 +195,22 @@ def check_approval(event: dict[str, Any], s3: Any | None = None) -> dict[str, An
     return {**event, "approved": approved}
 
 
+def stage_not_enabled(event: dict[str, Any], stage: str) -> dict[str, Any]:
+    """Fail closed: stop the run before a stage without a runtime can report success."""
+    if stage not in NOT_ENABLED_STAGES:
+        raise ContractError(f"PIPELINE_STAGE_NAME must be one of {', '.join(sorted(NOT_ENABLED_STAGES))}")
+    run_id = event.get("run_id", "unknown") if isinstance(event, dict) else "unknown"
+    raise StageNotEnabledError(f"{stage} adapter is not enabled for run {run_id}; no data was changed")
+
+
 def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
     action = os.environ.get("ORCHESTRATION_ACTION", "").strip()
+    if action == "not_enabled":
+        return stage_not_enabled(event, os.environ.get("PIPELINE_STAGE_NAME", "").strip())
     if action == "initialize_run":
         return initialize_run(event)
     if action == "status_writer":
         return write_status(event)
     if action == "approval_checker":
         return check_approval(event)
-    raise ContractError("ORCHESTRATION_ACTION must be initialize_run, status_writer, or approval_checker")
+    raise ContractError("ORCHESTRATION_ACTION must be initialize_run, status_writer, approval_checker, or not_enabled")

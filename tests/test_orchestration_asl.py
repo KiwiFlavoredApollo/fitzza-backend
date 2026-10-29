@@ -72,3 +72,8 @@ def test_definition_placeholders_match_stack_substitutions():
 def test_schedules_stay_disabled_by_default():
     template = yaml.load((ROOT / "infra/aws/cloudformation/orchestration.yaml").read_text(encoding="utf-8"), Loader=CfnLoader)
     assert template["Parameters"]["ScheduleState"]["Default"] == "DISABLED"
+
+
+def test_placeholder_stage_failures_are_not_retried():
+    for name in ("RunIntegrityChecks", "ValidateAndImport", "RunJev"):
+        assert STATES[name]["Retry"][0] == {"ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0}

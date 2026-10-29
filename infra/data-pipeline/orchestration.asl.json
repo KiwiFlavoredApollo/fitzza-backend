@@ -21,7 +21,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": { "FunctionName": "${ValidateImportLambdaArn}", "Payload.$": "$" },
       "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 20, "MaxAttempts": 2, "BackoffRate": 2 }],
+      "Retry": [{ "ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 20, "MaxAttempts": 2, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
       "Next": "RecordSuccess"
     },
@@ -45,7 +45,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": { "FunctionName": "${ValidateImportLambdaArn}", "Payload.$": "$" },
       "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 20, "MaxAttempts": 2, "BackoffRate": 2 }],
+      "Retry": [{ "ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 20, "MaxAttempts": 2, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
       "Next": "RunJev"
     },
@@ -54,7 +54,7 @@
       "Resource": "arn:aws:states:::lambda:invoke",
       "Parameters": { "FunctionName": "${JevRunnerLambdaArn}", "Payload.$": "$" },
       "OutputPath": "$.Payload",
-      "Retry": [{ "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 60, "MaxAttempts": 3, "BackoffRate": 2 }],
+      "Retry": [{ "ErrorEquals": ["StageNotEnabledError"], "MaxAttempts": 0 }, { "ErrorEquals": ["States.Timeout", "States.TaskFailed", "Lambda.ServiceException", "Lambda.SdkClientException"], "IntervalSeconds": 60, "MaxAttempts": 3, "BackoffRate": 2 }],
       "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "RecordFailure" }],
       "Next": "CheckHumanApproval"
     },
