@@ -11,10 +11,16 @@ logger = logging.getLogger(__name__)
 # 자연어 의도 분석 -> 단품/코디 분기 -> 조화도 검수 -> 응답 생성하는 전체 흐름 총괄
 
 class FashionPipelineCoordinator:
-    def __init__(self, cache_service: Any = None, repository: Any = None):
+    def __init__(
+        self,
+        cache_service: Any = None,
+        repository: Any = None,
+        product_client: Any = None,
+    ):
         logger.info("패션 추천 파이프라인 컴포넌트 초기화 중...")
         self.cache_service = cache_service
         self.repository = repository
+        self.product_client = product_client
         self.parser = QueryParser()
         self.engine = FashionSearchEngine(cache_service=cache_service)
         self.size_resolver = SizeProfileResolver()
@@ -31,6 +37,7 @@ class FashionPipelineCoordinator:
     ) -> list[dict[str, Any]]:
         """
         검색된 상품 후보군에 대해 SizeProfileResolver를 통해 최적 사이즈를 산출하고 부착한다.
+        또한 product-service의 실제 판매 옵션과 대조하여 미판매 색상이면 판매 가능 색상으로 보정한다.
         """
         learned_pref: dict[str, float] | None = None
         if self.repository is not None and slot.subcategory:
@@ -47,8 +54,38 @@ class FashionPipelineCoordinator:
                     exc,
                 )
 
+        # product-service 판매 가능 옵션 색상 조회
+        client = getattr(self, "product_client", None)
+        available_colors_by_pid: dict[int, list[str]] = {}
+        if client is not None and hasattr(client, "get_product_measurements"):
+            try:
+                pids = [int(it["product_id"]) for it in items if it.get("product_id")]
+                if pids:
+                    measurements = client.get_product_measurements(pids)
+                    for pid, opts in measurements.items():
+                        colors = [
+                            opt["color"] for opt in opts
+                            if opt.get("color") and isinstance(opt["color"], str)
+                        ]
+                        if colors:
+                            available_colors_by_pid[pid] = colors
+            except Exception as exc:
+                logger.debug("판매 옵션 조회 실패 (color validation): %s", exc)
+
         evaluated_items = []
         for item in items:
+            pid = item.get("product_id")
+            if pid and int(pid) in available_colors_by_pid:
+                avail_colors = available_colors_by_pid[int(pid)]
+                avail_lower = [c.strip().lower() for c in avail_colors]
+                current_raw = item.get("color_raw")
+                if current_raw and current_raw.strip().lower() not in avail_lower:
+                    logger.warning(
+                        "추천 상품의 색상(%s)이 판매 옵션에 없습니다 (pid=%s). 판매 중인 색상(%s)으로 치환합니다.",
+                        current_raw, pid, avail_colors[0]
+                    )
+                    item["color_raw"] = avail_colors[0]
+
             size_result = self.size_resolver.resolve_and_calculate_size(
                 user_id=user_id,
                 subcategory=slot.subcategory,

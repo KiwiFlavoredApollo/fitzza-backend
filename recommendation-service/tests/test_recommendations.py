@@ -1100,3 +1100,35 @@ def test_llm_services_token_contextvars_concurrency() -> None:
     assert res_b == (999, 888, 777)
 
 
+def test_coordinator_color_validation_replaces_unsellable_color() -> None:
+    from unittest.mock import MagicMock
+    from app.services.coordinator import FashionPipelineCoordinator
+    from app.services.query_parser import SlotQuery
+
+    mock_product_client = MagicMock()
+    mock_product_client.get_product_measurements.return_value = {
+        2837412: [
+            {"color": "BEIGE", "size": "FREE", "measurements": {"top_length": 52.0}},
+            {"color": "BLACK", "size": "FREE", "measurements": {"top_length": 52.0}},
+        ]
+    }
+
+    coordinator = FashionPipelineCoordinator.__new__(FashionPipelineCoordinator)
+    coordinator.product_client = mock_product_client
+    coordinator.repository = None
+    coordinator.size_resolver = MagicMock()
+    coordinator.size_resolver.resolve_and_calculate_size.return_value = {
+        "source_type": "standard_spec",
+        "recommendation": {"size": "FREE"},
+    }
+
+    # Item with unsellable color RED
+    items = [{"product_id": 2837412, "color_raw": "RED", "name": "오버핏 니트"}]
+    slot = SlotQuery(category="top", subcategory="니트/스웨터", clip_query_en="oversized knit")
+
+    result = coordinator._attach_size_info(items=items, slot=slot, user_id="user_1")
+
+    # RED must be replaced with the first available selling color "BEIGE"
+    assert result[0]["color_raw"] == "BEIGE"
+
+
