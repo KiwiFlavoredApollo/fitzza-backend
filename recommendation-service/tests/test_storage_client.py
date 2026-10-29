@@ -248,3 +248,30 @@ def test_get_presigned_url_dynamic_bucket_extraction():
         ExpiresIn=3600,
     )
 
+
+def test_get_presigned_url_unquotes_key_and_ignores_third_party():
+    settings = Settings(
+        storage_backend="s3",
+        aws_s3_bucket_name="fitzza-prod-foundation-databucket-wwng6wfc0hqy",
+    )
+    client = StorageClient(settings)
+    mock_boto = MagicMock()
+    mock_boto.generate_presigned_url.return_value = "https://signed.com/res"
+    client._s3_client = mock_boto
+
+    # 1. URL-encoded key is properly unquoted
+    encoded_url = "https://fitzza-prod-foundation-databucket-wwng6wfc0hqy.s3.amazonaws.com/pipeline/run/sample%2001.webp"
+    res1 = client.get_presigned_url(encoded_url)
+    assert res1 == "https://signed.com/res"
+    mock_boto.generate_presigned_url.assert_called_with(
+        ClientMethod="get_object",
+        Params={"Bucket": "fitzza-prod-foundation-databucket-wwng6wfc0hqy", "Key": "pipeline/run/sample 01.webp"},
+        ExpiresIn=3600,
+    )
+
+    # 2. Third-party non-fitzza S3 URL remains untouched
+    third_party_url = "https://external-vendor-assets.s3.amazonaws.com/images/item123.jpg"
+    res2 = client.get_presigned_url(third_party_url)
+    assert res2 == third_party_url
+
+

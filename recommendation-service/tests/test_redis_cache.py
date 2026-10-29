@@ -411,9 +411,12 @@ def test_redis_client_serializes_pydantic_model():
     fake_r = fakeredis.FakeRedis(decode_responses=True)
     client = RedisClient(Settings(), redis_instance=fake_r)
 
+    from datetime import datetime, timezone
+
     payload = {
         "status": "ok",
         "nested_model": SampleModel(),
+        "created_at": datetime(2026, 10, 29, 12, 0, 0, tzinfo=timezone.utc),
     }
 
     assert client.set("test:pydantic", payload) is True
@@ -422,4 +425,5 @@ def test_redis_client_serializes_pydantic_model():
     assert cached["status"] == "ok"
     assert cached["nested_model"]["field_a"] == "hello"
     assert cached["nested_model"]["field_b"] == 42
+    assert cached["created_at"] == "2026-10-29T12:00:00+00:00"
 

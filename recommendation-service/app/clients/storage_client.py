@@ -45,7 +45,7 @@ class StorageClient:
         if clean.startswith(("http://", "https://")):
             parsed = urllib.parse.urlparse(clean)
             host = parsed.netloc.lower()
-            path = parsed.path.lstrip("/")
+            path = urllib.parse.unquote(parsed.path.lstrip("/"))
 
             if ".s3." in host:
                 bucket = host.split(".s3.")[0]
@@ -58,7 +58,7 @@ class StorageClient:
             elif path.startswith(f"{self.bucket_name}/"):
                 path = path[len(self.bucket_name) + 1 :]
         else:
-            path = clean.lstrip("/")
+            path = urllib.parse.unquote(clean.lstrip("/"))
 
         return bucket, path
 
@@ -120,19 +120,23 @@ class StorageClient:
         if not clean_input:
             return ""
 
-        # 외부 HTTP(S) URL(무신사 원본 이미지 등)인 경우 그대로 유지
+        # 외부 HTTP(S) URL인 경우: 우리 서비스가 관리하는 버킷/엔드포인트가 아니면 원본 유지
         if clean_input.startswith(("http://", "https://")):
             parsed = urllib.parse.urlparse(clean_input)
             netloc = (parsed.netloc or "").lower()
-            is_s3_host = (
+            is_our_bucket = (
                 self.bucket_name.lower() in netloc
-                or (self.endpoint_url and urllib.parse.urlparse(self.endpoint_url).netloc.lower() == netloc)
-                or netloc.endswith(".amazonaws.com")
+                or "fitzza" in netloc
+            )
+            is_endpoint = bool(
+                self.endpoint_url
+                and urllib.parse.urlparse(self.endpoint_url).netloc.lower() == netloc
             )
             is_cf_host = bool(
                 self.cloudfront_domain
                 and urllib.parse.urlparse(self.cloudfront_domain).netloc.lower() == netloc
             )
+            is_s3_host = is_our_bucket or is_endpoint
             if not (is_s3_host or is_cf_host):
                 return clean_input
 
