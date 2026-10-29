@@ -1,7 +1,13 @@
 # 백엔드 API k6 성능 테스트
 
-`api.js`는 Gateway의 실제 API 경로로 요청한다. JavaScript는 Node.js가 아닌 k6로 실행한다.
-k6 1.3.0 기준이며 별도 npm 패키지는 필요하지 않다.
+JavaScript는 Node.js가 아닌 k6로 실행한다. k6 1.3.0 기준이며 별도 npm 패키지는 필요하지 않다.
+
+| 스크립트 | 용도 |
+| --- | --- |
+| `api.js` | 조회 부하 (`PROFILE=public\|member\|all`) |
+| `purchase_flow.js` (FITZZA-296) | 회원가입 → 로그인 → 상품 → 장바구니 → **주문 생성** (쓰기 포함 스모크) |
+
+## 조회 부하 (`api.js`)
 
 | PROFILE | API |
 | --- | --- |
@@ -97,3 +103,26 @@ k6 run performance/api.js
 실제 EKS에서 실행할 때는 노드 Ready와 운영 시간을 확인하고 VU 1부터 시작한다.
 DB 연결 수·CPU·메모리·오류율을 함께 관찰하고, Jaeger 샘플링과 배포 이미지 버전을
 기록해 같은 조건으로 비교한다. 외부에서 실행한 응답시간에는 네트워크와 ALB 지연도 포함된다.
+
+## 구매 여정 (`purchase_flow.js`)
+
+쓰기 API(장바구니 추가·주문 생성)를 포함한 end-to-end 스모크다. 기본은 VU 1 / 1회.
+매 iteration마다 새 회원을 가입시키므로 운영에 큰 VU로 돌리지 않는다.
+
+```bash
+k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/purchase_flow.js
+k6 run -e BASE_URL=https://api.fitzza.site -e VUS=1 -e ITERATIONS=1 performance/purchase_flow.js
+
+# Compose k6 컨테이너(기본은 api.js). 구매 시나리오는 entrypoint 오버라이드:
+docker compose run --rm --entrypoint k6 k6 run \
+  -e BASE_URL=http://gateway-service:8080 -e VUS=1 -e ITERATIONS=1 \
+  /scripts/purchase_flow.js
+```
+
+| 환경 변수 | 기본 | 설명 |
+| --- | --- | --- |
+| `BASE_URL` | `http://localhost:8080` | Gateway origin |
+| `API_PREFIX` | `/api/v1` | FE 경로. Swagger면 `/api` |
+| `VUS` / `ITERATIONS` | `1` / `1` | 스모크 |
+| `PRODUCT_ID` | (목록 첫 상품) | 고정 상품 |
+| `FETCH_IMAGE` | `false` | Presigned 이미지 GET |
