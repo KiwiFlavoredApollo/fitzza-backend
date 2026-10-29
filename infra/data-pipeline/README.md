@@ -219,6 +219,62 @@ runs/<run-id>/fashion-clip/report.json
 
 The layout above is historical. The deployed cloud contract uses `pipeline/runs/<run-id>/` and requires human color approval plus a separate matching dataset-quality approval; a Jev `_SUCCESS.json` alone is not sufficient. Jev credentials belong in SSM SecureString and must never be written to S3, Kubernetes manifests, or logs.
 
+## Orchestration run contract (FITZZA-219)
+
+Every automated run uses one immutable `run_id` and the input manifest SHA-256 as
+its idempotency key. The machine-readable contract is
+`run-contract.schema.json`; `run-contract.example.json` shows the expected shape.
+The state machine must refuse to start a stage when its predecessor's success
+marker is absent, and it must write a stage status document under
+`pipeline/runs/<run-id>/status/`. Reusing a `run_id` with a different manifest
+digest is invalid. A human approval remains required after Jev and before
+FashionCLIP/Qdrant indexing.
+
+The first state-machine definition is `orchestration.asl.json`. It invokes
+small Lambda adapters so provider-specific EKS Job details stay outside the
+workflow. Deploy-time substitutions must provide
+`CrawlerRunnerLambdaArn`, `ValidateImportLambdaArn`, `JevRunnerLambdaArn`,
+`ApprovalCheckerLambdaArn`, `FashionClipRunnerLambdaArn`, and
+`StatusWriterLambdaArn`. No credentials or secrets are stored in the
+definition.
+
+The deployable wrapper is `infra/aws/cloudformation/orchestration.yaml`. Upload
+the ASL file to a versioned private S3 bucket, deploy this stack with the seven
+adapter Lambda ARNs, and keep `ScheduleState=DISABLED` until the adapters and
+run contract are deployed. The daily rule defaults to 03:00 Asia/Seoul with
+`{"run_mode":"incremental"}`. It reads the approved current baseline manifest
+and incremental checkpoint, so the crawler must submit only new or changed product
+IDs; it must not rebuild the existing 3,000-product set. The weekly rule defaults
+to Sunday 04:00 with `{"run_mode":"integrity"}` and is routed directly to the
+validation adapter: it checks stored product data, image accessibility, and index
+state without recrawling the catalog. A `full` run is manual-only and requires
+`manual_approved: true`; use it only after a data-quality incident, site structure
+change, or planned bulk refresh. Manual executions can start the state machine
+directly with the same contract JSON. The template grants the state machine only
+Lambda invocation and grants EventBridge only `states:StartExecution`.
+
+The orchestration stack also grants the shared runner Lambda role
+`eks:DescribeCluster` and associates the AWS-managed `AmazonEKSEditPolicy` only
+to the configured `fitzza` namespace. The Lambda must have network access to
+the EKS API endpoint; if the cluster endpoint is private, deploy the runner
+functions into the foundation VPC subnets and security group. Public endpoint
+CIDRs must include the runner's egress path.
+
+`infra/aws/orchestration/job_spec.py` renders the Crawler and FashionCLIP Job
+specifications used by the runner adapters. Each Job receives the run contract,
+has CPU/memory requests and limits, targets a dedicated ARM64 pipeline node,
+and uses a deterministic name to prevent duplicate execution.
+
+`infra/aws/orchestration/job_runner.py` provides the idempotent runner logic:
+it reuses an existing Job for the same run, waits for completion, and surfaces
+failure or timeout without creating a duplicate. The production adapter must
+provide a Kubernetes API client with the namespace-scoped Job permissions.
+
+The Job service account `fitzza-pipeline` is defined in
+`infra/data-pipeline/pipeline-service-account.yaml`. Like the other pipeline
+manifests in this directory it is applied manually; it is not part of the CD
+kustomization, so merging this code does not create it in the cluster.
+
 ## Local Qdrant
 
 Qdrant runs in Docker; the crawler validation and Jev scripts run as Python batch jobs.
