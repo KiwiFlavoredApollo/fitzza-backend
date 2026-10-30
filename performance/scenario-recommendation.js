@@ -71,9 +71,10 @@ export default function () {
 }
 
 function requestRecommendation(deadline) {
+  const requestQuery = createRequestQuery();
   const response = http.post(
     endpoint,
-    JSON.stringify({ query }),
+    JSON.stringify({ query: requestQuery }),
     requestParams('POST', deadline),
   );
   ensureWithinDeadline(deadline);
@@ -83,6 +84,14 @@ function requestRecommendation(deadline) {
     throw new Error('Invalid acceptance ID or status');
   }
   return accepted.requestId;
+}
+
+function createRequestQuery() {
+  const timestamp = Date.now().toString(36);
+  const vu = __VU.toString(36);
+  const iteration = __ITER.toString(36);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${query}\n[k6:${timestamp}-${vu}-${iteration}-${random}]`;
 }
 
 function waitForRecommendation(requestId, deadline) {

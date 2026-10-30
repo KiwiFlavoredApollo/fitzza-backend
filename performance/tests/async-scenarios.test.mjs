@@ -51,7 +51,7 @@ function createResultBody(service, mode, pollCount) {
   return body;
 }
 
-function simulate(service, mode, overrides = {}) {
+function simulate(service, mode, overrides = {}, execution = {}) {
   let now = 0;
   let polls = 0;
   const metrics = new Map();
@@ -73,6 +73,8 @@ function simulate(service, mode, overrides = {}) {
 
   const context = vm.createContext({
     __ENV: { ...DEFAULT_ENVIRONMENT, ...overrides },
+    __VU: execution.vu || 1,
+    __ITER: execution.iteration || 0,
     Date: { now: () => now },
     console: { error() {} },
     Trend: Metric,
@@ -109,7 +111,12 @@ function simulate(service, mode, overrides = {}) {
   const source = entry.replace(/^import .*;\r?$/gm, '')
     .replace(/export default function/g, 'function execute')
     .replace(/export /g, '');
-  vm.runInContext(`${source}\nglobalThis.scenarioOptions = options; execute();`, context);
+  vm.runInContext(`${source}\nglobalThis.scenarioOptions = options;`, context);
+  const runCount = execution.runCount || 1;
+  for (let index = 0; index < runCount; index++) {
+    context.__ITER = (execution.iteration || 0) + index;
+    vm.runInContext('execute();', context);
+  }
   return { metrics, calls, options: context.scenarioOptions };
 }
 
@@ -201,4 +208,27 @@ test('사용자 지정 p95 기준과 반복 횟수에 따른 실행 제한 설�
   assert.equal(options.scenarios.recommendation.maxDuration, '183s');
   assert.equal(options.thresholds.fitzza_recommendation_accept_ms[0], 'p(95)<500');
   assert.equal(options.thresholds.fitzza_recommendation_complete_ms[0], 'p(95)<2000');
+});
+
+test('추천 요청마다 원래 질의를 유지하면서 고유 문자열 추가', () => {
+  const query = '주말 코디 추천';
+  const { calls } = simulate('recommendation', 'success', { QUERY: query }, { runCount: 3 });
+  const queries = calls.filter(call => call.payload).map(call => call.payload.query);
+
+  assert.equal(queries.length, 3);
+  assert.equal(new Set(queries).size, 3);
+  for (const requestQuery of queries) {
+    assert.ok(requestQuery.startsWith(`${query}\n[k6:`));
+    assert.match(requestQuery.slice(query.length), /^\n\[k6:[a-z0-9]+-1-[0-2]-[a-z0-9]+\]$/);
+  }
+});
+
+test('같은 시각에 실행한 VU와 재실행 간 추천 질의 구분', () => {
+  const queryFor = vu => simulate('recommendation', 'success', {}, { vu }).calls[0].payload.query;
+  const firstVuQuery = queryFor(1);
+  const secondVuQuery = queryFor(2);
+  const rerunQuery = queryFor(1);
+
+  assert.notEqual(firstVuQuery, secondVuQuery);
+  assert.notEqual(firstVuQuery, rerunQuery);
 });
