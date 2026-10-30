@@ -5,8 +5,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const common = readFileSync(new URL('../async-job.js', import.meta.url), 'utf8');
-
 function simulate(service, mode, overrides = {}) {
   let now = 0;
   let polls = 0;
@@ -53,7 +51,7 @@ function simulate(service, mode, overrides = {}) {
     },
   });
   const entry = readFileSync(new URL(`../scenario-${service}.js`, import.meta.url), 'utf8');
-  const source = (common + entry).replace(/^import .*;\r?$/gm, '')
+  const source = entry.replace(/^import .*;\r?$/gm, '')
     .replace(/export default function/g, 'function execute').replace(/export /g, '');
   vm.runInContext(`${source}\nglobalThis.scenarioOptions = options; execute();`, context);
   return { metrics, calls, options: context.scenarioOptions };
