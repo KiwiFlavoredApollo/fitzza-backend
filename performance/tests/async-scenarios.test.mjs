@@ -1,7 +1,3 @@
-/**
- * 실행: node --test performance/tests/async-scenarios.test.mjs
- * 가상 시계와 HTTP 응답으로 시나리오를 검증한다. 실제 API·AI·DB는 호출하지 않는다.
- */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -40,7 +36,6 @@ function createResultBody(service, mode, pollCount) {
     resultImageUrl: 'https://example.test/image.png',
   };
 
-  // 정상 응답도 한 번 대기시켜 폴링 후 완료되는 흐름을 검증한다.
   if (mode === 'timeout' || pollCount === 1) {
     body.status = isVton ? 'PENDING' : 'PROCESSING';
   }
@@ -111,7 +106,6 @@ function simulate(service, mode, overrides = {}) {
     },
   });
   const entry = readFileSync(new URL(`../scenario-${service}.js`, import.meta.url), 'utf8');
-  // k6 전용 import를 위의 대역으로 대체하고 Node VM에서 실행한다.
   const source = entry.replace(/^import .*;\r?$/gm, '')
     .replace(/export default function/g, 'function execute')
     .replace(/export /g, '');
@@ -149,7 +143,6 @@ function assertRequests(service, calls) {
   assert.equal(firstRequest.params.headers.Authorization, 'Bearer mock-only');
   assert.equal(firstRequest.url, `http://localhost:8080/api/v1/${path}`);
   if (service === 'vton') {
-    // VM 객체의 prototype 차이를 피하기 위해 JSON 값으로 비교한다.
     assert.equal(JSON.stringify(firstRequest.payload), '{"photoId":1,"productIds":[101,201]}');
   } else {
     assert.ok(firstRequest.payload.query);

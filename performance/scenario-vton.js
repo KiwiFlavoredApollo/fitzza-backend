@@ -1,14 +1,3 @@
-/**
- * 가상피팅 요청 접수 시간과 이미지 생성 완료 시간 측정
- * k6 run -e PHOTO_ID=123 -e PRODUCT_IDS=101,201 performance/scenario-vton.js
- * ACCESS_TOKEN: 필수, Bearer 접두사 없이 환경 변수로 전달한다.
- * BASE_URL=http://localhost:8080, VUS=1, ITERATIONS=1
- * POLL_INTERVAL_SECONDS=2, WAIT_TIMEOUT_SECONDS=600, HTTP_TIMEOUT_SECONDS=30
- * ACCEPT_P95_MS / COMPLETE_P95_MS: 선택적 p95 기준(ms).
- * 예시 ID를 계정 소유 사진과 서로 다른 카테고리의 실제 상품 2~5개로 바꾼다.
- * 완료 시간은 큐 대기·생성·저장·폴링 지연을 포함한다. 이미지 다운로드는 제외한다.
- * 실제 AI 호출과 데이터 저장이 발생하며, 생성된 데이터는 자동 삭제하지 않는다.
- */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
@@ -45,7 +34,6 @@ export const options = {
   },
   thresholds: buildThresholds(),
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
-  // 작업마다 달라지는 URL 대신 고정된 요청 이름으로 메트릭을 집계한다.
   systemTags: ['status', 'method', 'name', 'scenario', 'expected_response', 'error_code'],
 };
 
@@ -63,12 +51,10 @@ export default function () {
     acceptanceTime.add(Date.now() - startedAt);
 
     waitForFitting(fittingId, deadline);
-    // 실패 작업은 완료 시간에 포함하지 않고 성공률·실패 횟수로 기록한다.
     completionTime.add(Date.now() - startedAt);
     succeeded = true;
   } catch (error) {
     timedOut = Date.now() >= deadline;
-    // 응답 본문에는 개인정보·서명 URL이 있을 수 있어 오류 종류만 출력한다.
     const message = timedOut ? 'Job deadline exceeded' : error.message;
     console.error(`vton: ${message}`);
   } finally {

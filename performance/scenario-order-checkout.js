@@ -1,15 +1,3 @@
-/**
- * 구매 여정 k6 시나리오 (FITZZA-296)
- *
- * 회원가입 → 로그인 → 상품 목록 → 상품 상세 → 장바구니 추가 → 주문 생성 → 주문 상세
- *
- * 예:
- *   k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
- *   k6 run -e BASE_URL=https://api.fitzza.site -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
- *
- * PR #242 k6 컨테이너가 있으면:
- *   docker compose run --rm --entrypoint k6 k6 run -e BASE_URL=http://gateway-service:8080 -e VUS=1 -e ITERATIONS=1 /scripts/scenario-order-checkout.js
- */
 
 import http from 'k6/http';
 import { check, fail, group, sleep } from 'k6';
@@ -25,7 +13,6 @@ function readBaseUrl() {
 }
 
 const baseUrl = readBaseUrl();
-// FE·#242 simple-api-load-test.js 와 같이 /api/v1 기본. Swagger 경로면 API_PREFIX=/api
 const apiPrefix = __ENV.API_PREFIX || '/api/v1';
 const vus = Number(__ENV.VUS || 1);
 const iterations = Number(__ENV.ITERATIONS || 1);
