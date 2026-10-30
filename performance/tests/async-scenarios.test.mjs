@@ -1,9 +1,60 @@
-// node --test performance/tests/async-scenarios.test.mjs
-// Simulated k6 runtime: no Docker, application services, credentials or AI calls.
+/**
+ * 실행: node --test performance/tests/async-scenarios.test.mjs
+ * 가상 시계와 HTTP 응답으로 시나리오를 검증한다. 실제 API·AI·DB는 호출하지 않는다.
+ */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+
+const JOB_ID = 7;
+const REQUEST_DURATION_MS = 5;
+const DEFAULT_ENVIRONMENT = {
+  ACCESS_TOKEN: 'mock-only',
+  PHOTO_ID: '1',
+  PRODUCT_IDS: '101,201',
+  WAIT_TIMEOUT_SECONDS: '1',
+  POLL_INTERVAL_SECONDS: '0.1',
+};
+
+function createResponse(status, body, invalidJson) {
+  return {
+    status,
+    json() {
+      if (invalidJson) {
+        throw new Error('Invalid JSON');
+      }
+      return body;
+    },
+  };
+}
+
+function createResultBody(service, mode, pollCount) {
+  const isVton = service === 'vton';
+  const idField = isVton ? 'fittingId' : 'requestId';
+  const body = {
+    [idField]: mode === 'wrong_id' ? JOB_ID + 1 : JOB_ID,
+    status: isVton ? 'COMPLETED' : 'DONE',
+    items: [],
+    combos: [],
+    resultImageUrl: 'https://example.test/image.png',
+  };
+
+  // 정상 응답도 한 번 대기시켜 폴링 후 완료되는 흐름을 검증한다.
+  if (mode === 'timeout' || pollCount === 1) {
+    body.status = isVton ? 'PENDING' : 'PROCESSING';
+  }
+  if (mode === 'failed') {
+    body.status = 'FAILED';
+  }
+  if (mode === 'unknown') {
+    body.status = 'UNKNOWN';
+  }
+  if (mode === 'missing_result') {
+    delete body[isVton ? 'resultImageUrl' : 'items'];
+  }
+  return body;
+}
 
 function simulate(service, mode, overrides = {}) {
   let now = 0;
@@ -13,92 +64,146 @@ function simulate(service, mode, overrides = {}) {
   const isVton = service === 'vton';
   const idField = isVton ? 'fittingId' : 'requestId';
   const pending = isVton ? 'PENDING' : 'PROCESSING';
+
   class Metric {
-    constructor(name) { this.values = []; metrics.set(name, this.values); }
-    add(value) { this.values.push(value); }
+    constructor(name) {
+      this.values = [];
+      metrics.set(name, this.values);
+    }
+
+    add(value) {
+      this.values.push(value);
+    }
   }
-  const response = (status, body) => ({ status, json() {
-    if (mode === 'bad_json') throw new Error('invalid JSON');
-    return body;
-  } });
+
   const context = vm.createContext({
-    __ENV: { ACCESS_TOKEN: 'mock-only', PHOTO_ID: '1', PRODUCT_IDS: '101,201',
-      WAIT_TIMEOUT_SECONDS: '1', POLL_INTERVAL_SECONDS: '0.1', ...overrides },
-    Date: { now: () => now }, console: { error() {} },
-    Trend: Metric, Rate: Metric, Counter: Metric,
-    sleep(seconds) { now += seconds * 1000; },
-    check(value, checks) { return Object.values(checks).every(check => check(value)); },
+    __ENV: { ...DEFAULT_ENVIRONMENT, ...overrides },
+    Date: { now: () => now },
+    console: { error() {} },
+    Trend: Metric,
+    Rate: Metric,
+    Counter: Metric,
+    sleep(seconds) {
+      now += seconds * 1000;
+    },
+    check(value, checks) {
+      return Object.values(checks).every(validate => validate(value));
+    },
     http: {
       post(url, payload, params) {
         calls.push({ url, payload: JSON.parse(payload), params });
-        now += 5;
-        return response(mode === 'post_error' ? 503 : 202,
-          { [idField]: mode === 'bad_acceptance' ? null : 7, status: pending });
+        now += REQUEST_DURATION_MS;
+        const status = mode === 'post_error' ? 503 : 202;
+        const body = {
+          [idField]: mode === 'bad_acceptance' ? null : JOB_ID,
+          status: pending,
+        };
+        return createResponse(status, body, mode === 'bad_json');
       },
       get(url, params) {
         calls.push({ url, params });
         polls++;
-        now += mode === 'http_timeout' ? params.timeout : 5;
-        let status = isVton ? 'COMPLETED' : 'DONE';
-        if (mode === 'timeout' || polls === 1) status = pending;
-        if (mode === 'failed') status = 'FAILED';
-        if (mode === 'unknown') status = 'UNKNOWN';
-        const body = { [idField]: mode === 'wrong_id' ? 8 : 7, status,
-          items: [], combos: [], resultImageUrl: 'https://example.test/image.png' };
-        if (mode === 'missing_result') delete body[isVton ? 'resultImageUrl' : 'items'];
-        return response(mode === 'http_error' || mode === 'http_timeout' ? 503 : 200, body);
+        now += mode === 'http_timeout' ? params.timeout : REQUEST_DURATION_MS;
+        const body = createResultBody(service, mode, polls);
+        const httpFailed = mode === 'http_error' || mode === 'http_timeout';
+        return createResponse(httpFailed ? 503 : 200, body, mode === 'bad_json');
       },
     },
   });
   const entry = readFileSync(new URL(`../scenario-${service}.js`, import.meta.url), 'utf8');
+  // k6 전용 import를 위의 대역으로 대체하고 Node VM에서 실행한다.
   const source = entry.replace(/^import .*;\r?$/gm, '')
-    .replace(/export default function/g, 'function execute').replace(/export /g, '');
+    .replace(/export default function/g, 'function execute')
+    .replace(/export /g, '');
   vm.runInContext(`${source}\nglobalThis.scenarioOptions = options; execute();`, context);
   return { metrics, calls, options: context.scenarioOptions };
 }
 
+const OUTCOMES = [
+  { mode: 'success', name: '완료 성공', succeeded: true, accepted: true },
+  { mode: 'failed', name: '작업 실패', accepted: true },
+  { mode: 'unknown', name: '알 수 없는 상태', accepted: true },
+  { mode: 'timeout', name: '폴링 대기 제한 초과', accepted: true, timedOut: true },
+  { mode: 'http_timeout', name: 'HTTP 요청 중 대기 제한 초과', accepted: true, timedOut: true },
+  { mode: 'post_error', name: '접수 HTTP 오류' },
+  { mode: 'bad_acceptance', name: '접수 ID 누락' },
+  { mode: 'http_error', name: '조회 HTTP 오류', accepted: true },
+  { mode: 'bad_json', name: '잘못된 JSON' },
+  { mode: 'wrong_id', name: '조회 ID 불일치', accepted: true },
+  { mode: 'missing_result', name: '완료 결과 누락', accepted: true },
+];
+
+function assertMetrics(service, metrics, outcome) {
+  const metric = suffix => metrics.get(`fitzza_${service}_${suffix}`);
+  const succeeded = Boolean(outcome.succeeded);
+  assert.deepEqual(metric('success'), [succeeded]);
+  assert.equal(metric('complete_ms').length, Number(succeeded));
+  assert.equal(metric('accept_ms').length, Number(Boolean(outcome.accepted)));
+  assert.equal(metric('failures').at(-1), Number(!succeeded));
+  assert.equal(metric('timeouts').at(-1), Number(Boolean(outcome.timedOut)));
+}
+
+function assertRequests(service, calls) {
+  const firstRequest = calls[0];
+  const path = service === 'vton' ? 'vton' : 'recommendations';
+  assert.equal(firstRequest.params.headers.Authorization, 'Bearer mock-only');
+  assert.equal(firstRequest.url, `http://localhost:8080/api/v1/${path}`);
+  if (service === 'vton') {
+    // VM 객체의 prototype 차이를 피하기 위해 JSON 값으로 비교한다.
+    assert.equal(JSON.stringify(firstRequest.payload), '{"photoId":1,"productIds":[101,201]}');
+  } else {
+    assert.ok(firstRequest.payload.query);
+  }
+  assert.ok(calls.every(call => call.params.timeout > 0 && call.params.timeout <= 1000));
+  assert.ok(calls.every(call => !call.params.tags.name.includes(`/${JOB_ID}`)));
+}
+
 for (const service of ['recommendation', 'vton']) {
-  for (const mode of ['success', 'failed', 'unknown', 'timeout', 'http_timeout', 'post_error',
-    'bad_acceptance', 'http_error', 'bad_json', 'wrong_id', 'missing_result']) {
-    test(`${service}: ${mode}`, () => {
+  for (const outcome of OUTCOMES) {
+    test(`${service}: ${outcome.name}`, () => {
+      const { mode } = outcome;
       const { metrics, calls, options } = simulate(service, mode);
-      const prefix = `fitzza_${service}`;
-      const succeeded = mode === 'success';
-      assert.deepEqual(metrics.get(`${prefix}_success`), [succeeded]);
-      assert.equal(metrics.get(`${prefix}_complete_ms`).length, Number(succeeded));
-      assert.equal(metrics.get(`${prefix}_failures`).at(-1), Number(!succeeded));
-      assert.equal(metrics.get(`${prefix}_timeouts`).at(-1), Number(['timeout', 'http_timeout'].includes(mode)));
-      assert.equal(metrics.get(`${prefix}_accept_ms`).length,
-        Number(!['post_error', 'bad_acceptance', 'bad_json'].includes(mode)));
-      assert.equal(calls[0].params.headers.Authorization, 'Bearer mock-only');
-      assert.equal(calls[0].url, `http://localhost:8080/api/v1/${service === 'vton' ? 'vton' : 'recommendations'}`);
-      if (service === 'vton') assert.equal(JSON.stringify(calls[0].payload), '{"photoId":1,"productIds":[101,201]}');
-      else assert.ok(calls[0].payload.query);
+      assertMetrics(service, metrics, outcome);
+      assertRequests(service, calls);
       assert.equal(options.scenarios[service].maxDuration, '61s');
-      assert.ok(calls.every(call => call.params.timeout > 0 && call.params.timeout <= 1000));
-      assert.ok(calls.every(call => !call.params.tags.name.includes('/7')));
     });
   }
 }
 
-for (const settings of [{ ACCESS_TOKEN: '' }, { BASE_URL: 'http://user:pass@localhost' },
-  { VUS: '0' }, { ITERATIONS: '0' }, { VUS: '2', ITERATIONS: '1' },
-  { POLL_INTERVAL_SECONDS: 'NaN' }, { WAIT_TIMEOUT_SECONDS: '-1' },
-  { HTTP_TIMEOUT_SECONDS: '0' }, { ACCEPT_P95_MS: '0' }, { COMPLETE_P95_MS: 'no' },
-  { PHOTO_ID: '' }, { PRODUCT_IDS: '1,1' }, { PRODUCT_IDS: '1' },
-  { PRODUCT_IDS: '1,2,3,4,5,6' }, { PRODUCT_IDS: '1,-2' }]) {
-  test(`reject invalid settings: ${Object.keys(settings).join(',')}`, () => {
+const INVALID_SETTINGS = [
+  { name: '토큰 누락', values: { ACCESS_TOKEN: '' } },
+  { name: '인증정보가 포함된 URL', values: { BASE_URL: 'http://user:pass@localhost' } },
+  { name: 'VU 0명', values: { VUS: '0' } },
+  { name: '반복 횟수 0회', values: { ITERATIONS: '0' } },
+  { name: 'VU보다 적은 반복 횟수', values: { VUS: '2', ITERATIONS: '1' } },
+  { name: '숫자가 아닌 폴링 간격', values: { POLL_INTERVAL_SECONDS: 'NaN' } },
+  { name: '음수 대기 제한', values: { WAIT_TIMEOUT_SECONDS: '-1' } },
+  { name: 'HTTP 제한 0초', values: { HTTP_TIMEOUT_SECONDS: '0' } },
+  { name: '접수 p95 기준 0', values: { ACCEPT_P95_MS: '0' } },
+  { name: '숫자가 아닌 완료 p95 기준', values: { COMPLETE_P95_MS: 'no' } },
+  { name: '사진 ID 누락', values: { PHOTO_ID: '' } },
+  { name: '중복 상품 ID', values: { PRODUCT_IDS: '1,1' } },
+  { name: '상품 1개', values: { PRODUCT_IDS: '1' } },
+  { name: '상품 6개', values: { PRODUCT_IDS: '1,2,3,4,5,6' } },
+  { name: '음수 상품 ID', values: { PRODUCT_IDS: '1,-2' } },
+];
+
+for (const { name, values: settings } of INVALID_SETTINGS) {
+  test(`잘못된 설정 거부: ${name}`, () => {
     assert.throws(() => simulate('vton', 'success', settings));
   });
 }
 
-test('reject blank recommendation query', () => {
+test('공백으로만 구성된 추천 질의 거부', () => {
   assert.throws(() => simulate('recommendation', 'success', { QUERY: ' ' }));
 });
 
-test('optional thresholds and iteration budget', () => {
+test('사용자 지정 p95 기준과 반복 횟수에 따른 실행 제한 설정', () => {
   const { options } = simulate('recommendation', 'success', {
-    VUS: '2', ITERATIONS: '5', ACCEPT_P95_MS: '500', COMPLETE_P95_MS: '2000',
+    VUS: '2',
+    ITERATIONS: '5',
+    ACCEPT_P95_MS: '500',
+    COMPLETE_P95_MS: '2000',
   });
   assert.equal(options.scenarios.recommendation.maxDuration, '183s');
   assert.equal(options.thresholds.fitzza_recommendation_accept_ms[0], 'p(95)<500');
