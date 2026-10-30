@@ -3,7 +3,7 @@
  *
  * 회원가입 → 로그인 → 상품 목록 → 상품 상세 → 장바구니 추가 → 주문 생성 → 주문 상세
  *
- * GET 조회 부하(api.js)와 달리 쓰기(담기·주문)를 포함한다. 기본은 스모크(VU 1 / 1회).
+ * GET 조회 부하(simple-api-load-test.js)와 달리 쓰기(담기·주문)를 포함한다. 기본은 스모크(VU 1 / 1회).
  *
  * 예:
  *   k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
@@ -27,7 +27,7 @@ function readBaseUrl() {
 }
 
 const baseUrl = readBaseUrl();
-// FE·#242 api.js 와 같이 /api/v1 기본. Swagger 경로면 API_PREFIX=/api
+// FE·#242 simple-api-load-test.js 와 같이 /api/v1 기본. Swagger 경로면 API_PREFIX=/api
 const apiPrefix = __ENV.API_PREFIX || '/api/v1';
 const vus = Number(__ENV.VUS || 1);
 const iterations = Number(__ENV.ITERATIONS || 1);
