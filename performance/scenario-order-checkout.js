@@ -3,8 +3,6 @@
  *
  * 회원가입 → 로그인 → 상품 목록 → 상품 상세 → 장바구니 추가 → 주문 생성 → 주문 상세
  *
- * GET 조회 부하(simple-api-load-test.js)와 달리 쓰기(담기·주문)를 포함한다. 기본은 스모크(VU 1 / 1회).
- *
  * 예:
  *   k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
  *   k6 run -e BASE_URL=https://api.fitzza.site -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
