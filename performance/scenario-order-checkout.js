@@ -6,11 +6,11 @@
  * GET 조회 부하(api.js)와 달리 쓰기(담기·주문)를 포함한다. 기본은 스모크(VU 1 / 1회).
  *
  * 예:
- *   k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/purchase-flow.js
- *   k6 run -e BASE_URL=https://api.fitzza.site -e VUS=1 -e ITERATIONS=1 performance/purchase-flow.js
+ *   k6 run -e BASE_URL=http://localhost:8080 -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
+ *   k6 run -e BASE_URL=https://api.fitzza.site -e VUS=1 -e ITERATIONS=1 performance/scenario-order-checkout.js
  *
  * PR #242 k6 컨테이너가 있으면:
- *   docker compose run --rm --entrypoint k6 k6 run -e BASE_URL=http://gateway-service:8080 -e VUS=1 -e ITERATIONS=1 /scripts/purchase-flow.js
+ *   docker compose run --rm --entrypoint k6 k6 run -e BASE_URL=http://gateway-service:8080 -e VUS=1 -e ITERATIONS=1 /scripts/scenario-order-checkout.js
  */
 
 import http from 'k6/http';
